@@ -86,6 +86,31 @@ struct Server: Sendable {
         router.post("/simulators/:udid/shutdown") { [simulators] r, _ in
             Self.lifecycle(udid: Self.udidParam(r), simulators: simulators) { try $0.shutdown() }
         }
+        // Orientation — `?value=portrait|landscape-left|landscape-right|portrait-upside-down`.
+        // Routes through `simulator.orientation().set(...)` which fires
+        // a GSEvent over `PurpleWorkspacePort`. Pure parse + dispatch
+        // logic lives in `Server.applyOrientation` for unit testing.
+        router.post("/simulators/:udid/orientation") { [simulators] r, _ in
+            let value = r.uri.queryParameters.get("value") ?? ""
+            switch Self.applyOrientation(
+                udid: Self.udidParam(r), value: value, simulators: simulators
+            ) {
+            case .ok:
+                return jsonOK
+            case .invalidValue:
+                return errorJSON(
+                    "value must be one of portrait, landscape-left, landscape-right, portrait-upside-down",
+                    status: .badRequest
+                )
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON(
+                    "orientation change failed (PurpleWorkspacePort unreachable?)",
+                    status: .internalServerError
+                )
+            }
+        }
 
         // Chrome / bezel — DeviceKit-sourced layout + rasterized PNG.
         router.get("/simulators/:udid/chrome.json") { [simulators, chromes] r, _ in
@@ -213,6 +238,36 @@ struct Server: Sendable {
             headers: [.contentType: "application/json", .cacheControl: "no-cache"],
             body: .init(byteBuffer: ByteBuffer(string: simulators.listJSON))
         )
+    }
+
+    /// Outcome of `applyOrientation` — one case per HTTP-status
+    /// branch the orientation route maps to. Lives next to the
+    /// helper so the route closure in `addRoutes(...)` is just a
+    /// `switch outcome → Response` translation.
+    enum OrientationOutcome: Equatable {
+        case ok
+        case invalidValue
+        case unknownDevice
+        case dispatchFailed
+    }
+
+    /// Pure parse + dispatch: validate `value`, look up the
+    /// simulator, and run `simulator.orientation().set(...)`. Split
+    /// out from the route closure so unit tests can drive every
+    /// branch (`MockSimulators` + `MockOrientation`) without booting
+    /// Hummingbird.
+    static func applyOrientation(
+        udid: String,
+        value: String,
+        simulators: any Simulators
+    ) -> OrientationOutcome {
+        guard let orientation = DeviceOrientation(wireName: value) else {
+            return .invalidValue
+        }
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        return sim.orientation().set(orientation) ? .ok : .dispatchFailed
     }
 
     private static func lifecycle(

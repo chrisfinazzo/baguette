@@ -40,6 +40,45 @@ struct BezelRoutesTests {
         #expect(bytes == Data("BARE-PNG".utf8))
     }
 
+    @Test func `applyOrientation routes a valid value through the simulator's orientation surface`() {
+        let host = MockSimulators()
+        let orientation = MockOrientation()
+        let sim = Simulator(udid: "U", name: "iPhone", state: .booted, host: host)
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(host).orientation(for: .value(sim)).willReturn(orientation)
+        given(orientation).set(.value(.landscapeRight)).willReturn(true)
+
+        #expect(Server.applyOrientation(udid: "U", value: "landscape-right", simulators: host) == .ok)
+        verify(orientation).set(.value(.landscapeRight)).called(1)
+    }
+
+    @Test func `applyOrientation reports invalidValue for unrecognised spellings`() {
+        let host = MockSimulators()
+        #expect(Server.applyOrientation(udid: "U", value: "sideways", simulators: host) == .invalidValue)
+    }
+
+    @Test func `applyOrientation reports unknownDevice when the simulator can't be found`() {
+        let host = MockSimulators()
+        given(host).find(udid: .value("ghost")).willReturn(nil)
+        #expect(Server.applyOrientation(udid: "ghost", value: "portrait", simulators: host) == .unknownDevice)
+    }
+
+    @Test func `applyOrientation reports unknownDevice when the udid is empty`() {
+        let host = MockSimulators()
+        #expect(Server.applyOrientation(udid: "", value: "portrait", simulators: host) == .unknownDevice)
+    }
+
+    @Test func `applyOrientation reports dispatchFailed when the orientation surface returns false`() {
+        let host = MockSimulators()
+        let orientation = MockOrientation()
+        let sim = Simulator(udid: "U", name: "iPhone", state: .booted, host: host)
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(host).orientation(for: .value(sim)).willReturn(orientation)
+        given(orientation).set(.any).willReturn(false)
+
+        #expect(Server.applyOrientation(udid: "U", value: "portrait", simulators: host) == .dispatchFailed)
+    }
+
     @Test func `bezelImage returns nil for an unknown udid`() {
         let chromes = MockChromes()
         let sims = MockSimulators()

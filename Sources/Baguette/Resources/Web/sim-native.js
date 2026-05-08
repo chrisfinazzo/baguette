@@ -44,6 +44,15 @@
   let layout = null;
   let deviceName = '';
 
+  // CW rotation order, indexed by `orientationIndex`. Matches the
+  // cycle Simulator.app's Cmd+→ produces. Starting index is `0`
+  // (portrait) — we don't probe the guest because the GSEvent path
+  // is write-only; out-of-sync state self-heals after one click.
+  const ORIENTATION_CYCLE_CW = [
+    'portrait', 'landscape-right', 'portrait-upside-down', 'landscape-left'
+  ];
+  let orientationIndex = 0;
+
   // --- Bootstrap ---------------------------------------------------
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot, { once: true });
@@ -360,6 +369,19 @@
     // device's stream view without an extra click.
     window.__nativeOpenSidebarView = () => {
       location.href = '/simulators#stream=' + encodeURIComponent(udid);
+    };
+
+    // Orientation cycle — advances `orientationIndex` by `steps`
+    // (-1 = CCW, +1 = CW) and POSTs the new value through the
+    // `/simulators/<udid>/orientation?value=...` route. The server
+    // delegates to `simulator.orientation().set(...)`, which fires a
+    // GSEvent over PurpleWorkspacePort.
+    window.__nativeRotate = (steps) => {
+      orientationIndex = ((orientationIndex + steps) % 4 + 4) % 4;
+      const value = ORIENTATION_CYCLE_CW[orientationIndex];
+      const url = '/simulators/' + encodeURIComponent(udid)
+                + '/orientation?value=' + encodeURIComponent(value);
+      fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
     };
   }
 

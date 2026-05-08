@@ -33,31 +33,22 @@ struct OrientationCommand: ParsableCommand {
             log("Orientation change rejected (PurpleWorkspacePort unreachable?)")
             Foundation.exit(1)
         }
-        log("Set \(simulator.name) → \(value.cliName)")
+        log("Set \(simulator.name) → \(value.wireName)")
     }
 }
 
+/// ArgumentParser conformance lives in App so Domain stays free of
+/// ArgumentParser. The actual kebab-case parsing is in
+/// `DeviceOrientation(wireName:)` (Domain) — `init(argument:)`
+/// just delegates so the CLI and HTTP route share one mapping.
 extension DeviceOrientation: ExpressibleByArgument {
-    /// Accept the kebab-case spellings the CLI exposes; reject anything
-    /// else with ArgumentParser's standard usage message.
     public init?(argument: String) {
-        switch argument {
-        case "portrait":             self = .portrait
-        case "portrait-upside-down": self = .portraitUpsideDown
-        case "landscape-left":       self = .landscapeLeft
-        case "landscape-right":      self = .landscapeRight
-        default: return nil
-        }
+        self.init(wireName: argument)
     }
 
-    /// Reverse of `init(argument:)` — used to echo the chosen value
-    /// back to the user in `OrientationCommand.run()`.
-    fileprivate var cliName: String {
-        switch self {
-        case .portrait:           return "portrait"
-        case .portraitUpsideDown: return "portrait-upside-down"
-        case .landscapeLeft:      return "landscape-left"
-        case .landscapeRight:     return "landscape-right"
-        }
+    /// Without this, ArgumentParser derives `allValueStrings` from
+    /// the `UInt32` raw values and prints `(values: 1, 2, 3, 4)`.
+    public static var allValueStrings: [String] {
+        ["portrait", "landscape-left", "landscape-right", "portrait-upside-down"]
     }
 }
