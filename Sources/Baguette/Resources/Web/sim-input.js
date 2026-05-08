@@ -337,10 +337,19 @@
         const yNorm = r.height ? (vy / r.height) : 0;
         const xNorm = r.width  ? (vx / r.width)  : 0;
         const ori = this.getOrientation();
+        // upside-down quirk: iOS routes its system-gesture
+        // recognizers to *physical* edges that are visually mirrored
+        // — home is hot at visual-LEFT (xNorm ≤ 0.07), so by
+        // symmetry the status-bar pull-down hot zone is visual-RIGHT
+        // (xNorm ≥ 0.93). Other orientations follow the strict
+        // CSS-rotation inverse: visual-bottom = high yNorm, visual-
+        // top = low yNorm.
         const inBottomBand = ori === 'portrait-upside-down'
           ? xNorm <= (1 - EDGE_BAND_NORM)
           : yNorm >= EDGE_BAND_NORM;
-        const inTopBand = yNorm <= TOP_BAND_NORM;
+        const inTopBand = ori === 'portrait-upside-down'
+          ? xNorm >= EDGE_BAND_NORM
+          : yNorm <= TOP_BAND_NORM;
         const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
         if (mode === 'tap-or-swipe' && startEdge) {
           const fx = vx / r.width;

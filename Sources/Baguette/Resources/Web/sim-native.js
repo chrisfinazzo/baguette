@@ -186,12 +186,18 @@
     //   landscape-right (raw=3): bottom → top    (✅ home fires)
     //
     // Top edge (lock-screen / notification-center pull-down)
-    // uses the strict CSS-rotation inverse — iOS's status-bar
+    // mostly uses the CSS-rotation inverse — iOS's status-bar
     // recognizer rotates with the device:
     //   portrait              : top → top
     //   landscape-left  (raw=4): top → left
-    //   portrait-upside-down  : top → bottom
     //   landscape-right (raw=3): top → right
+    //   portrait-upside-down  : top → left   (symmetric inverse of
+    //                                          upside-down's home
+    //                                          quirk — home fires
+    //                                          at portrait-right,
+    //                                          so lock-screen is
+    //                                          expected at portrait-
+    //                                          left)
     switch (currentOrientation) {
       case 'landscape-left':
         if (edge === 'bottom') return 'right';
@@ -199,7 +205,7 @@
         return edge;
       case 'portrait-upside-down':
         if (edge === 'bottom') return 'right';
-        if (edge === 'top')    return 'bottom';
+        if (edge === 'top')    return 'left';
         return edge;
       case 'landscape-right':
         if (edge === 'bottom') return 'top';
