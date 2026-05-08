@@ -44,14 +44,25 @@
   let layout = null;
   let deviceName = '';
 
-  // CW rotation order, indexed by `orientationIndex`. Matches the
-  // cycle Simulator.app's Cmd+→ produces. Starting index is `0`
-  // (portrait) — we don't probe the guest because the GSEvent path
-  // is write-only; out-of-sync state self-heals after one click.
-  const ORIENTATION_CYCLE_CW = [
-    'portrait', 'landscape-right', 'portrait-upside-down', 'landscape-left'
-  ];
+  // CW rotation cycle. Two flavours — iPhone UIKit refuses
+  // `portrait-upside-down` for apps that don't opt in (which is
+  // basically every Apple-shipped iPhone app), so the cycle skips
+  // it on phones to keep every click visibly productive. iPads
+  // and other tablet-class devices honour all four. The Domain /
+  // CLI / HTTP layers still accept `portrait-upside-down`
+  // unconditionally — this trim is UI ergonomics only.
+  // Starting index is `0` (portrait); we don't probe the guest
+  // because the GSEvent path is write-only.
+  const ORIENTATION_CYCLE_PHONE  = ['portrait', 'landscape-right', 'landscape-left'];
+  const ORIENTATION_CYCLE_TABLET = ['portrait', 'landscape-right', 'portrait-upside-down', 'landscape-left'];
   let orientationIndex = 0;
+
+  function orientationCycle() {
+    // chrome.json's `identifier` is `phone12` / `tablet5` / etc.
+    // Anything that isn't an iPhone gets the full 4-step cycle.
+    const id = (layout && layout.identifier) || '';
+    return id.startsWith('phone') ? ORIENTATION_CYCLE_PHONE : ORIENTATION_CYCLE_TABLET;
+  }
 
   // --- Bootstrap ---------------------------------------------------
   if (document.readyState === 'loading') {
@@ -371,14 +382,16 @@
       location.href = '/simulators#stream=' + encodeURIComponent(udid);
     };
 
-    // Orientation cycle — advances `orientationIndex` by `steps`
-    // (-1 = CCW, +1 = CW) and POSTs the new value through the
-    // `/simulators/<udid>/orientation?value=...` route. The server
-    // delegates to `simulator.orientation().set(...)`, which fires a
-    // GSEvent over PurpleWorkspacePort.
-    window.__nativeRotate = (steps) => {
-      orientationIndex = ((orientationIndex + steps) % 4 + 4) % 4;
-      const value = ORIENTATION_CYCLE_CW[orientationIndex];
+    // Orientation cycle — one click advances 90° CW. Cycle length
+    // varies by device class: 3 on iPhone (skips upside-down,
+    // which iPhone UIKit ignores), 4 on iPad. POSTs the new value
+    // through the `/simulators/<udid>/orientation?value=...` route;
+    // server delegates to `simulator.orientation().set(...)`, which
+    // fires a GSEvent over PurpleWorkspacePort.
+    window.__nativeRotate = () => {
+      const cycle = orientationCycle();
+      orientationIndex = (orientationIndex + 1) % cycle.length;
+      const value = cycle[orientationIndex];
       const url = '/simulators/' + encodeURIComponent(udid)
                 + '/orientation?value=' + encodeURIComponent(value);
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
