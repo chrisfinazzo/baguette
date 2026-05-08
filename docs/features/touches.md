@@ -22,13 +22,14 @@ action) that's a separate path — see
 
 | Surface | How it arrives |
 |---------|----------------|
-| **CLI** | `baguette tap --x … --y …`, `baguette swipe …`, `baguette press --button swipe-to-home / app-switcher` |
-| **Wire** | `{"type":"tap"}` / `{"type":"swipe"}` / `{"type":"touch1-down","edge":"bottom",…}` on `baguette serve` WS or `baguette input` stdin |
-| **Browser** | Click / drag on the focus-mode canvas. Drag from the bottom 7 % of the screen streams `touch1-*` with `edge: 'bottom'` so iOS animates the home / app-switcher preview live |
+| **CLI** | `baguette tap --x … --y …`, `baguette swipe …`, `baguette press --button swipe-to-home / app-switcher / pull-down-to-lock-screen / pull-down-to-notification-center` |
+| **Wire** | `{"type":"tap"}` / `{"type":"swipe"}` / `{"type":"touch1-down","edge":"bottom",…}` on `baguette serve` WS or `baguette input` stdin. `edge` accepts `bottom` (home / app switcher) or `top` (lock screen / notification center). |
+| **Browser** | Click / drag on the focus-mode canvas. Drag from the bottom 7 % streams `touch1-*` with `edge: 'bottom'` (iOS animates the home / app-switcher preview live); drag from the top 7 % streams with `edge: 'top'` (iOS pulls the lock-screen cover sheet from a top-left origin or Notification Center from a top-right origin). |
 
 Everything ends up in `Input.touch1(phase:at:size:edge:)` (streaming)
 or in the `IndigoHIDInput` button cases for the canned
-`swipe-to-home` / `app-switcher` shortcuts. From there the
+`swipe-to-home` / `app-switcher` / `pull-down-to-lock-screen` /
+`pull-down-to-notification-center` shortcuts. From there the
 `IOHIDDigitizerDispatch.send(...)` helper builds + patches +
 dispatches a single touch event.
 
@@ -136,34 +137,41 @@ chain.
 
 ## Edge gestures
 
-`IOHIDDigitizerDispatch.Edge.bottom` flips the bottom-edge bit
-(`0x3b = 0x01`, `0x3a = 0x04`) on every event in the sequence. This
-is the flag the simulator's home-indicator gesture recognizer checks
-to decide whether a touch is an interior pan or a system gesture
+`IOHIDDigitizerDispatch.Edge` flips the matching edge bit on every
+event in a sequence: bottom = `0x01`, left = `0x02`, right = `0x04`,
+top = `0x08` (with the "edges-present" flag `0x04` at offset `0x3a`).
+This is the flag the simulator's system-gesture recognizers check to
+decide whether a touch is an interior pan or a system-gesture
 candidate.
 
-iOS itself discriminates Home from App Switcher purely by velocity
-and dwell — *we don't* run a client-side discriminator any more.
-Same UX as Simulator.app:
+iOS itself discriminates between gestures purely by velocity, dwell,
+and start-x — *we don't* run a client-side discriminator. Same UX as
+Simulator.app:
 
 | Gesture | Dispatch shape |
 |---------|----------------|
-| **Quick flick up** from `y ≈ 1.0` to `y ≈ 0.3` over ~12 × 16 ms steps | iOS fires Home — back to the home screen |
-| **Slow drag** from `y ≈ 1.0` to `y ≈ 0.58` over ~30 × 35 ms steps + ~900 ms dwell at midpoint | iOS fires App Switcher — multitasking cards |
+| **Quick flick up** from `y ≈ 1.0` to `y ≈ 0.3` over ~12 × 16 ms steps with `edge=bottom` | iOS fires Home — back to the home screen |
+| **Slow drag up** from `y ≈ 1.0` to `y ≈ 0.58` over ~30 × 35 ms steps + ~900 ms dwell at midpoint with `edge=bottom` | iOS fires App Switcher — multitasking cards |
+| **Slow drag down** from `(0.25, 0.0)` to `(0.25, 0.55)` over ~24 × 25 ms steps with `edge=top` | iOS pulls the **Lock Screen** cover sheet down |
+| **Slow drag down** from `(0.75, 0.0)` to `(0.75, 0.55)` over ~24 × 25 ms steps with `edge=top` | iOS opens **Notification Center** |
 
-Both shapes are exposed as wire buttons:
+All four shapes are exposed as wire buttons:
 
 ```
 baguette press --button swipe-to-home
 baguette press --button app-switcher
+baguette press --button pull-down-to-lock-screen
+baguette press --button pull-down-to-notification-center
 ```
 
-The browser canvas auto-detects bottom-edge drags
-(`y / r.height ≥ 0.93` on `mousedown`) and switches to live
-streaming mode, sending `touch1-*` envelopes with `edge: "bottom"`
-at the user's actual drag speed. iOS animates the home-card preview
-live as the cursor moves — no client-side buffering, no canned
-playback on release.
+The browser canvas auto-detects edge drags on mousedown — bottom
+band (`y / r.height ≥ 0.93`) streams with `edge: "bottom"`; top
+band (`y / r.height ≤ 0.07`) streams with `edge: "top"`. Both
+switch to live `touch1-*` streaming at the user's actual drag
+speed. iOS animates the corresponding system preview (home-card
+for bottom, lock-screen cover sheet or notification center for
+top) live as the cursor moves — no client-side buffering, no
+canned playback on release.
 
 ## Wire JSON
 
