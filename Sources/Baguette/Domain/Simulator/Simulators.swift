@@ -1,53 +1,29 @@
 import Foundation
 import Mockable
 
-/// The host's collection of simulators. Lists what's available, finds by
-/// UDID, and runs the lifecycle verbs (`boot` / `shutdown`) that
-/// `Simulator.boot()` / `simulator.shutdown()` delegate into.
+/// The host's collection of simulators — a true DDD repository.
+/// Lists what's available and finds by UDID; capability factories
+/// (`screen`, `input`, `orientation`, …) live on `Simulator` itself.
 ///
-/// `@Mockable` so domain tests can drive the aggregate's contract without
-/// CoreSimulator. Class-bound (`AnyObject`) because each `Simulator` value
-/// carries `host: any Simulators` as a reference.
+/// `@Mockable` so domain tests can drive the aggregate without
+/// CoreSimulator. Class-bound (`AnyObject`) because the production
+/// impl `CoreSimulators` is reference-typed.
 @Mockable
 protocol Simulators: AnyObject, Sendable {
-    var all: [Simulator] { get }
-    func find(udid: String) -> Simulator?
-    func boot(_ simulator: Simulator) throws
-    func shutdown(_ simulator: Simulator) throws
-
-    /// Produce a `Screen` for the simulator. Each call returns a fresh
-    /// pipeline; multiple parallel streams are supported.
-    func screen(for simulator: Simulator) -> any Screen
-
-    /// Produce an `Input` for the simulator.
-    func input(for simulator: Simulator) -> any Input
-
-    /// Produce an `Accessibility` snapshot port for the simulator.
-    /// Each call returns a fresh handle; the underlying translator
-    /// is a process-wide singleton, so allocations are cheap.
-    func accessibility(for simulator: Simulator) -> any Accessibility
-
-    /// Produce a `LogStream` for the simulator. Each call returns
-    /// a fresh handle; multiple parallel subscribers are supported
-    /// (each spawns its own `/usr/bin/log stream` child).
-    func logs(for simulator: Simulator) -> any LogStream
-
-    /// Produce an `Orientation` surface for the simulator.
-    /// Each call returns a fresh handle; the underlying GSEvent
-    /// dispatch is stateless, so allocations are trivial.
-    func orientation(for simulator: Simulator) -> any Orientation
+    var all: [any Simulator] { get }
+    func find(udid: String) -> (any Simulator)?
 }
 
 extension Simulators {
     /// Booted simulators — the RUNNING section of the serve UI.
-    var running: [Simulator] {
+    var running: [any Simulator] {
         all.filter { $0.state == .booted }
     }
 
     /// Everything that isn't booted (shutdown, booting, shutting
     /// down) — the AVAILABLE section. Booting devices land here so
     /// the user has somewhere to see them while they come up.
-    var available: [Simulator] {
+    var available: [any Simulator] {
         all.filter { $0.state != .booted }
     }
 

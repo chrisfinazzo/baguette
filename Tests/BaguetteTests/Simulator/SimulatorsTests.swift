@@ -9,10 +9,10 @@ struct SimulatorsTests {
     @Test func `running returns only booted simulators`() {
         let host = MockSimulators()
         given(host).all.willReturn([
-            sim("U1", "iPhone 17 Pro Max", .booted, host: host),
-            sim("U2", "iPhone 17 Pro",     .shutdown, host: host),
-            sim("U3", "iPhone 17",         .booting, host: host),
-            sim("U4", "iPhone Air",        .booted, host: host),
+            sim("U1", "iPhone 17 Pro Max", .booted),
+            sim("U2", "iPhone 17 Pro",     .shutdown),
+            sim("U3", "iPhone 17",         .booting),
+            sim("U4", "iPhone Air",        .booted),
         ])
 
         let running = host.running
@@ -22,10 +22,10 @@ struct SimulatorsTests {
     @Test func `available returns everything that isn't booted`() {
         let host = MockSimulators()
         given(host).all.willReturn([
-            sim("U1", "iPhone 17 Pro Max", .booted, host: host),
-            sim("U2", "iPhone 17 Pro",     .shutdown, host: host),
-            sim("U3", "iPhone 17",         .booting, host: host),
-            sim("U4", "iPhone Air",        .shuttingDown, host: host),
+            sim("U1", "iPhone 17 Pro Max", .booted),
+            sim("U2", "iPhone 17 Pro",     .shutdown),
+            sim("U3", "iPhone 17",         .booting),
+            sim("U4", "iPhone Air",        .shuttingDown),
         ])
 
         let available = host.available
@@ -35,8 +35,8 @@ struct SimulatorsTests {
     @Test func `listJSON splits sections and preserves field shape`() throws {
         let host = MockSimulators()
         given(host).all.willReturn([
-            sim("U1", "iPhone 17 Pro Max", .booted,   runtime: "iOS 26.4", host: host),
-            sim("U2", "iPhone 17 Pro",     .shutdown, runtime: "iOS 26.4", host: host),
+            sim("U1", "iPhone 17 Pro Max", .booted,   runtime: "iOS 26.4"),
+            sim("U2", "iPhone 17 Pro",     .shutdown, runtime: "iOS 26.4"),
         ])
 
         let json = host.listJSON
@@ -70,10 +70,19 @@ struct SimulatorsTests {
 
     // MARK: - helpers
 
+    /// Build a `MockSimulator` with stubbed identity getters. Only
+    /// the fields `running`/`available`/`listJSON` actually read are
+    /// stubbed — the rest stay at Mockable's "no expectation set"
+    /// (which is fine for these tests).
     private func sim(
-        _ udid: String, _ name: String, _ state: Simulator.State,
-        runtime: String = "", host: any Simulators
-    ) -> Simulator {
-        Simulator(udid: udid, name: name, state: state, runtime: runtime, host: host)
+        _ udid: String, _ name: String, _ state: SimulatorState,
+        runtime: String = ""
+    ) -> any Simulator {
+        let s = MockSimulator()
+        given(s).udid.willReturn(udid)
+        given(s).name.willReturn(name)
+        given(s).state.willReturn(state)
+        given(s).runtime.willReturn(runtime)
+        return s
     }
 }

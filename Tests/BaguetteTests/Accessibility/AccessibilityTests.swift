@@ -6,16 +6,15 @@ import Mockable
 @Suite("Accessibility")
 struct AccessibilityTests {
 
-    @Test func `simulator delegates accessibility() to the host`() {
-        let host = MockSimulators()
+    @Test func `simulator vends a fresh Accessibility from accessibility()`() {
+        let sim = MockSimulator()
         let stubAX = MockAccessibility()
-        given(host).accessibility(for: .any).willReturn(stubAX)
-
-        let sim = Simulator(udid: "u1", name: "X", state: .booted, host: host)
+        given(sim).accessibility().willReturn(stubAX)
 
         let ax = sim.accessibility()
+
         #expect(ax === stubAX)
-        verify(host).accessibility(for: .value(sim)).called(1)
+        verify(sim).accessibility().called(1)
     }
 
     @Test func `describeAll returns the host's tree`() throws {

@@ -14,72 +14,15 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         Self.loadFrameworks()
     }
 
-    var all: [Simulator] {
+    var all: [any Simulator] {
         guard let set = resolveSet() else { return [] }
         return availableDevices(in: set).map { device in
-            simulator(from: device)
+            coreSimulator(from: device)
         }
     }
 
-    func find(udid: String) -> Simulator? {
+    func find(udid: String) -> (any Simulator)? {
         all.first { $0.udid == udid }
-    }
-
-    func boot(_ simulator: Simulator) throws {
-        guard let device = resolveDevice(udid: simulator.udid) else {
-            throw SimulatorError.notFound(udid: simulator.udid)
-        }
-
-        // Try bootWithOptions:error: first (headless boot, persists past disconnect).
-        let bootOpts = NSSelectorFromString("bootWithOptions:error:")
-        if device.responds(to: bootOpts) {
-            var err: NSError?
-            let opts: NSDictionary = ["persist": true]
-            if invokeBoolWithObjAndError(device, bootOpts, opts, &err) { return }
-            if let err { logErr("bootWithOptions failed: \(err)") }
-        }
-
-        let bootSel = NSSelectorFromString("bootWithError:")
-        if device.responds(to: bootSel) {
-            var err: NSError?
-            if invokeBoolWithError(device, bootSel, &err) { return }
-            if let err { logErr("bootWithError failed: \(err)") }
-        }
-
-        throw SimulatorError.bootFailed
-    }
-
-    func shutdown(_ simulator: Simulator) throws {
-        guard let device = resolveDevice(udid: simulator.udid) else {
-            throw SimulatorError.notFound(udid: simulator.udid)
-        }
-        let sel = NSSelectorFromString("shutdownWithError:")
-        guard device.responds(to: sel) else { throw SimulatorError.shutdownFailed }
-        var err: NSError?
-        guard invokeBoolWithError(device, sel, &err) else {
-            if let err { logErr("shutdownWithError failed: \(err)") }
-            throw SimulatorError.shutdownFailed
-        }
-    }
-
-    func screen(for simulator: Simulator) -> any Screen {
-        SimulatorKitScreen(udid: simulator.udid, host: self)
-    }
-
-    func input(for simulator: Simulator) -> any Input {
-        IndigoHIDInput(udid: simulator.udid, host: self)
-    }
-
-    func accessibility(for simulator: Simulator) -> any Accessibility {
-        AXPTranslatorAccessibility(udid: simulator.udid, host: self)
-    }
-
-    func logs(for simulator: Simulator) -> any LogStream {
-        SimDeviceLogStream(udid: simulator.udid, host: self)
-    }
-
-    func orientation(for simulator: Simulator) -> any Orientation {
-        PurpleEventOrientation(udid: simulator.udid, host: self)
     }
 
     // MARK: - resolution
@@ -141,7 +84,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         (set.value(forKey: "availableDevices") as? [NSObject]) ?? []
     }
 
-    private func simulator(from device: NSObject) -> Simulator {
+    private func coreSimulator(from device: NSObject) -> CoreSimulator {
         let udid = (device.value(forKey: "UDID") as? NSUUID)?.uuidString ?? ""
         let name = (device.value(forKey: "name") as? String) ?? "Unknown"
         let raw = (device.value(forKey: "state") as? NSNumber)?.uintValue ?? 1
@@ -154,13 +97,14 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         } ?? ""
         // `deviceType.name` is the stable bundle filename — survives
         // `simctl clone` / rename, where `device.name` does not. Falls
-        // back to the user-given `name` (via the initializer's `??`)
-        // so non-clones and any oddball device with no `deviceType`
-        // resolve to the same string they did before.
+        // back to the user-given `name` so non-clones (and any oddball
+        // device with no `deviceType`) resolve to the same string they
+        // did before.
         let deviceTypeName = (device.value(forKey: "deviceType") as? NSObject)
-            .flatMap { $0.value(forKey: "name") as? String }
-        return Simulator(
-            udid: udid, name: name,
+            .flatMap { $0.value(forKey: "name") as? String } ?? name
+        return CoreSimulator(
+            udid: udid,
+            name: name,
             state: state(from: raw),
             runtime: runtimeName,
             deviceTypeName: deviceTypeName,
@@ -168,7 +112,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         )
     }
 
-    private func state(from raw: UInt) -> Simulator.State {
+    private func state(from raw: UInt) -> SimulatorState {
         switch raw {
         case 0: return .creating
         case 1: return .shutdown

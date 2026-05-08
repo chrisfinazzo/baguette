@@ -42,10 +42,10 @@ struct BezelRoutesTests {
 
     @Test func `applyOrientation routes a valid value through the simulator's orientation surface`() {
         let host = MockSimulators()
+        let sim = MockSimulator()
         let orientation = MockOrientation()
-        let sim = Simulator(udid: "U", name: "iPhone", state: .booted, host: host)
         given(host).find(udid: .value("U")).willReturn(sim)
-        given(host).orientation(for: .value(sim)).willReturn(orientation)
+        given(sim).orientation().willReturn(orientation)
         given(orientation).set(.value(.landscapeRight)).willReturn(true)
 
         #expect(Server.applyOrientation(udid: "U", value: "landscape-right", simulators: host) == .ok)
@@ -70,10 +70,10 @@ struct BezelRoutesTests {
 
     @Test func `applyOrientation reports dispatchFailed when the orientation surface returns false`() {
         let host = MockSimulators()
+        let sim = MockSimulator()
         let orientation = MockOrientation()
-        let sim = Simulator(udid: "U", name: "iPhone", state: .booted, host: host)
         given(host).find(udid: .value("U")).willReturn(sim)
-        given(host).orientation(for: .value(sim)).willReturn(orientation)
+        given(sim).orientation().willReturn(orientation)
         given(orientation).set(.any).willReturn(false)
 
         #expect(Server.applyOrientation(udid: "U", value: "portrait", simulators: host) == .dispatchFailed)
@@ -159,7 +159,7 @@ private extension BezelRoutesTests {
     /// One-shot fixture: a booted simulator whose chrome carries one
     /// button (`powerButton`) plus distinct merged + bare composites
     /// so byte equality alone proves which path was taken.
-    static func fixture() -> (Simulator, any Chromes) {
+    static func fixture() -> (any Simulator, any Chromes) {
         let chrome = DeviceChrome(
             identifier: "phone11",
             screenInsets: Insets(top: 0, left: 0, bottom: 0, right: 0),
@@ -195,16 +195,14 @@ private extension BezelRoutesTests {
         let chromes = MockChromes()
         given(chromes).assets(forDeviceName: .any).willReturn(assets)
 
-        let sim = Simulator(
-            udid: "UDID-1",
-            name: "iPhone 17 Pro",
-            state: .booted,
-            host: MockSimulators()
-        )
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("UDID-1")
+        given(sim).name.willReturn("iPhone 17 Pro")
+        given(sim).deviceTypeName.willReturn("iPhone 17 Pro")
         return (sim, chromes)
     }
 
-    static func simulators(with sim: Simulator) -> any Simulators {
+    static func simulators(with sim: any Simulator) -> any Simulators {
         let sims = MockSimulators()
         given(sims).find(udid: .value(sim.udid)).willReturn(sim)
         return sims

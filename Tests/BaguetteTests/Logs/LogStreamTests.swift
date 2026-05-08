@@ -6,16 +6,15 @@ import Mockable
 @Suite("LogStream rich-domain delegation")
 struct LogStreamRichDomainTests {
 
-    @Test func `simulator delegates logs() to the host`() {
-        let host = MockSimulators()
+    @Test func `simulator vends a fresh LogStream from logs()`() {
+        let sim = MockSimulator()
         let stub = MockLogStream()
-        given(host).logs(for: .any).willReturn(stub)
+        given(sim).logs().willReturn(stub)
 
-        let sim = Simulator(udid: "u1", name: "X", state: .booted, host: host)
         let stream = sim.logs()
 
         #expect(stream === stub)
-        verify(host).logs(for: .value(sim)).called(1)
+        verify(sim).logs().called(1)
     }
 
     @Test func `start forwards filter and callbacks to the host`() throws {
