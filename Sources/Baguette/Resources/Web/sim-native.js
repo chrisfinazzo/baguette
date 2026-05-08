@@ -148,21 +148,21 @@
     // Empirical mapping (verified against iOS 26.4 home-indicator
     // recognizer in our headless setup):
     //   portrait                : bottom → bottom
-    //   landscape-left  (raw=4) : bottom → right   (recognizer rotates with orientation; verified)
-    //   landscape-right (raw=3) : bottom → left    (recognizer not wired — known limitation)
-    //   portrait-upside-down    : bottom → bottom  (recognizer does NOT rotate; expects portrait-bottom + edge=bottom)
+    //   landscape-left  (raw=4) : bottom → right
+    //   landscape-right (raw=3) : bottom → left   (recognizer not wired — known limitation)
+    //   portrait-upside-down    : bottom → right  (same physical edge as raw=4!)
     //
-    // The portrait-upside-down case is the asymmetry: iOS rotates
-    // the recognizer hot zone for landscape-left but *not* for
-    // upside-down. The user's visual-top drag in our 180°-rotated
-    // view maps to portrait-bottom via the coordinate transform,
-    // which is what the (non-rotated) recognizer expects, so we
-    // keep `edge: bottom` rather than rotating it to `top`.
+    // The upside-down case is iOS-asymmetric: the recognizer for
+    // raw=2 fires from portrait-right (same as raw=4), not from
+    // portrait-top as a strict 180° rotation would suggest. The
+    // browser detects this with a LEFT-edge band (xNorm ≤ 0.07)
+    // since after our 180° canvas rotation the portrait-right
+    // hot zone shows at the user's visual left.
     const rotateCCW = { bottom: 'left', left: 'top', top: 'right', right: 'bottom' };
     const rotateCW  = { bottom: 'right', right: 'top', top: 'left', left: 'bottom' };
     switch (currentOrientation) {
       case 'landscape-right':       return rotateCCW[edge] || edge;
-      case 'portrait-upside-down':  return edge;  // recognizer doesn't rotate
+      case 'portrait-upside-down':  return rotateCW[edge]  || edge;
       case 'landscape-left':        return rotateCW[edge]  || edge;
       default:                      return edge;
     }

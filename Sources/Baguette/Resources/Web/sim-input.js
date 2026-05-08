@@ -320,27 +320,29 @@
         const mode = modeOf(e);
         this._dragActive = true;
 
-        // Edge gesture from the user's-visual-bottom of the
-        // device screen. Stream `touch1-*` events with
-        // `edge: 'bottom'`; the server's `IOHIDDigitizerDispatch`
-        // patches the `IndigoHIDEdge` byte and iOS animates the
-        // home / app-switcher preview in real time. Which
-        // viewport edge counts as "user's visual bottom" depends
-        // on the current orientation — for portrait-upside-down
-        // it's the visual TOP of the rotated canvas (iOS's
-        // recognizer doesn't rotate its hot zone for raw=2 in
-        // our headless setup).
+        // Edge gesture — origin band depends on where iOS draws
+        // the home indicator after our CSS rotation, which varies
+        // by orientation:
+        //   portrait              → user's visual bottom (yNorm ≥ 0.93)
+        //   landscape-*           → user's visual bottom (yNorm ≥ 0.93,
+        //                            in the rotated bbox)
+        //   portrait-upside-down  → user's visual LEFT  (xNorm ≤ 0.07)
+        // The upside-down case is iOS-asymmetric: the recognizer
+        // for raw=2 fires from the same physical edge as raw=4
+        // (portrait-right), which after our 180° canvas rotation
+        // is the user's visual left. Detection mirrors that.
         const yNorm = r.height ? (vy / r.height) : 0;
+        const xNorm = r.width  ? (vx / r.width)  : 0;
         const ori = this.getOrientation();
         const inEdgeBand = ori === 'portrait-upside-down'
-          ? yNorm <= (1 - EDGE_BAND_NORM)
+          ? xNorm <= (1 - EDGE_BAND_NORM)
           : yNorm >= EDGE_BAND_NORM;
         if (mode === 'tap-or-swipe' && inEdgeBand) {
           const fx = vx / r.width;
           const fy = vy / r.height;
           state = { mode: 'edge-stream' };
           this.input.touchDown([{ x: fx, y: fy }], { edge: 'bottom' });
-          this.log('edge stream begin (' + ori + ', yNorm=' + yNorm.toFixed(2) + ')');
+          this.log('edge stream begin (' + ori + ', xNorm=' + xNorm.toFixed(2) + ' yNorm=' + yNorm.toFixed(2) + ')');
           return;
         }
 
@@ -372,8 +374,13 @@
           this.log('pan begin');
         } else {
           // Deferred: decide tap vs drag on first movement past the threshold.
+          // Capture the original viewport coords so the tap-ripple
+          // animation can land where the cursor actually is — the
+          // local-frame `vx/vy` are inside a rotated screenArea
+          // and would visually drift after CSS rotation.
           state = { mode: 'pending',
                     startVx: vx, startVy: vy, startW: r.width, startH: r.height,
+                    startClientX: e.clientX, startClientY: e.clientY,
                     startedAt: Date.now() };
         }
       });
@@ -473,7 +480,7 @@
         } else {
           // Never promoted past the tap threshold → one-shot tap.
           this.input.tap(state.startVx / state.startW, state.startVy / state.startH);
-          this._ripple(state.startVx, state.startVy);
+          this._ripple(state.startClientX, state.startClientY);
           this.log('tap');
         }
         state = null;
