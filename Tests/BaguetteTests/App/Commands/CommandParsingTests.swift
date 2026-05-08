@@ -80,6 +80,42 @@ struct CommandParsingTests {
         #expect(InputCommand.configuration.commandName == "input")
     }
 
+    // MARK: - orientation
+
+    @Test func `orientation parses portrait`() throws {
+        let cmd = try OrientationCommand.parse(["--udid", "U", "portrait"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.value == .portrait)
+        #expect(OrientationCommand.configuration.commandName == "orientation")
+    }
+
+    @Test func `orientation parses landscape-left`() throws {
+        let cmd = try OrientationCommand.parse(["--udid", "U", "landscape-left"])
+        #expect(cmd.value == .landscapeLeft)
+    }
+
+    @Test func `orientation parses landscape-right`() throws {
+        let cmd = try OrientationCommand.parse(["--udid", "U", "landscape-right"])
+        #expect(cmd.value == .landscapeRight)
+    }
+
+    @Test func `orientation parses portrait-upside-down`() throws {
+        let cmd = try OrientationCommand.parse(["--udid", "U", "portrait-upside-down"])
+        #expect(cmd.value == .portraitUpsideDown)
+    }
+
+    @Test func `orientation rejects unknown values`() {
+        #expect(throws: (any Error).self) {
+            try OrientationCommand.parse(["--udid", "U", "sideways"])
+        }
+    }
+
+    @Test func `orientation rejects argv without --udid`() {
+        #expect(throws: (any Error).self) {
+            try OrientationCommand.parse(["portrait"])
+        }
+    }
+
     // MARK: - stream
 
     @Test func `stream defaults match StreamConfig.default`() throws {
