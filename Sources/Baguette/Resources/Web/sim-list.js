@@ -21,7 +21,12 @@
     family: 'iphones',
     runtime: 'all',
     loading: false,
-    error: null
+    error: null,
+    // Per-device transition state — UDID → 'boot' | 'shutdown'.
+    // Drives in-row "Booting…" / "Shutting down…" chips so the user
+    // gets immediate feedback without wiping the whole table back to
+    // a loading skeleton (which felt like a full-page refresh).
+    pending: Object.create(null)
   };
 
   function getServerUrl() {
@@ -107,6 +112,17 @@
         cursor: pointer;
       }
       .asc-sim-button:hover { background: #f1f5f9; border-color: #cbd5e1; }
+      .asc-sim-pending {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 12px;
+        color: var(--asc-sim-muted);
+        font-size: 12px;
+        font-weight: 600;
+        font-style: italic;
+      }
       .asc-sim-section-title {
         padding: 14px 20px 8px;
         color: var(--asc-sim-strong);
@@ -254,14 +270,18 @@
 
   function renderRows(devices) {
     return devices.map(device => {
-      const actions = Object.keys(device.affordances || {})
-        .filter(key => key !== 'listSimulators')
-        .map(key => `<button class="asc-sim-button" data-sim-action="${escapeHTML(key)}" data-sim-id="${escapeHTML(device.id)}">${escapeHTML(actionLabel(key))}</button>`)
-        .join(' ');
+      const pending = state.pending[device.id];
+      const actions = pending
+        ? `<span class="asc-sim-pending">${escapeHTML(pendingLabel(pending))}</span>`
+        : Object.keys(device.affordances || {})
+            .filter(key => key !== 'listSimulators')
+            .map(key => `<button type="button" class="asc-sim-button" data-sim-action="${escapeHTML(key)}" data-sim-id="${escapeHTML(device.id)}">${escapeHTML(actionLabel(key))}</button>`)
+            .join(' ');
+      const stateLabel = pending ? pendingLabel(pending) : device.state;
       return `
         <tr>
           <td>${escapeHTML(device.name)}</td>
-          <td><span class="asc-sim-dot ${device.isBooted ? 'booted' : ''}"></span>${escapeHTML(device.state)}</td>
+          <td><span class="asc-sim-dot ${device.isBooted ? 'booted' : ''}"></span>${escapeHTML(stateLabel)}</td>
           <td>${escapeHTML(device.runtime)}</td>
           <td class="asc-sim-actions">${actions}</td>
         </tr>`;
@@ -270,6 +290,12 @@
 
   function actionLabel(key) {
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+  }
+
+  function pendingLabel(action) {
+    if (action === 'boot') return 'Booting…';
+    if (action === 'shutdown') return 'Shutting down…';
+    return 'Working…';
   }
 
   function renderSection(title, devices) {
@@ -342,9 +368,14 @@
   }
 
   async function loadSimDeviceList() {
-    state.loading = true;
+    // Only show the full-card "Loading…" placeholder on the first
+    // fetch (or after an error wiped the list). Subsequent refreshes
+    // — including the one after boot/shutdown — leave the existing
+    // table on screen so the page doesn't appear to reload.
+    const initial = state.devices.length === 0;
+    if (initial) state.loading = true;
     state.error = null;
-    render();
+    if (initial) render();
     try {
       state.devices = await fetchDevices();
     } catch (error) {
@@ -377,14 +408,16 @@
     }
 
     if (action === 'boot' || action === 'shutdown') {
-      state.loading = true;
+      if (state.pending[id]) return;
+      state.pending[id] = action;
       render();
       try {
         await postSimAction(action, id);
         await loadSimDeviceList();
       } catch (error) {
         state.error = error.message || String(error);
-        state.loading = false;
+      } finally {
+        delete state.pending[id];
         render();
       }
     }
