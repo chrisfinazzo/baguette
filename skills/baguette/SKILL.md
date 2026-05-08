@@ -147,10 +147,20 @@ fresh captures `baguette screenshot` is one HTTP-free command.
 
 Wired (use freely):
 - `tap`, `swipe`, `touch1-{down,move,up}`, `touch2-{down,move,up}`,
-  `pinch`, `pan`, `scroll`
+  `pinch`, `pan`, `scroll`. `touch1-*` events accept an optional
+  `edge: "bottom" | "top" | "left" | "right"` field that flags every
+  event in the chain as a screen-edge system gesture; `bottom`
+  engages iOS's home-indicator recognizer (live home / app-switcher
+  preview as the touches stream). Omit `edge` for ordinary
+  interior touches.
 - `button`: `home`, `lock`, `power`, `volume-up`, `volume-down`,
-  `action`. Optional `--duration` / `"duration"` for long-press
-  semantics (action button "Hold for Ring", power → Siri / SOS, …).
+  `action`, `swipe-to-home`, `app-switcher`. Optional `--duration` /
+  `"duration"` for long-press semantics (action button "Hold for
+  Ring", power → Siri / SOS, …). `swipe-to-home` and `app-switcher`
+  are virtual buttons that synthesize the canned home-indicator
+  gesture shapes — fast edge-flick → Home, slow drag-and-hold →
+  multitasking cards. They land iOS gesture recognition without
+  any client-side stream management.
 - `key` (single keystroke) and `type` (US-ASCII string). CLI:
   `baguette key --code KeyA --modifiers shift,command --duration 0.2`
   and `baguette type --text "hello"`. `code` is a W3C

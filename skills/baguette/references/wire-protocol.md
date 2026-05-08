@@ -53,6 +53,24 @@ intermediate samples come from a UI loop (mouse-move handler, etc.).
 Pair every `down` with an `up`. `move` is optional but typically
 streamed at ~60 Hz from the input source.
 
+#### Optional `edge` field — system gesture flag
+
+```json
+{"type":"touch1-down","x":219,"y":950,"width":438,"height":954,"edge":"bottom"}
+{"type":"touch1-move","x":219,"y":700,"width":438,"height":954,"edge":"bottom"}
+{"type":"touch1-move","x":219,"y":500,"width":438,"height":954,"edge":"bottom"}
+{"type":"touch1-up",  "x":219,"y":500,"width":438,"height":954,"edge":"bottom"}
+```
+
+`edge` accepts `bottom` / `top` / `left` / `right`. When set, every
+event in the chain is flagged as an `IndigoHIDEdge` system gesture.
+`bottom` engages iOS's home-indicator gesture recognizer — fast
+swipe → Home, slow drag-and-hold near midpoint → App Switcher,
+with iOS animating the live preview as the events stream. Omit
+`edge` for ordinary interior touches. See
+[`docs/features/touches.md`](../../../docs/features/touches.md) for
+the full dispatch recipe.
+
 ### Two fingers (the primary pinch / pan path)
 
 ```json
@@ -107,14 +125,25 @@ Negative `deltaY` scrolls content up (same convention as macOS). No
 {"type":"button","button":"volume-up"}
 {"type":"button","button":"volume-down"}
 {"type":"button","button":"action","duration":1.2}
+{"type":"button","button":"swipe-to-home"}
+{"type":"button","button":"app-switcher"}
 ```
 
-Allowed names: `home | lock | power | volume-up | volume-down | action`.
+Allowed names: `home | lock | power | volume-up | volume-down | action | swipe-to-home | app-switcher`.
 `duration` is the optional hold time in seconds — `0`/absent → ~100 ms
 short tap; longer holds drive iOS long-press semantics ("Hold for
 Ring" on `action`, Siri / SOS on `power`, etc.). The browser bezel
 overlay measures real `mousedown` → `mouseup` and forwards the
 elapsed time, so click-and-hold on a side button just works.
+
+`swipe-to-home` and `app-switcher` are *virtual* buttons — they
+synthesize the canned home-indicator gesture shapes (fast
+edge-swipe and slow drag-with-dwell). Use them when the agent
+wants the gesture vocabulary without managing a streaming
+`touch1-*` chain manually. For live-preview UX (drag from the
+canvas bottom and watch iOS animate the home-card preview),
+stream `touch1-*` with `edge: "bottom"` instead — see "One finger"
+above.
 
 **Do not propose `button:"siri"`** — it crashes `backboardd` via
 every known Indigo path and is rejected by the CLI before reaching
