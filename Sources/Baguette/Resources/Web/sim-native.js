@@ -95,6 +95,36 @@
     }
   }
 
+  // Map a screen-edge name from the user's visual frame to the
+  // device's portrait coord frame. When the device is rotated, the
+  // user's visual bottom corresponds to a *different* physical
+  // edge in portrait coords (the frame the digitizer dispatch
+  // patches `IndigoHIDEdge` against). Without this remap, a swipe
+  // up from the visual bottom in landscape lands as portrait coords
+  // near the left/right edge but is still flagged `bottom` — iOS's
+  // gesture recognizer requires the flag to match the touch's
+  // physical edge, so the home gesture never fires.
+  //
+  //   portrait                : visual bottom → physical bottom
+  //   landscape-right         : visual bottom → physical left
+  //   portrait-upside-down    : visual bottom → physical top
+  //   landscape-left          : visual bottom → physical right
+  //
+  // Same rotation applies to all four edge names — derived from
+  // the same CSS rotate transforms the bezel uses.
+  function visualToPortraitEdge(edge) {
+    if (!edge) return edge;
+    const rotateCCW = { bottom: 'left', left: 'top', top: 'right', right: 'bottom' };
+    const rotateCW  = { bottom: 'right', right: 'top', top: 'left', left: 'bottom' };
+    const rotate180 = { bottom: 'top', top: 'bottom', left: 'right', right: 'left' };
+    switch (currentOrientation) {
+      case 'landscape-right':       return rotateCCW[edge] || edge;
+      case 'portrait-upside-down':  return rotate180[edge] || edge;
+      case 'landscape-left':        return rotateCW[edge]  || edge;
+      default:                      return edge;
+    }
+  }
+
   // Map a pixel coord from the rotated visual bbox back to the
   // unrotated DOM-local frame (the screenArea's own pre-rotation
   // pixel grid). Used when placing pinch-overlay dots — their CSS
@@ -407,7 +437,13 @@
       case 'touchMove':
       case 'touchUp': {
         const fingers = (payload.fingers || []).map((f) => visualToPortraitNorm(f.x, f.y));
-        return { ...payload, fingers };
+        // Edge names ride along with coords through the rotation
+        // transform — the user's `bottom` in landscape-right is the
+        // device's physical `left`, etc. Without this remap, iOS
+        // rejects the edge flag mismatch and the system gesture
+        // recognizer never fires.
+        const edge = visualToPortraitEdge(payload.edge);
+        return { ...payload, fingers, edge };
       }
       default:
         return payload;

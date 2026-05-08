@@ -243,13 +243,20 @@ production path — taps / swipes / touches go through
   haven't ported it onto the digitizer recipe because the existing
   shape is verified and there's no live-preview feature gated on
   the swap.
-- **Edge gestures in landscape orientation** flag the byte slots
-  but the touch coords are still emitted in portrait device space.
-  iOS may or may not honour the edge flag when the touch
-  coordinates don't match the post-rotation home-indicator
-  position. Streaming `edge: 'bottom'` while the device is in
-  landscape is *technically* untested — file a bug if you observe
-  the home gesture failing to fire from landscape canvas drags.
+- **Edge gesture remapping in landscape** — when the device is
+  rotated, the user's *visual* bottom corresponds to a different
+  *physical* edge in the portrait coord frame the message uses.
+  The browser's orientation transport rotates the `edge` name
+  alongside the coords (`landscape-right`: visual-bottom →
+  physical-left, etc.) so iOS's gesture recognizer sees a touch +
+  edge flag pair on the matching physical edge. CLI / wire
+  callers passing `edge: bottom` directly while the device is
+  rotated will *not* fire the home gesture — they need to send
+  the orientation-appropriate edge name themselves, or use the
+  `swipe-to-home` / `app-switcher` button shortcuts (which
+  always run their canned shapes from the device's portrait
+  bottom regardless of current orientation, then iOS handles the
+  rotation internally).
 - **No carplay / external display targets** — `target = 0x32`
   (touch digitizer) is hard-coded. The dispatch helper would need
   a target parameter to support those, plus a way to route
