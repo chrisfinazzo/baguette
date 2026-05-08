@@ -7,7 +7,7 @@ import Foundation
 /// Siri/SOS path.
 struct Press: Gesture, Equatable {
     static let wireType = "button"
-    static let allowed = "home | lock | power | volume-up | volume-down | action"
+    static let allowed = "home | lock | power | volume-up | volume-down | action | app-switcher | swipe-to-home"
 
     let button: DeviceButton
     let duration: Double

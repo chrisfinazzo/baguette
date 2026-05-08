@@ -448,7 +448,14 @@
 
   function wireActions() {
     window.__nativeHome = () => simInput && simInput.button('home');
-    window.__nativeLock = () => simInput && simInput.button('lock');
+    // App switcher — fires the new `app-switcher` virtual button
+    // on the server side. The Swift `IndigoHIDInput` decomposes it
+    // into two consecutive home `IndigoHIDMessageForButton` presses
+    // ~150 ms apart, which is the recipe SpringBoard listens for
+    // (works on Face ID iPhones with no physical home button). No
+    // gesture coordinates involved, so device rotation is a non-
+    // issue here.
+    window.__nativeAppSwitcher = () => simInput && simInput.button('app-switcher');
     window.__nativeScreenshot = () => downloadSnapshot();
     window.__nativeClose = () => {
       // Shutting the window from inside a popup-style URL: try

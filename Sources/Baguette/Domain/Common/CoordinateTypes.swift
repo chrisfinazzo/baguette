@@ -52,11 +52,24 @@ struct HIDUsage: Equatable, Hashable, Sendable {
 /// `action`) ride `IndigoHIDMessageForHIDArbitrary` keyed by HID
 /// usagePage / usage codes from each device's chrome.json. `siri`
 /// remains rejected — it crashes backboardd through every known path.
+///
+/// `appSwitcher` and `swipeToHome` are *virtual* buttons — they have
+/// no physical counterpart on any iPhone, but the wire surface keeps
+/// the API uniform with the real ones. `appSwitcher` decomposes into
+/// two consecutive home `IndigoHIDMessageForButton` presses
+/// (SpringBoard's own recipe; works on Face ID devices that have no
+/// home button hardware). `swipeToHome` is a screen-edge gesture
+/// dispatched via `IndigoHIDMessageForMouseNSEvent` with the
+/// `IndigoHIDEdge.bottom (= 3)` flag, which is what tells the iOS
+/// HID stack to route the touches to the home-indicator gesture
+/// recognizer rather than to whatever app is foreground.
 enum DeviceButton: String, Sendable, Equatable, Hashable {
     case home, lock
     case power, action
     case volumeUp = "volume-up"
     case volumeDown = "volume-down"
+    case appSwitcher = "app-switcher"
+    case swipeToHome = "swipe-to-home"
 }
 
 extension DeviceButton {
@@ -68,7 +81,7 @@ extension DeviceButton {
     /// shipping iPhone's chrome.json.
     var standardHIDUsage: HIDUsage? {
         switch self {
-        case .home, .lock: return nil
+        case .home, .lock, .appSwitcher, .swipeToHome: return nil
         case .power:      return HIDUsage(page: 12, usage: 48)
         case .volumeUp:   return HIDUsage(page: 12, usage: 233)
         case .volumeDown: return HIDUsage(page: 12, usage: 234)

@@ -571,9 +571,15 @@
             <circle cx="12" cy="13" r="3.5"/>
           </svg>
         </button>
-        <button class="ico-btn" title="Lock" onclick="window.__nativeLock && window.__nativeLock()">
+        <button class="ico-btn" title="App switcher"
+                aria-label="Open app switcher"
+                onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
           <!-- "App-switcher" glyph mirroring the native Simulator
-               toolbar's third icon — two overlapping rounded squares. -->
+               toolbar's third icon — two overlapping rounded squares.
+               The click streams a single-finger swipe up from the
+               bottom edge that pauses near the middle of the screen,
+               which is iOS's recipe for surfacing the app switcher
+               (a quick swipe goes home instead). -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
