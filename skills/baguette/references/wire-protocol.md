@@ -127,23 +127,27 @@ Negative `deltaY` scrolls content up (same convention as macOS). No
 {"type":"button","button":"action","duration":1.2}
 {"type":"button","button":"swipe-to-home"}
 {"type":"button","button":"app-switcher"}
+{"type":"button","button":"pull-down-to-lock-screen"}
+{"type":"button","button":"pull-down-to-notification-center"}
 ```
 
-Allowed names: `home | lock | power | volume-up | volume-down | action | swipe-to-home | app-switcher`.
+Allowed names: `home | lock | power | volume-up | volume-down | action | swipe-to-home | app-switcher | pull-down-to-lock-screen | pull-down-to-notification-center`.
 `duration` is the optional hold time in seconds — `0`/absent → ~100 ms
 short tap; longer holds drive iOS long-press semantics ("Hold for
 Ring" on `action`, Siri / SOS on `power`, etc.). The browser bezel
 overlay measures real `mousedown` → `mouseup` and forwards the
 elapsed time, so click-and-hold on a side button just works.
 
-`swipe-to-home` and `app-switcher` are *virtual* buttons — they
-synthesize the canned home-indicator gesture shapes (fast
-edge-swipe and slow drag-with-dwell). Use them when the agent
-wants the gesture vocabulary without managing a streaming
-`touch1-*` chain manually. For live-preview UX (drag from the
-canvas bottom and watch iOS animate the home-card preview),
-stream `touch1-*` with `edge: "bottom"` instead — see "One finger"
-above.
+`swipe-to-home`, `app-switcher`, `pull-down-to-lock-screen`, and
+`pull-down-to-notification-center` are *virtual* buttons — they
+synthesize the canned system-gesture shapes (fast edge-swipe up;
+slow drag-with-dwell up; slow drag down from top-left; slow drag
+down from top-right). Use them when the agent wants the gesture
+vocabulary without managing a streaming `touch1-*` chain manually.
+For live-preview UX, stream `touch1-*` with `edge: "bottom"` (drag
+from canvas bottom — iOS animates home / app-switcher preview) or
+`edge: "top"` (drag from canvas top — iOS pulls the lock-screen /
+notification-center cover sheet) instead — see "One finger" above.
 
 **Do not propose `button:"siri"`** — it crashes `backboardd` via
 every known Indigo path and is rejected by the CLI before reaching

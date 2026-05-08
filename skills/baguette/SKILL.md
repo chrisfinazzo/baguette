@@ -151,16 +151,21 @@ Wired (use freely):
   `edge: "bottom" | "top" | "left" | "right"` field that flags every
   event in the chain as a screen-edge system gesture; `bottom`
   engages iOS's home-indicator recognizer (live home / app-switcher
-  preview as the touches stream). Omit `edge` for ordinary
-  interior touches.
+  preview as the touches stream); `top` engages the status-bar
+  recognizer (live lock-screen cover sheet from a top-left drag,
+  Notification Center from a top-right drag). Omit `edge` for
+  ordinary interior touches.
 - `button`: `home`, `lock`, `power`, `volume-up`, `volume-down`,
-  `action`, `swipe-to-home`, `app-switcher`. Optional `--duration` /
-  `"duration"` for long-press semantics (action button "Hold for
-  Ring", power → Siri / SOS, …). `swipe-to-home` and `app-switcher`
-  are virtual buttons that synthesize the canned home-indicator
-  gesture shapes — fast edge-flick → Home, slow drag-and-hold →
-  multitasking cards. They land iOS gesture recognition without
-  any client-side stream management.
+  `action`, `swipe-to-home`, `app-switcher`,
+  `pull-down-to-lock-screen`, `pull-down-to-notification-center`.
+  Optional `--duration` / `"duration"` for long-press semantics
+  (action button "Hold for Ring", power → Siri / SOS, …). The four
+  swipe / pull names are virtual buttons that synthesize the
+  canned system-gesture shapes — fast edge-flick → Home, slow
+  drag-and-hold → app switcher, slow drag down from top-left →
+  Lock Screen, slow drag down from top-right → Notification
+  Center. They land iOS gesture recognition without any
+  client-side stream management.
 - `key` (single keystroke) and `type` (US-ASCII string). CLI:
   `baguette key --code KeyA --modifiers shift,command --duration 0.2`
   and `baguette type --text "hello"`. `code` is a W3C
