@@ -114,6 +114,25 @@
   // the same CSS rotate transforms the bezel uses.
   function visualToPortraitEdge(edge) {
     if (!edge) return edge;
+    // Strict rotation-by-orientation mapping — the edge name
+    // rotates by the same angle the coord transform uses, so the
+    // flag matches the physical edge the touch coords land on:
+    //   portrait                : bottom → bottom
+    //   landscape-left  (raw=4) : bottom → right   (verified)
+    //   landscape-right (raw=3) : bottom → left    (does NOT fire — known limitation)
+    //   portrait-upside-down    : bottom → top
+    //
+    // Empirically: `landscape-left` with `edge=right` fires the
+    // home gesture; `landscape-right` does not fire on either
+    // `edge=left` (the symmetric mapping) or `edge=right`. The
+    // asymmetry appears to be inside iOS — the home-indicator
+    // recognizer for `UIDeviceOrientationLandscapeLeft (raw=3)`
+    // doesn't fully wire up in our headless setup (no
+    // `SimDisplayChromeView` attachment). Browser canvas drags
+    // from the visual bottom in `landscape-right` won't fire the
+    // home gesture; rotate to `landscape-left` or run
+    // `baguette press --button swipe-to-home` against a portrait
+    // device instead.
     const rotateCCW = { bottom: 'left', left: 'top', top: 'right', right: 'bottom' };
     const rotateCW  = { bottom: 'right', right: 'top', top: 'left', left: 'bottom' };
     const rotate180 = { bottom: 'top', top: 'bottom', left: 'right', right: 'left' };
@@ -437,11 +456,14 @@
       case 'touchMove':
       case 'touchUp': {
         const fingers = (payload.fingers || []).map((f) => visualToPortraitNorm(f.x, f.y));
-        // Edge names ride along with coords through the rotation
-        // transform — the user's `bottom` in landscape-right is the
-        // device's physical `left`, etc. Without this remap, iOS
-        // rejects the edge flag mismatch and the system gesture
-        // recognizer never fires.
+        // Edge name rotates with the coords. iOS reads the flag
+        // as a *physical* edge in portrait coords, so the user's
+        // visual `bottom` becomes `left` / `right` / `top`
+        // depending on device rotation — same rotation the
+        // coordinate transform uses. Verified empirically:
+        // landscape-left fires home gesture with `edge: right`
+        // (visual-bottom → physical-right). Landscape-right with
+        // `edge: left` is currently flaky — under investigation.
         const edge = visualToPortraitEdge(payload.edge);
         return { ...payload, fingers, edge };
       }

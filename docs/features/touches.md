@@ -257,6 +257,18 @@ production path — taps / swipes / touches go through
   always run their canned shapes from the device's portrait
   bottom regardless of current orientation, then iOS handles the
   rotation internally).
+- **`landscape-right` (raw=3) home gesture is not yet working.**
+  Empirically: `landscape-left` (raw=4, home on left) fires the
+  home gesture cleanly with `edge=right` flagged on touches at
+  portrait-right. `landscape-right` (raw=3, home on right) does
+  *not* fire on either `edge=left` (the symmetric mapping) or
+  `edge=right` (the alternative we tested). The gesture
+  recognizer for that specific orientation appears to depend on
+  state we don't fully replicate in our headless setup
+  (likely a `SimDisplayChromeView` attachment). Workaround:
+  rotate to `landscape-left` if you need a landscape edge gesture,
+  or rotate back to `portrait` and use `baguette press --button
+  swipe-to-home` / `--button app-switcher`.
 - **No carplay / external display targets** — `target = 0x32`
   (touch digitizer) is hard-coded. The dispatch helper would need
   a target parameter to support those, plus a way to route
