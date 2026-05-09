@@ -244,11 +244,14 @@ struct Server: Sendable {
 
     // MARK: - handlers
 
-    private static func staticAsset(_ name: String) -> Response {
+    static func staticAsset(_ name: String) -> Response {
         guard let data = WebRoot.data(named: name) else {
             return Response(
                 status: .notFound,
-                headers: [.contentType: "text/plain; charset=utf-8"],
+                headers: [
+                    .contentType: "text/plain; charset=utf-8",
+                    .contentSecurityPolicy: "frame-ancestors 'none'",
+                ],
                 body: .init(byteBuffer: ByteBuffer(string:
                     "missing \(name) — set BAGUETTE_WEB_DIR or rebuild"
                 ))
@@ -256,7 +259,11 @@ struct Server: Sendable {
         }
         return Response(
             status: .ok,
-            headers: [.contentType: contentType(for: name), .cacheControl: "no-cache"],
+            headers: [
+                .contentType: contentType(for: name),
+                .cacheControl: "no-cache",
+                .contentSecurityPolicy: "frame-ancestors 'none'",
+            ],
             body: .init(byteBuffer: ByteBuffer(data: data))
         )
     }
@@ -983,4 +990,5 @@ private func contentType(for filename: String) -> String {
 
 private extension HTTPField.Name {
     static let secFetchSite = Self("Sec-Fetch-Site")!
+    static let contentSecurityPolicy = Self("Content-Security-Policy")!
 }

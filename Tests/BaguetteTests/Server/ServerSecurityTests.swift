@@ -60,6 +60,16 @@ struct ServerSecurityTests {
         ))
     }
 
+    @Test func `static asset responses deny foreign framing`() {
+        let csp = HTTPField.Name("Content-Security-Policy")!
+
+        for asset in ["sim.html", "farm/farm.html"] {
+            let response = Server.staticAsset(asset)
+
+            #expect(response.headers[csp] == "frame-ancestors 'none'")
+        }
+    }
+
     private static func request(
         host: String,
         origin: String? = nil,
