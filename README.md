@@ -54,7 +54,7 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
   out of Simulator.app.
 - **Live unified-log stream** — `baguette logs --udid <X>` streams the
   booted simulator's `os_log` output line-by-line to stdout; `WS
-  /simulators/:udid/logs` does the same to a browser. Predicate /
+/simulators/:udid/logs` does the same to a browser. Predicate /
   bundle-id filters supported.
 - **Standalone web UI** — `baguette serve` opens `http://localhost:8421/simulators`
   with a list page, live stream, gesture input, and DeviceKit-sourced
@@ -191,22 +191,22 @@ served root for live-iteration without rebuilding.
 
 ### Routes (single resource tree, no `/api/` prefix)
 
-| Method | Path                                       | Backed by                    |
-|--------|--------------------------------------------|------------------------------|
-| `GET`  | `/`                                        | 302 → `/simulators`          |
-| `GET`  | `/simulators`                              | list HTML                    |
-| `GET`  | `/simulators.json`                         | list JSON `{running, available}` |
-| `GET`  | `/simulators/:udid`                        | stream HTML                  |
-| `POST` | `/simulators/:udid/boot`                   | `simulator.boot()`           |
-| `POST` | `/simulators/:udid/shutdown`               | `simulator.shutdown()`       |
-| `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
-| `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
-| `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG of the framebuffer (`?quality=&scale=`) |
-| `WS`   | `/simulators/:udid/stream?format=mjpeg|avcc` | live frames + control + input + `describe_ui` |
+| Method | Path                                                        | Backed by                                                                    |
+| ------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| `GET`  | `/`                                                         | 302 → `/simulators`                                                          |
+| `GET`  | `/simulators`                                               | list HTML                                                                    |
+| `GET`  | `/simulators.json`                                          | list JSON `{running, available}`                                             |
+| `GET`  | `/simulators/:udid`                                         | stream HTML                                                                  |
+| `POST` | `/simulators/:udid/boot`                                    | `simulator.boot()`                                                           |
+| `POST` | `/simulators/:udid/shutdown`                                | `simulator.shutdown()`                                                       |
+| `GET`  | `/simulators/:udid/chrome.json`                             | DeviceKit bezel layout                                                       |
+| `GET`  | `/simulators/:udid/bezel.png`                               | rasterized bezel PNG                                                         |
+| `GET`  | `/simulators/:udid/screenshot.jpg`                          | one-shot JPEG of the framebuffer (`?quality=&scale=`)                        |
+| `WS`   | `/simulators/:udid/stream?format=mjpeg                      | avcc`                                                                        | live frames + control + input + `describe_ui` |
 | `WS`   | `/simulators/:udid/logs?level=&style=&predicate=&bundleId=` | live unified-log stream (one `{"type":"log","line":…}` text frame per entry) |
-| `GET`  | `/farm`                                    | device-farm HTML             |
-| `GET`  | `/farm/:file`                              | farm UI asset (`farm.css`, `farm-*.js`, …) |
-| `GET`  | `/<file>.{html,js,css}`                    | static UI asset              |
+| `GET`  | `/farm`                                                     | device-farm HTML                                                             |
+| `GET`  | `/farm/:file`                                               | farm UI asset (`farm.css`, `farm-*.js`, …)                                   |
+| `GET`  | `/<file>.{html,js,css}`                                     | static UI asset                                                              |
 
 ### One bidirectional WebSocket per stream
 
@@ -260,13 +260,13 @@ device renders in a single page; the same WebSocket pipeline that powers
 `/farm` is a thin HTML shell at `Resources/Web/farm/farm.html` that
 loads five IIFE component scripts from `/farm/<name>.js`:
 
-| Script           | Job                                             |
-|------------------|-------------------------------------------------|
-| `farm-views.js`  | Grid / Wall / List renderers (pure DOM)         |
-| `farm-tile.js`   | `FarmTile` — per-device thumbnail StreamSession |
-| `farm-focus.js`  | `FarmFocus` — focused-device pane               |
-| `farm-filter.js` | `FarmFilter` — filter state + sidebar wiring    |
-| `farm-app.js`    | `FarmApp` — orchestrator (boot, fetch, dispatch)|
+| Script           | Job                                              |
+| ---------------- | ------------------------------------------------ |
+| `farm-views.js`  | Grid / Wall / List renderers (pure DOM)          |
+| `farm-tile.js`   | `FarmTile` — per-device thumbnail StreamSession  |
+| `farm-focus.js`  | `FarmFocus` — focused-device pane                |
+| `farm-filter.js` | `FarmFilter` — filter state + sidebar wiring     |
+| `farm-app.js`    | `FarmApp` — orchestrator (boot, fetch, dispatch) |
 
 `BAGUETTE_WEB_DIR` overrides the served root, so you can iterate on the
 farm UI without rebuilding — point it at `Sources/Baguette/Resources/Web`
@@ -330,12 +330,12 @@ baguette stream --udid <UDID> --format avcc --fps 60 | ffplay -
 Outputs length-prefixed binary frames on stdout. AVCC carries a 1-byte
 type prefix per chunk:
 
-| Prefix | Meaning |
-|--------|---------|
+| Prefix | Meaning                                             |
+| ------ | --------------------------------------------------- |
 | `0x01` | avcC description — feed to `VideoDecoder.configure` |
-| `0x02` | Keyframe (IDR) AVCC payload |
-| `0x03` | Delta frame |
-| `0x04` | JPEG seed — paints before H.264 IDR lands |
+| `0x02` | Keyframe (IDR) AVCC payload                         |
+| `0x03` | Delta frame                                         |
+| `0x04` | JPEG seed — paints before H.264 IDR lands           |
 
 Runtime control: while streaming, write one JSON line per command to
 stdin to retune without restarting.
