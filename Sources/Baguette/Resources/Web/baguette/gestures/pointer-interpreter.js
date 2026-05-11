@@ -350,10 +350,7 @@
           state.f2.x += shiftX; state.f2.y += shiftY;
         }
 
-        this.screen.touchMove([
-          { x: state.f1.x / width, y: state.f1.y / height },
-          { x: state.f2.x / width, y: state.f2.y / height },
-        ]);
+        this.screen.touchMove([state.f1, state.f2]);
 
         if (this.overlay) {
           if (state.kind === 'pinch') {
@@ -383,13 +380,14 @@
       let state = null;
 
       const fingersFor = (scale, rotRad, centreDev, baseDev) => {
-        const { width, height } = this.screen.size;
         const rr = baseDev * scale;
         const dx = Math.cos(rotRad) * rr;
         const dy = Math.sin(rotRad) * rr;
+        // Chrome-pixel coords — `centreDev` is already chrome-pixel
+        // and the wire envelope expects chrome-pixel. Don't divide.
         return [
-          { x: (centreDev.x + dx) / width, y: (centreDev.y + dy) / height },
-          { x: (centreDev.x - dx) / width, y: (centreDev.y - dy) / height },
+          { x: centreDev.x + dx, y: centreDev.y + dy },
+          { x: centreDev.x - dx, y: centreDev.y - dy },
         ];
       };
 
@@ -527,9 +525,14 @@
 
       const relFingers = (touches) => {
         const r = this._el.getBoundingClientRect();
+        const { width, height } = this.screen.size;
         return Array.from(touches).map(t => ({
-          x: (t.clientX - r.left) / r.width,
-          y: (t.clientY - r.top)  / r.height,
+          // Chrome-pixel coords (visual rect → device-point scale)
+          // so the wire envelope ships the same units as `tap`.
+          x: ((t.clientX - r.left) / r.width)  * width,
+          y: ((t.clientY - r.top)  / r.height) * height,
+          // Pre-scaling raw pixels for the overlay HUD, which paints
+          // host-local DOM dots in CSS pixels.
           vx: t.clientX - r.left, vy: t.clientY - r.top,
         }));
       };
