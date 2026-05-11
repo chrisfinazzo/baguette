@@ -134,19 +134,27 @@
     max-width: 100%;
   }
 
-  /* `!important` overrides device-frame.js's inline `max-height: 70vh`
+  /* `!important` overrides the SDK Bezel's inline `max-height: 70vh`
      on both the wrapper <div> and the bezel <img> — those defaults
      are tuned for the sidebar layout and would cap the device to
      70% of the viewport here. The 68px subtracts the toolbar
-     (36px) + column gap (8px) + container padding (24px). */
+     (36px) + column gap (8px) + container padding (24px).
+
+     Uses `dvh` (dynamic viewport height) so iOS Safari's URL bar +
+     bottom toolbar are subtracted from the viewport, not overlaid on
+     top of the bezel. With plain `vh` the bezel renders behind the
+     Safari toolbar and the bottom of the device gets clipped. Falls
+     back to `vh` on engines that don't support `dvh`. */
   #simNativeView #nativeDeviceFrame,
   #simNativeView #nativeDeviceFrame > div {
-    max-height: calc(100vh - 68px) !important;
+    max-height: calc(100vh  - 68px) !important;
+    max-height: calc(100dvh - 68px) !important;
     max-width: 100% !important;
   }
   #simNativeView #nativeDeviceFrame img,
   #simNativeView #nativeDeviceFrame canvas {
-    max-height: calc(100vh - 68px) !important;
+    max-height: calc(100vh  - 68px) !important;
+    max-height: calc(100dvh - 68px) !important;
     max-width: 100% !important;
   }
 
@@ -184,7 +192,8 @@
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] canvas,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] img,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] canvas {
-    max-height: min(calc(100vh - 68px), calc(100vw - 32px)) !important;
+    max-height: min(calc(100vh  - 68px), calc(100vw - 32px)) !important;
+    max-height: min(calc(100dvh - 68px), calc(100vw - 32px)) !important;
   }
 
   /* Label group — clickable, returns to the simulator list. The

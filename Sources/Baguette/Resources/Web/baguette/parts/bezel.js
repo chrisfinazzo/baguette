@@ -29,15 +29,19 @@
     mount(container) {
       container.innerHTML = '';
       const wrapper = document.createElement('div');
+      // `dvh` (dynamic viewport height) subtracts iOS Safari's URL bar
+      // and bottom toolbar from the cap, so the bezel doesn't render
+      // behind them and get clipped. The earlier `vh` declaration
+      // stays as a fallback for engines without `dvh` support.
       wrapper.style.cssText =
-        'position:relative;display:inline-block;max-height:70vh;';
+        'position:relative;display:inline-block;max-height:70vh;max-height:70dvh;';
 
       const frameImg = document.createElement('img');
       frameImg.src = this.bare ? this.def.bezelImage.bare : this.def.bezelImage.rest;
       frameImg.draggable = false;
       frameImg.alt = '';
       frameImg.style.cssText =
-        'display:block;height:100%;max-height:70vh;pointer-events:none;position:relative;z-index:1;';
+        'display:block;height:100%;max-height:70vh;max-height:70dvh;pointer-events:none;position:relative;z-index:1;';
       frameImg.onerror = () => { frameImg.style.display = 'none'; };
 
       const screenArea = document.createElement('div');
