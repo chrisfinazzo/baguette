@@ -116,21 +116,34 @@
       ? `${humanizeName(b.name)} → ${wire}`
       : `${humanizeName(b.name)} — not wired on iOS 26.4`;
     wrap.setAttribute('aria-label', wrap.title);
+    // Z-order against the bezel <img> (which sits at z=1):
+    //  • `onTop: false` → z=0, BEHIND the bezel. DeviceKit marks
+    //    iPhone power/volume/action this way: the cap pokes out
+    //    through a transparent slot in the bezel's side rail and
+    //    only the overshoot is visible. The bezel image's opaque
+    //    body silhouette occludes the rest with no CSS clip-path
+    //    math. Apple Watch's digital-crown and side-button are
+    //    also `onTop:false` because the watch composite has
+    //    their silhouettes baked into the body PDF — the overlay
+    //    sits behind the silhouette as the click target while
+    //    being visually hidden.
+    //  • `onTop: true`  → z=2, IN FRONT of the bezel. Apple
+    //    Watch's orange action button (`left-side-button`) ships
+    //    this way: the action cap is NOT baked into the watch
+    //    composite, so the overlay must layer on top to be
+    //    visible at all. Routing both z-indices off chrome.json's
+    //    `onTop` keeps the actionable-bezel UI consistent with
+    //    Apple's static merged composite, which uses the same
+    //    flag to decide whether to bake the button under or over
+    //    the device body.
+    const z = b.onTop ? 2 : 0;
     wrap.style.cssText = [
       'position:absolute',
       'padding:0',
       'border:0',
       'background:transparent',
       'cursor:pointer',
-      // Render BEHIND the bezel <img> (which is z=1). DeviceKit's
-      // chrome data marks iPhone power/volume/action with
-      // `onTop:false` — i.e. the cap should sit behind the device
-      // body so only the part overshooting the bezel edge stays
-      // visible. That's how a real iPhone looks: the cap pokes out
-      // through a slot in the side rail. z=0 + the opaque bezel
-      // composite gives us that exact occlusion for free, with no
-      // CSS clip-path math.
-      'z-index:0',
+      `z-index:${z}`,
       'transition:transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1.0)',
       '-webkit-user-select:none',
       'user-select:none',

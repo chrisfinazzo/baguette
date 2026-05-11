@@ -216,13 +216,59 @@ struct LiveChromesTests {
         let assets = chromes.assets(forDeviceName: "iPhone 17 Pro")
 
         #expect(assets?.composite == merged)
-        // Margins reflect every anchor branch:
-        //   left:   imgW(10) - offX(0) = 10
-        //   right:  imgW(10) + offX(0) = 10
-        //   top:    -(offY(-15) - imgH(20)/2) = 25
-        //   bottom: offY(15) + imgH(20)/2 = 25
-        #expect(assets?.buttonMargins == Insets(top: 25, left: 10, bottom: 25, right: 10))
+        // Margins come from chrome.json's `images.devicePadding`,
+        // verbatim — Apple's authoritative source. The four-anchor
+        // fixture declares (top:7, left:3, bottom:5, right:9); button
+        // geometry no longer drives this value.
+        #expect(assets?.buttonMargins == Insets(top: 7, left: 3, bottom: 5, right: 9))
         verify(rasterizer).compose(canvasSize: .any, layers: .any).called(1)
+    }
+
+    // Apple's chrome.json carries an authoritative `images.devicePadding`
+    // block — the canvas margin reserved around the rasterized
+    // composite for hardware-button overshoot and rollover-animation
+    // slack. The merged bezel must take its margins straight from
+    // that field, not from button-geometry guessing: real chromes
+    // ship `devicePadding` even on tablet bundles that have no
+    // buttons at all, and the values for watches don't match the
+    // naive "imgW ± offX" inference.
+    //
+    // Fixture: composite 100×200, single right-anchor button image
+    // 20×60 with its CENTRE 25 px inside the composite right edge
+    // (button sits entirely inside the composite — the inferred
+    // overshoot is zero). chrome.devicePadding declares `right: 11`
+    // for hover popout. Assertion: merged margins reflect that 11 —
+    // not the zero an inference formula would compute, and not the
+    // accidental `imgW + offX` = -5 → 0 the prior production code
+    // would compute.
+    @Test func `assets uses chrome devicePadding as button margins`() throws {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        let composite = ChromeImage(data: Data("composite".utf8), size: Size(width: 100, height: 200))
+        let sideBtn = ChromeImage(data: Data("side".utf8), size: Size(width: 20, height: 60))
+        let merged = ChromeImage(data: Data("merged".utf8), size: Size(width: 111, height: 200))
+
+        given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONDevicePadding)
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("PhoneComposite"))
+            .willReturn(Data("composite-pdf".utf8))
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("SIDE"))
+            .willReturn(Data("side-pdf".utf8))
+        given(rasterizer).rasterize(pdfData: .value(Data("composite-pdf".utf8)))
+            .willReturn(composite)
+        given(rasterizer).rasterize(pdfData: .value(Data("side-pdf".utf8)))
+            .willReturn(sideBtn)
+        given(rasterizer).compose(canvasSize: .any, layers: .any).willReturn(merged)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        let assets = chromes.assets(forDeviceName: "Apple Watch Ultra 2 (49mm)")
+
+        #expect(assets?.buttonMargins == Insets(top: 0, left: 0, bottom: 0, right: 11))
+        verify(rasterizer).compose(
+            canvasSize: .value(Size(width: 111, height: 200)),
+            layers: .any
+        ).called(1)
     }
 
     // Watch-style chrome: the orange action button (`onTop: true`)
@@ -482,6 +528,29 @@ private extension LiveChromesTests {
         ("iPadLeft",  "left"),
     ]
 
+    /// watch4-shape fixture exposing the new authoritative source for
+    /// canvas margins: `images.devicePadding`. The right-anchor button
+    /// fits ENTIRELY inside the composite (centre 25 px in, image 36
+    /// wide → right edge 7 px before composite right edge), so an
+    /// inference-based formula would compute zero overshoot. The
+    /// chrome's declared `right: 11` is therefore the only thing that
+    /// can produce the correct 11 px hover-popout margin.
+    static let fixtureChromeJSONDevicePadding: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.watch4",
+      "images": {
+        "composite": "PhoneComposite",
+        "sizing": { "leftWidth": 0, "rightWidth": 0, "topHeight": 0, "bottomHeight": 0 },
+        "devicePadding": { "top": 0, "left": 0, "bottom": 0, "right": 11 }
+      },
+      "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
+      "inputs": [
+        { "name": "side", "image": "SIDE", "anchor": "right",
+          "offsets": { "normal": { "x": -25, "y": 160 } } }
+      ]
+    }
+    """#.utf8)
+
     /// One `onTop: false` button and one `onTop: true` button. Drives
     /// the layering split inside `assemble()` so a watch-shaped chrome
     /// renders its overlaid action button above the bezel.
@@ -505,14 +574,17 @@ private extension LiveChromesTests {
     """#.utf8)
 
     /// Four anchors × two aligns — drives every arm of the
-    /// computeMargins / buttonTopLeft switches (left, right, top with
-    /// both leading & trailing align, bottom with both leading & trailing).
+    /// `buttonTopLeft` switch (left, right, top with both leading &
+    /// trailing align, bottom with both leading & trailing). Carries
+    /// a non-trivial `devicePadding` block so the test can pin that
+    /// Apple's authoritative margin flows through to the assets.
     static let fixtureChromeJSONFourAnchors: Data = Data(#"""
     {
       "identifier": "com.apple.dt.devicekit.chrome.phone11",
       "images": {
         "composite": "PhoneComposite",
-        "sizing": { "leftWidth": 0, "rightWidth": 0, "topHeight": 0, "bottomHeight": 0 }
+        "sizing": { "leftWidth": 0, "rightWidth": 0, "topHeight": 0, "bottomHeight": 0 },
+        "devicePadding": { "top": 7, "left": 3, "bottom": 5, "right": 9 }
       },
       "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
       "inputs": [

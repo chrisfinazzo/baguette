@@ -211,7 +211,16 @@ final class LiveChromes: Chromes, @unchecked Sendable {
             }
         }
 
-        let margins = computeMargins(buttons: buttonImages)
+        // `images.devicePadding` in chrome.json is Apple's authoritative
+        // canvas margin around the rasterized composite — reserved for
+        // hardware-button overshoot and rollover-animation slack. The
+        // values are smaller than a naive "fit every button" inference
+        // would produce (watch4 ships `right: 11`, exactly the slack
+        // the digital-crown popout needs) and they apply even to
+        // chromes that have no buttons (tablet5 ships `top: 9, right:
+        // 10` despite having no `inputs`). Honour the field verbatim
+        // rather than rederiving anything from button geometry.
+        let margins = chrome.devicePadding
         let canvasSize = Size(
             width:  composite.size.width  + margins.left + margins.right,
             height: composite.size.height + margins.top  + margins.bottom
@@ -265,29 +274,6 @@ final class LiveChromes: Chromes, @unchecked Sendable {
             buttonImages: perButton,
             buttonMargins: margins
         )
-    }
-
-    /// Overshoot margins — how far each button image extends past the
-    /// composite edge along its anchored side. Used to expand the
-    /// merged-bezel canvas so the cap visually pokes out instead of
-    /// being clipped at the device-body edge.
-    private func computeMargins(
-        buttons: [(button: ChromeButton, image: ChromeImage)]
-    ) -> Insets {
-        var top: Double = 0, left: Double = 0, bottom: Double = 0, right: Double = 0
-        for entry in buttons {
-            let imgW = entry.image.size.width
-            let imgH = entry.image.size.height
-            let offX = entry.button.offset.x
-            let offY = entry.button.offset.y
-            switch entry.button.anchor {
-            case .left:   left   = max(left,   max(imgW - offX, 0))
-            case .right:  right  = max(right,  max(imgW + offX, 0))
-            case .top:    top    = max(top,    max(-(offY - imgH / 2), 0))
-            case .bottom: bottom = max(bottom, max(offY + imgH / 2, 0))
-            }
-        }
-        return Insets(top: top, left: left, bottom: bottom, right: right)
     }
 
     /// Top-left draw position for a button image inside the expanded
