@@ -164,14 +164,16 @@ The SDK mirrors that shape in both languages: the Swift `Simulator` has sub-aggr
 
 ## Migration path
 
-1. **(landed)** SDK skeleton + `/definition.json` route + `/baguette-demo.html` smoke page. Existing pages untouched.
-2. **(next)** Cutover `sim-native.js` to `Baguette.use().mount()`. Keep `StreamSession` for frames; SDK takes over bezel + buttons + tap dispatch.
-3. **(next)** Port `MouseGestureSource` logic into `gestures/pointer-interpreter.js` — drag, pinch, edge gestures, wheel synthesis. Delete `sim-input.js`.
-4. **(next)** Cutover `sim-stream.js` + `farm/farm-tile.js`. Delete `sim-input-bridge.js`, `bezel-buttons.js`, `device-frame.js`.
-5. **(next)** Add `parts/crown.js` + `parts/keyboard.js`. Apple Watch correctness lands.
-6. **(eventually)** Add `parts/remote.js` for Apple TV. Vision Pro adds whatever parts it needs.
+1. **(landed)** SDK skeleton + `/definition.json` route + `/baguette-demo.html` smoke page.
+2. **(landed)** Button geometry + transform CSS computed in Swift (anchor switch + mirror formula + image-percent translates).
+3. **(landed)** Full gesture interpreter ported into `gestures/pointer-interpreter.js` — drag, pinch, pan, edge-stream, wheel-as-2-finger, Safari gesture events, option-hover preview, touch (iOS WebView).
+4. **(landed)** Keyboard part added (`parts/keyboard.js`). W3C-code whitelist consolidated in one file.
+5. **(landed)** Cutover of all three consumer pages: `sim-stream.js`, `sim-native.js` (with orientation-aware coord remap at the send boundary), `farm/farm-tile.js` (uses SDK parts à la carte — Transport + Screen + Keyboard — since the tile has its own canvas surface).
+6. **(landed)** Deleted: `bezel-buttons.js`, `sim-input.js`, `sim-input-bridge.js`, `device-frame.js`, `keyboard-capture.js`.
+7. **(next)** Add `parts/crown.js`. Apple Watch correctness lands (rotary input, not button).
+8. **(eventually)** Add `parts/remote.js` for Apple TV. Vision Pro adds whatever parts it needs.
 
-Each step is bounded — the SDK boundary means a page cutover is "delete N old files, change 5 lines in the page, done."
+The cutover is complete — every browser-side simulator interaction flows through `Baguette.use({...}).mount(container)` (or, in farm-tile's case, through the SDK's internal parts assembled by hand).
 
 ---
 
