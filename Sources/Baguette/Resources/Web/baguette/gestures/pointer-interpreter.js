@@ -417,9 +417,30 @@
         }
       });
 
+      // Recompute the centroid from the event's clientX/Y on each
+      // change. Apple's `GestureEvent.clientX/Y` carries the CURRENT
+      // midpoint between the two fingers (not the gesturestart
+      // anchor), so updating `state.centreDev` here lets a 2-finger
+      // pan in Apple Maps / Photos translate the synthesized fingers
+      // — without this, the pair stayed mirrored around the original
+      // landing centroid and the user couldn't shift the map.
+      const updateCentre = (e) => {
+        const r = this._el.getBoundingClientRect();
+        const { width, height } = this.screen.size;
+        const vx = e.clientX - r.left, vy = e.clientY - r.top;
+        state.centreVx = vx;
+        state.centreVy = vy;
+        state.centreDev = {
+          x: (vx / r.width)  * width,
+          y: (vy / r.height) * height,
+        };
+        state.viewR = (BASE_SPREAD_PT / width) * r.width;
+      };
+
       this._on(this._el, 'gesturechange', (e) => {
         e.preventDefault();
         if (!state) return;
+        updateCentre(e);
         const scale = e.scale || 1;
         const rotRad = ((e.rotation || 0) * Math.PI) / 180;
         if (this.overlay) {
@@ -439,6 +460,7 @@
       this._on(this._el, 'gestureend', (e) => {
         e.preventDefault();
         if (!state) return;
+        updateCentre(e);
         const scale = e.scale || 1;
         const rotRad = ((e.rotation || 0) * Math.PI) / 180;
         this.screen.touchUp(fingersFor(scale, rotRad, state.centreDev, BASE_SPREAD_PT));
