@@ -214,23 +214,27 @@ struct Server: Sendable {
             return Self.staticAsset("farm/\(name)")
         }
 
-        // Baguette SDK — served from `Resources/Web/baguette/`. Two
-        // routes cover the SDK's two-level layout (`/baguette/<file>`
-        // for entry / facade / transport, `/baguette/<dir>/<file>` for
-        // `parts/` and `gestures/`). Same prefix-strip pattern as
-        // `/farm/...` so we don't need a generic deep-path matcher.
+        // Baguette SDK — served from `Resources/Web/baguette/`. The
+        // SDK's two-level layout (`parts/`, `gestures/`) needs literal
+        // subdirectory routes; Hummingbird's router rejects two
+        // placeholder routes that share a path slot with different
+        // param names (`/baguette/:file` vs `/baguette/:dir/:file`
+        // both bind position 2 but disagree on the name), so we
+        // register one route per known subdirectory instead.
         router.get("/baguette/:file") { r, _ in
             let name = String(r.uri.path.split(separator: "/").last ?? "")
                 .removingPercentEncoding ?? ""
             return Self.staticAsset("baguette/\(name)")
         }
-        router.get("/baguette/:dir/:file") { r, _ in
-            let parts = r.uri.path.split(separator: "/")
-            // /baguette/<dir>/<file> → keep dir + file
-            guard parts.count >= 3 else { return Self.staticAsset("baguette/") }
-            let dir  = String(parts[parts.count - 2]).removingPercentEncoding ?? ""
-            let file = String(parts[parts.count - 1]).removingPercentEncoding ?? ""
-            return Self.staticAsset("baguette/\(dir)/\(file)")
+        router.get("/baguette/parts/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("baguette/parts/\(name)")
+        }
+        router.get("/baguette/gestures/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("baguette/gestures/\(name)")
         }
 
         // Live stream — encoded frames downstream as binary; upstream

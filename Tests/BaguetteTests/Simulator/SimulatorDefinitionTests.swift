@@ -72,7 +72,11 @@ struct SimulatorDefinitionTests {
 
     @Test func `buttons list mirrors the chrome's input order`() {
         let def = Self.composeFixtureWithButtons()
-        #expect(def.buttons.map(\.id) == ["powerButton", "volumeUp"])
+        // Apple's chrome.json `name` is already hyphenated lowercase —
+        // `"power"`, `"volume-up"`, … — so the SDK `id` and the wire
+        // `button` value are the same string. Pre-cutover the JS
+        // had to camelCase-to-hyphenate; Swift now owns the table.
+        #expect(def.buttons.map(\.id) == ["power", "volume-up"])
     }
 
     @Test func `each button carries its wire envelope as the SDK will send it`() {
@@ -87,11 +91,11 @@ struct SimulatorDefinitionTests {
 
     @Test func `button image URLs route through the per-udid chrome-button path`() {
         let def = Self.composeFixtureWithButtons()
-        #expect(def.buttons[0].images.rest    == "/simulators/UDID-1/chrome-button/powerButton.png")
-        #expect(def.buttons[0].images.pressed == "/simulators/UDID-1/chrome-button/powerButton-down.png")
+        #expect(def.buttons[0].images.rest    == "/simulators/UDID-1/chrome-button/power.png")
+        #expect(def.buttons[0].images.pressed == "/simulators/UDID-1/chrome-button/power-down.png")
         // Volume-up has no imageDown in this fixture — pressed falls
         // back to rest so the JS SDK's swap is a no-op.
-        #expect(def.buttons[1].images.pressed == "/simulators/UDID-1/chrome-button/volumeUp.png")
+        #expect(def.buttons[1].images.pressed == "/simulators/UDID-1/chrome-button/volume-up.png")
     }
 
     @Test func `button z-order maps the chrome's onTop flag to a domain enum`() {
@@ -254,7 +258,7 @@ struct SimulatorDefinitionTests {
             outerCornerRadius: 60,
             buttons: [
                 ChromeButton(
-                    name: "powerButton",
+                    name: "power",
                     imageName: "PWR",
                     imageDownName: "PWR-down",
                     imageDownDrawMode: "replace",
@@ -264,7 +268,7 @@ struct SimulatorDefinitionTests {
                     onTop: false
                 ),
                 ChromeButton(
-                    name: "volumeUp",
+                    name: "volume-up",
                     imageName: "VOL",
                     anchor: .left, align: .leading,
                     offset: Point(x: 8, y: 240)

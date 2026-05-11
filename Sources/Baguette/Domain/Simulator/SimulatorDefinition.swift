@@ -394,12 +394,6 @@ extension SimulatorDefinition.Button {
         )
     }
 
-    /// chrome.json's `name` is Apple's DeviceKit spelling
-    /// (`"powerButton"`, `"volumeUp"`, `"digitalCrown"`); the wire
-    /// uses the lowercased hyphenated form the GestureRegistry's
-    /// `DeviceButton` enum already speaks. Centralising the table
-    /// here pulls it out of the JS `WIRE_BUTTON` allow-list in
-    /// `bezel-buttons.js` — one source of truth.
     /// Drop the trailing `.0` so integer-valued percents serialise
     /// cleanly (`50%` not `50.0%`). Anything else keeps its
     /// fractional digits — `0.75%` stays as is.
@@ -407,17 +401,24 @@ extension SimulatorDefinition.Button {
         v == v.rounded() ? String(Int(v)) : String(v)
     }
 
+    /// Apple's chrome.json `name` is already the hyphenated
+    /// lowercase form (`"power"`, `"volume-up"`, `"action"`,
+    /// `"digital-crown"`, `"side-button"`, …) — same vocabulary
+    /// the GestureRegistry's `DeviceButton` enum speaks. The
+    /// mapping is the identity for every wired name today, but
+    /// the switch stays as the explicit allow-list: an unknown
+    /// name returns nil so the overlay isn't rendered for
+    /// gestures we don't dispatch. One source of truth, replacing
+    /// the JS `WIRE_BUTTON` map that used to live in
+    /// `bezel-buttons.js`.
     private static func wireButton(for chromeName: String) -> String? {
         switch chromeName {
-        case "powerButton":     return "power"
-        case "volumeUp":        return "volume-up"
-        case "volumeDown":      return "volume-down"
-        case "actionButton":    return "action"
-        case "homeButton":      return "home"
-        case "digitalCrown":    return "digital-crown"
-        case "sideButton":      return "side-button"
-        case "leftSideButton":  return "left-side-button"
-        default:                return nil
+        case "power", "volume-up", "volume-down", "action",
+             "home", "lock",
+             "digital-crown", "side-button", "left-side-button":
+            return chromeName
+        default:
+            return nil
         }
     }
 }
