@@ -239,10 +239,7 @@
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
 
         if (state.mode === 'edge-stream') {
-          this.screen.touchUp(
-            [{ x: vx / r.width, y: vy / r.height }],
-            { edge: state.edge }
-          );
+          this.screen.touchUp([this._pointInScreen(e)], { edge: state.edge });
           this.log('edge stream end');
         } else if (state.mode === 'pinch' || state.mode === 'pan') {
           sendTouch2('up', state.f1, state.f2);
@@ -311,11 +308,7 @@
 
       const close = () => {
         if (!state) return;
-        const { width, height } = this.screen.size;
-        this.screen.touchUp([
-          { x: state.f1.x / width, y: state.f1.y / height },
-          { x: state.f2.x / width, y: state.f2.y / height },
-        ]);
+        this.screen.touchUp([state.f1, state.f2]);
         if (this.overlay) this.overlay.clear();
         state = null;
       };
@@ -342,10 +335,7 @@
             f2: { x: centre.x - BASE_SPREAD_PT, y: centre.y },
             scale: 1, idleTimer: null,
           };
-          this.screen.touchDown([
-            { x: state.f1.x / width, y: state.f1.y / height },
-            { x: state.f2.x / width, y: state.f2.y / height },
-          ]);
+          this.screen.touchDown([state.f1, state.f2]);
         }
 
         if (state.kind === 'pinch') {
