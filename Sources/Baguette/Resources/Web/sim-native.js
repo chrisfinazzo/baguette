@@ -404,7 +404,8 @@
       // No `host` — toolbar drives enable/disable, panel surfaces selection.
       screenArea: sim.screenArea,
       send: (payload) => session && session.send(payload),
-      getDeviceSize: () => sim.screen.size,
+      // AX inspector reads `{w, h}`; SDK Screen exposes `{width, height}`.
+      getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
       onSelect: (node) => renderAxPanel(panel, node),
       onEnableChange: (enabled) => {
         const btn = document.getElementById('nativeAxToggle');
@@ -570,7 +571,7 @@
         node,
         {
           send: (payload) => session && session.send(payload),
-          getDeviceSize: () => sim.screen.size,
+          getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
         }
     );
   }

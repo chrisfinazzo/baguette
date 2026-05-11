@@ -215,7 +215,10 @@
         host: axHost,
         screenArea: sim.screenArea,
         send: (payload) => session && session.send(payload),
-        getDeviceSize: () => sim.screen.size,
+        // AX inspector still uses the legacy `{w, h}` shape; the SDK
+        // Screen exposes `{width, height}`. Adapt at the boundary
+        // until the inspector itself moves to the SDK shape.
+        getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
       });
     }
   }
