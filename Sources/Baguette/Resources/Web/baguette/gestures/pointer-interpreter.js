@@ -116,8 +116,13 @@
         e.altKey                 ? 'pinch' :
                                    'tap-or-drag';
 
+      // f1 / f2 are already in chrome-pixel space (the same units
+      // the wire envelope carries). Don't normalise — `Screen.touch*`
+      // → `Transport._touch` ships these verbatim, and the server's
+      // `IndigoHIDInput.sendMouse` divides by size internally. Double-
+      // normalising drives every touch envelope to ~(0,0).
       const sendTouch2 = (phase, f1, f2) => {
-        const fs = [this._ptToNorm(f1), this._ptToNorm(f2)];
+        const fs = [f1, f2];
         if (phase === 'down') this.screen.touchDown(fs);
         else if (phase === 'move') this.screen.touchMove(fs);
         else this.screen.touchUp(fs);
@@ -143,7 +148,7 @@
 
         if (mode === 'tap-or-drag' && startEdge) {
           state = { mode: 'edge-stream', edge: startEdge };
-          this.screen.touchDown([{ x: xNorm, y: yNorm }], { edge: startEdge });
+          this.screen.touchDown([this._pointInScreen(e)], { edge: startEdge });
           this.log('edge stream begin (' + ori + ', edge=' + startEdge + ')');
           return;
         }
@@ -180,10 +185,7 @@
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
 
         if (state.mode === 'edge-stream') {
-          this.screen.touchMove(
-            [{ x: vx / r.width, y: vy / r.height }],
-            { edge: state.edge }
-          );
+          this.screen.touchMove([this._pointInScreen(e)], { edge: state.edge });
           return;
         }
 
