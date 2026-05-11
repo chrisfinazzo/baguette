@@ -537,15 +537,39 @@
         }));
       };
 
+      // iOS Safari fires BOTH `touchstart/move/end` AND `gesturestart/
+      // change/end` for a 2-finger pinch. The legacy code only ever
+      // attached MouseGestureSource (which listens to `gesture*`), so
+      // pinch on iPhone was driven by Safari's `gesture*` stream
+      // alone. If we ALSO emit `touch2-*` envelopes from this handler,
+      // the simulator receives two interleaved touch2 streams and iOS
+      // sees fingers teleporting between them → spinning.
+      //
+      // Resolution: when a second finger lands, abandon the touch
+      // path entirely and let `_mountGestureEvent` (gesturestart →
+      // gesturechange → gestureend) own the pinch. Single-finger
+      // touch (drag, edge gestures) stays here.
       this._on(this._el, 'touchstart', (e) => {
         e.preventDefault();
         const all = relFingers(e.touches);
         if (all.length >= 2) {
-          state = { mode: 'multi' };
-          const fs = all.slice(0, 2).map(f => ({ x: f.x, y: f.y }));
-          this.screen.touchDown(fs);
-          if (this.overlay) this.overlay.setFingers(all.slice(0, 2).map(f => ({ x: f.vx, y: f.vy })));
-        } else if (all.length === 1) {
+          // If we'd already shipped a touch1-down, lift it cleanly
+          // before bowing out — otherwise the simulator holds a
+          // phantom touch1 while `gesturestart` opens its own pinch.
+          if (state && state.mode === 'single') {
+            this.screen.touchUp([{ x: all[0].x, y: all[0].y }]);
+          }
+          state = { mode: 'multi-deferred' };  // gesture* will handle it
+          // Paint the two real finger positions so the HUD lights up
+          // the moment the second finger lands; touchmove keeps it
+          // following (gesturechange's centroid-only positions are
+          // too coarse to track each fingertip accurately).
+          if (this.overlay) {
+            this.overlay.setFingers(all.slice(0, 2).map(f => ({ x: f.vx, y: f.vy })));
+          }
+          return;
+        }
+        if (all.length === 1) {
           state = { mode: 'single' };
           this.screen.touchDown([{ x: all[0].x, y: all[0].y }]);
         }
@@ -555,39 +579,49 @@
       this._on(this._el, 'touchmove', (e) => {
         e.preventDefault();
         if (!state) return;
+        const all = relFingers(e.touches);
+
+        // Multi-deferred: wire envelopes come from `_mountGestureEvent`
+        // (Safari's gesture* uses scale/rotation around a fixed
+        // centroid and can't tell us each finger's real position).
+        // But the overlay HUD wants to track the REAL fingers — so
+        // keep painting from e.touches without dispatching wire.
+        if (state.mode === 'multi-deferred') {
+          if (this.overlay && all.length >= 2) {
+            this.overlay.setFingers(all.slice(0, 2).map(f => ({ x: f.vx, y: f.vy })));
+          }
+          return;
+        }
+
         const now = performance.now();
         if (now - lastMs < MOVE_FLUSH_MS) return;
         lastMs = now;
-        const all = relFingers(e.touches);
-        if (state.mode === 'multi' && all.length >= 2) {
-          const fs = all.slice(0, 2).map(f => ({ x: f.x, y: f.y }));
-          this.screen.touchMove(fs);
-          if (this.overlay) this.overlay.setFingers(all.slice(0, 2).map(f => ({ x: f.vx, y: f.vy })));
-        } else if (state.mode === 'single' && all.length === 1) {
+        if (state.mode === 'single' && all.length === 1) {
           this.screen.touchMove([{ x: all[0].x, y: all[0].y }]);
         } else if (state.mode === 'single' && all.length >= 2) {
+          // Late-arriving second finger after a streaming single
+          // touch had already started: close it cleanly and hand
+          // off to `_mountGestureEvent`. Overlay starts tracking
+          // both fingers in the next touchmove.
           this.screen.touchUp([{ x: all[0].x, y: all[0].y }]);
-          const fs = all.slice(0, 2).map(f => ({ x: f.x, y: f.y }));
-          state = { mode: 'multi' };
-          this.screen.touchDown(fs);
+          state = { mode: 'multi-deferred' };
+          if (this.overlay) {
+            this.overlay.setFingers(all.slice(0, 2).map(f => ({ x: f.vx, y: f.vy })));
+          }
         }
       }, opts);
 
       const endTouch = (e) => {
         e.preventDefault();
         if (!state) return;
-        const remaining = relFingers(e.touches);
-        const ended     = relFingers(e.changedTouches);
-        if (state.mode === 'multi') {
-          const src = remaining.length >= 2 ? remaining : ended;
-          const fs = src.slice(0, 2).map(f => ({ x: f.x, y: f.y }));
-          while (fs.length < 2) fs.push(fs[0] || { x: 0.5, y: 0.5 });
-          this.screen.touchUp(fs);
-          if (this.overlay) this.overlay.clear();
-        } else if (state.mode === 'single') {
-          const f = ended[0] || { x: 0, y: 0 };
-          this.screen.touchUp([{ x: f.x, y: f.y }]);
+        if (state.mode === 'multi-deferred') {
+          // gesturestart/change/end owns this lifecycle.
+          state = null;
+          return;
         }
+        const ended = relFingers(e.changedTouches);
+        const f = ended[0] || { x: 0, y: 0 };
+        this.screen.touchUp([{ x: f.x, y: f.y }]);
         state = null;
       };
       this._on(this._el, 'touchend',    endTouch, opts);
