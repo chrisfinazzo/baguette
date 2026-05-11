@@ -283,10 +283,10 @@ struct SimulatorDefinitionTests {
                 size: Size(width: 400, height: 800)
             ),
             buttonImages: [
-                "powerButton": ChromeImage(data: Data("PWR".utf8),
-                                           size: Size(width: 10, height: 30)),
-                "volumeUp":    ChromeImage(data: Data("VOL".utf8),
-                                           size: Size(width: 10, height: 30)),
+                "power":     ChromeImage(data: Data("PWR".utf8),
+                                         size: Size(width: 10, height: 30)),
+                "volume-up": ChromeImage(data: Data("VOL".utf8),
+                                         size: Size(width: 10, height: 30)),
             ]
         )
 

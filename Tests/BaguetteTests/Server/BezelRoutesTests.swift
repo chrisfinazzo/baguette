@@ -99,7 +99,7 @@ struct BezelRoutesTests {
         let (sim, chromes) = Self.fixture()
         let bytes = Server.chromeButtonImage(
             udid: "UDID-1",
-            buttonFile: "powerButton.png",
+            buttonFile: "power.png",
             simulators: Self.simulators(with: sim),
             chromes: chromes
         )
@@ -124,7 +124,7 @@ struct BezelRoutesTests {
         let (sim, chromes) = Self.fixture()
         let bytes = Server.chromeButtonImage(
             udid: "UDID-1",
-            buttonFile: "powerButton",
+            buttonFile: "power",
             simulators: Self.simulators(with: sim),
             chromes: chromes
         )
@@ -166,11 +166,11 @@ struct BezelRoutesTests {
         let buttons = try #require(parsed["buttons"] as? [[String: Any]])
         #expect(buttons.count == 1)
         let power = buttons[0]
-        #expect(power["id"] as? String == "powerButton")
+        #expect(power["id"] as? String == "power")
         let envelope = try #require(power["envelope"] as? [String: String])
         #expect(envelope == ["type": "button", "button": "power"])
         let images = try #require(power["images"] as? [String: String])
-        #expect(images["rest"] == "/simulators/UDID-1/chrome-button/powerButton.png")
+        #expect(images["rest"] == "/simulators/UDID-1/chrome-button/power.png")
     }
 
     @Test func `chromeJSONString includes imageUrl per button under the per-udid prefix`() throws {
@@ -197,7 +197,7 @@ struct BezelRoutesTests {
 private extension BezelRoutesTests {
 
     /// One-shot fixture: a booted simulator whose chrome carries one
-    /// button (`powerButton`) plus distinct merged + bare composites
+    /// button (`power`) plus distinct merged + bare composites
     /// so byte equality alone proves which path was taken.
     static func fixture() -> (any Simulator, any Chromes) {
         let chrome = DeviceChrome(
@@ -206,7 +206,7 @@ private extension BezelRoutesTests {
             outerCornerRadius: 0,
             buttons: [
                 ChromeButton(
-                    name: "powerButton",
+                    name: "power",
                     imageName: "PWR",
                     anchor: .right, align: .leading,
                     offset: Point(x: 0, y: 100)
@@ -225,7 +225,7 @@ private extension BezelRoutesTests {
                 size: Size(width: 100, height: 200)
             ),
             buttonImages: [
-                "powerButton": ChromeImage(
+                "power": ChromeImage(
                     data: Data("POWER-PNG".utf8),
                     size: Size(width: 10, height: 30)
                 ),
