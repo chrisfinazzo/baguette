@@ -133,6 +133,46 @@ struct BezelRoutesTests {
 
     // MARK: - chrome.json carries imageUrl
 
+    // MARK: - definition.json (SDK bootstrap)
+
+    @Test func `definitionJSONString returns nil for an unknown udid`() {
+        let sims = MockSimulators()
+        given(sims).find(udid: .value("ghost")).willReturn(nil)
+        let chromes = MockChromes()
+        #expect(Server.definitionJSONString(
+            udid: "ghost", simulators: sims, chromes: chromes
+        ) == nil)
+    }
+
+    @Test func `definitionJSONString carries identity + screen + buttons for the SDK bootstrap`() throws {
+        let (sim, chromes) = Self.fixture()
+        let json = try #require(Server.definitionJSONString(
+            udid: "UDID-1", simulators: Self.simulators(with: sim), chromes: chromes
+        ))
+        let parsed = try #require(
+            JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        )
+
+        let identity = try #require(parsed["identity"] as? [String: Any])
+        #expect(identity["udid"]  as? String == "UDID-1")
+        #expect(identity["name"]  as? String == "iPhone 17 Pro")
+        #expect(identity["model"] as? String == "iPhone 17 Pro")
+
+        let screen = try #require(parsed["screen"] as? [String: Any])
+        let bezel  = try #require(screen["bezelImage"] as? [String: Any])
+        #expect(bezel["rest"] as? String == "/simulators/UDID-1/bezel.png")
+        #expect(bezel["bare"] as? String == "/simulators/UDID-1/bezel.png?buttons=false")
+
+        let buttons = try #require(parsed["buttons"] as? [[String: Any]])
+        #expect(buttons.count == 1)
+        let power = buttons[0]
+        #expect(power["id"] as? String == "powerButton")
+        let envelope = try #require(power["envelope"] as? [String: String])
+        #expect(envelope == ["type": "button", "button": "power"])
+        let images = try #require(power["images"] as? [String: String])
+        #expect(images["rest"] == "/simulators/UDID-1/chrome-button/powerButton.png")
+    }
+
     @Test func `chromeJSONString includes imageUrl per button under the per-udid prefix`() throws {
         let (sim, chromes) = Self.fixture()
         let json = try #require(Server.chromeJSONString(

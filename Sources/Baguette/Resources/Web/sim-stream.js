@@ -17,12 +17,8 @@
 
   // --- Live stream state ---
   let session = null;       // StreamSession
-  let frame = null;         // DeviceFrame
-  let surface = null;       // { screenArea, canvas, frameImg }
+  let sim = null;           // Baguette SDK Simulator (replaces DeviceFrame + SimInput + MouseGestureSource + BezelButtons)
   let gallery = null;       // CaptureGallery
-  let simInput = null;
-  let mouseSource = null;
-  let pinchOverlay = null;
   let logPanel = null;
   let axInspector = null;   // AXInspector — accessibility-tree overlay
 
@@ -143,17 +139,16 @@
     view.style.display = '';
     document.getElementById('simStreamTitle').textContent = name;
 
-    // Don't `force-cache` — chrome.json's shape evolves (e.g. button
-    // margins were added; innerCornerRadius math has been corrected),
-    // and `force-cache` would pin the browser to whatever it pulled
-    // first, ignoring the server's current response. The default
-    // policy plus the server's no-cache header keeps clients in sync.
-    const layout = await fetch(
-      `/simulators/${encodeURIComponent(udid)}/chrome.json`
-    ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-
-    frame = new window.DeviceFrame({ udid, layout });
-    surface = frame.mount(document.getElementById('simDeviceFrame'));
+    // Boot the SDK: the page hands it a `send` closure that defers
+    // to the StreamSession's WebSocket. Pre-open gestures (rare —
+    // the user can't interact until the page renders) get dropped.
+    sim = await window.Baguette.use({
+      host: location.origin,
+      udid,
+      send: (payload) => { if (session) session.send(payload); },
+      log,
+    });
+    sim.mount(document.getElementById('simDeviceFrame'));
 
     const format = pickFormat();
     requestAnimationFrame(() => {
@@ -174,7 +169,7 @@
 
     session = new window.StreamSession({
       udid, format, version: 'v2',
-      canvas: surface.canvas,
+      canvas: sim.canvas,
       onSize: (w, h) => { lastPaintedSize = { w, h }; },
       onFps:  (fps) => {
         const el = document.getElementById('simStreamFps');
@@ -185,16 +180,17 @@
     });
     session.start();
 
-    wireInput(udid, frame.screenSize());
-    wireKeyboard();
-
-    // Cache the chrome layout for the recorder. The bezel <img> and
-    // pinch overlay are already in the page; the recorder pulls them
-    // by reference at start-time, so nothing extra runs while idle.
+    // Cache the legacy `chrome.json` for tools that haven't migrated
+    // yet (CaptureGallery's compose, BrowserRecorder's bezel layout).
+    // Once those tools consume the SDK directly this fetch + the
+    // `chrome.json` route can be deleted.
+    const layout = await fetch(
+      `/simulators/${encodeURIComponent(udid)}/chrome.json`
+    ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     recordingState.layout = layout;
 
     gallery = new window.CaptureGallery({
-      udid, layout, frameImg: surface.frameImg,
+      udid, layout, frameImg: sim._bezel.frameImg,
     });
     gallery.clear();
     renderGallery();
@@ -217,9 +213,9 @@
       axHost.innerHTML = '';
       axInspector = new window.AXInspector({
         host: axHost,
-        screenArea: surface.screenArea,
+        screenArea: sim.screenArea,
         send: (payload) => session && session.send(payload),
-        getDeviceSize: () => frame.screenSize(),
+        getDeviceSize: () => sim.screen.size,
       });
     }
   }
