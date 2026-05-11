@@ -299,77 +299,76 @@
     return [402, 874];
   };
 
+  // The farm tile renders into its own canvas + mirror (no Bezel),
+  // so we reach into the Baguette SDK's internal parts directly:
+  //   Transport             — wire format
+  //   Screen                — domain verbs (tap/swipe/touch)
+  //   PointerInterpreter    — DOM events → Screen methods (auto-attached by Screen.bindDOM)
+  //   PinchOverlay          — passive HUD (auto-attached by Screen.bindDOM)
+  //   Keyboard              — focus-gated key forwarding
+  // Composing them by hand here is OCP-friendly: the public
+  // `Baguette.use(...)` covers the full-page case; piecemeal use
+  // covers exotic surfaces like the farm tile.
   FarmTile.prototype.wireInput = function () {
-    if (this.simInput || !this.session || !window.SimInput) return;
-    if (!window.SimInputBridge || !window.MouseGestureSource) return;
-    // The mirror lives in the focus pane while focused — that's the
-    // element the user sees and clicks. Mouse coords normalize against
-    // the listener element's bounding box, so attaching to the mirror
-    // (instead of the canvas, which stays in the grid) gives correct
-    // device-point math out of the box.
+    if (this.simParts || !this.session || !window.Baguette) return;
+    const B = window.Baguette;
+    if (!B._Transport || !B._Screen || !B._Keyboard) return;
     const target = this.mirror;
-    const host = target.parentElement;
-    if (!host) return;
+    if (!target) return;
 
-    this.simInput = new window.SimInput({
-      udid: this.udid,
-      log:  () => {},
-      transport: window.SimInputBridge.makeTransport(this.session)
-    });
-    this.simInput.setScreenSize(...this.computeScreenSize());
+    fetch(`/simulators/${encodeURIComponent(this.udid)}/definition.json`)
+      .then(r => r.ok ? r.json() : null)
+      .then(def => {
+        if (!def || !this.session) return;
+        const transport = new B._Transport({
+          send: (p) => this.session && this.session.send(p),
+        });
+        const screen = new B._Screen(def.screen, transport);
+        // bindDOM auto-attaches PointerInterpreter + PinchOverlay
+        // to the mirror element — mouse coords normalize against
+        // mirror.getBoundingClientRect(), scaled to def.screen.rect.
+        target.style.cursor = 'crosshair';
+        target.style.touchAction = 'none';
+        target.tabIndex = 0;
+        screen.bindDOM({ screenArea: target, canvas: this.canvas });
 
-    if (window.PinchOverlay) {
-      this.pinchOverlay = new window.PinchOverlay(host);
-    }
-
-    target.style.cursor = 'crosshair';
-    target.style.touchAction = 'none';
-    target.tabIndex = 0;
-    this.mouseSource = new window.MouseGestureSource({
-      el:    target,
-      input: this.simInput,
-      overlay: this.pinchOverlay,
-      log:   () => {}
-    });
-    this.mouseSource.attach();
-
-    // Mac keyboard → focused tile. Same focus-gated capture used by
-    // sim-native: mousedown on the mirror takes focus; while focused,
-    // every supported keystroke flows through `simInput.key`. Click
-    // out (or focus another tile) → host browser shortcuts work again.
-    if (window.KeyboardCapture) {
-      target.addEventListener('mousedown', () => target.focus());
-      this.keyboardCapture = new window.KeyboardCapture({
-        target,
-        simInput: () => this.simInput,
+        let keyboard = null;
+        if (def.keyboard) {
+          keyboard = new B._Keyboard(def.keyboard, transport);
+          target.addEventListener('mousedown', () => target.focus());
+          keyboard.attach(target);
+        }
+        this.simParts = { transport, screen, keyboard };
       });
-      this.keyboardCapture.start();
-    }
   };
 
   FarmTile.prototype.unwireInput = function () {
-    if (this.mouseSource && typeof this.mouseSource.detach === 'function') {
-      try { this.mouseSource.detach(); } catch {}
+    if (!this.simParts) {
+      this.mirror.style.cursor = '';
+      this.mirror.style.touchAction = '';
+      return;
     }
-    this.mouseSource = null;
-    if (this.keyboardCapture && typeof this.keyboardCapture.stop === 'function') {
-      try { this.keyboardCapture.stop(); } catch {}
+    if (this.simParts.keyboard) {
+      try { this.simParts.keyboard.detach(); } catch {}
     }
-    this.keyboardCapture = null;
-    this.simInput = null;
-    if (this.pinchOverlay && this.pinchOverlay.container?.parentElement) {
-      this.pinchOverlay.container.parentElement.removeChild(this.pinchOverlay.container);
-    }
-    this.pinchOverlay = null;
+    try { this.simParts.screen.detach(); } catch {}
+    this.simParts = null;
     this.mirror.style.cursor = '';
     this.mirror.style.touchAction = '';
   };
 
   // Forward sidebar buttons (home / lock / volume / siri) to the
   // focused device. FarmFocus calls these on its preset row clicks.
-  FarmTile.prototype.button = function (name) { this.simInput?.button(name); };
-  FarmTile.prototype.type   = function (text) { this.simInput?.type(text); };
-  FarmTile.prototype.key    = function (code) { this.simInput?.key(code); };
+  FarmTile.prototype.button = function (name) {
+    if (!this.simParts) return;
+    this.simParts.transport.button({ type: 'button', button: name });
+  };
+  FarmTile.prototype.type = function (text) {
+    if (this.simParts && this.simParts.keyboard) this.simParts.keyboard.type(text);
+  };
+  FarmTile.prototype.key = function (code) {
+    if (this.simParts && this.simParts.keyboard) this.simParts.keyboard.key(code);
+  };
 
   FarmTile.prototype.applyConfig = function (cfg) {
     if (!this.session || !this.session.send) return;

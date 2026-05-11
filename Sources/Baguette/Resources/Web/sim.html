@@ -47,21 +47,17 @@
      to `/simulators/<file>.js`, which the `/simulators/:udid` route
      happily answers with sim.html — leaving the browser to parse HTML
      as JS and throw `Unexpected token '<'`. -->
-<script src="/sim-input.js"></script>
-<script src="/sim-input-bridge.js"></script>
 <script src="/frame-decoder.js"></script>
-<script src="/bezel-buttons.js"></script>
-<script src="/keyboard-capture.js"></script>
-<script src="/device-frame.js"></script>
 <script src="/capture-gallery.js"></script>
 <script src="/recorder.js"></script>
 <script src="/stream-session.js"></script>
 <script src="/sim-logs.js"></script>
 <script src="/sim-ax-inspector.js"></script>
-<!-- Baguette SDK (the new shape — see Resources/Web/baguette/). Loaded
-     alongside the legacy modules during cutover; pages migrate to
-     `Baguette.use({...}).mount(...)` one at a time. The SDK files are
-     IIFEs that compose into `window.Baguette` in load order. -->
+<!-- Baguette SDK (the new shape — see Resources/Web/baguette/). The
+     page-level scripts below (sim-stream / sim-native) consume the
+     SDK via `Baguette.use({...}).mount(...)`. Load order matters:
+     each part IIFE attaches to `window.Baguette` and the entry
+     `baguette.js` reads them. -->
 <script src="/baguette/transport.js"></script>
 <script src="/baguette/gestures/pinch-overlay.js"></script>
 <script src="/baguette/gestures/pointer-interpreter.js"></script>

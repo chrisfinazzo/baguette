@@ -226,12 +226,8 @@
     }
     if (axInspector) { axInspector.detach(); axInspector = null; }
     if (session) { session.stop(); session = null; }
-    if (mouseSource) { mouseSource.detach(); mouseSource = null; }
-    if (pinchOverlay) { pinchOverlay.clear(); pinchOverlay = null; }
+    if (sim) { sim.detach(); sim = null; }
     if (logPanel) { logPanel.detach(); logPanel = null; }
-    simInput = null;
-    frame = null;
-    surface = null;
     gallery = null;
     activeUdid = null;
     activeName = null;
@@ -242,51 +238,6 @@
     const list = document.getElementById('simListView');
     if (list) list.style.display = '';
     if (window.loadSimDeviceList) window.loadSimDeviceList();
-  }
-
-  function wireInput(udid, screenSize) {
-    simInput = new SimInput({
-      udid,
-      log,
-      // Input + control rides over the same WebSocket the stream
-      // session opened. SimInputBridge translates SimInput's asc-cli
-      // dialect (kind:"tap", fingers[]) to Baguette's GestureRegistry
-      // dialect (type:"tap", touch1-/touch2-, points-not-normalized);
-      // also shared by farm-tile.js and sim-native.js.
-      transport: window.SimInputBridge.makeTransport(session, log),
-    });
-    simInput.setScreenSize(screenSize.w, screenSize.h);
-    pinchOverlay = new PinchOverlay(surface.screenArea);
-    mouseSource = new MouseGestureSource({
-      el: surface.screenArea,
-      input: simInput,
-      overlay: pinchOverlay,
-      log,
-    });
-    mouseSource.attach();
-  }
-
-  function wireKeyboard() {
-    const KEY_HID = {
-      Backspace: 42, Enter: 40, Tab: 43, Escape: 41,
-      ArrowUp: 82, ArrowDown: 81, ArrowLeft: 80, ArrowRight: 79,
-    };
-    const el = surface.screenArea;
-    el.addEventListener('mousedown', () => el.focus());
-    el.addEventListener('keydown', (e) => {
-      if (e.metaKey || e.ctrlKey) return;
-      const hid = KEY_HID[e.key];
-      if (hid !== undefined) {
-        e.preventDefault();
-        log(`key(${e.key})`);
-        simInput.key(hid);
-        return;
-      }
-      if (e.key.length === 1 && !e.altKey) {
-        e.preventDefault();
-        simInput.type(e.key);
-      }
-    });
   }
 
   function renderGallery() {
@@ -300,14 +251,27 @@
   // --- Sidebar callbacks (invoked from sim-stream.html onclick=…) ---
 
   window._simStopStream = stopStream;
-  window._simButton = (b) => { if (!simInput) return; log(`button(${b})`); simInput.button(b); };
-  window._simKey    = (k) => { if (!simInput) return; log(`key(${k})`); simInput.key(k); };
+  window._simButton = (b) => {
+    if (!sim) return;
+    log(`button(${b})`);
+    sim.pressButton(b);
+  };
+  window._simKey = (k) => {
+    if (!sim || !sim.keyboard) return;
+    // Legacy sidebar fires raw HID numbers — the modern wire dialect
+    // accepts W3C codes (`"Enter"`, `"Backspace"`, …) which the
+    // backend resolves to HID. Numbers stay forwarded for back-compat
+    // with the existing sidebar HTML; new sidebar code should call
+    // `sim.keyboard.key('Enter')` directly.
+    log(`key(${k})`);
+    sim.keyboard.key(k);
+  };
   window._simSendText = () => {
     const el = document.getElementById('simTextInput');
     const t = el ? el.value : '';
-    if (!t || !simInput) return;
+    if (!t || !sim) return;
     log(`type("${t.slice(0, 20)}")`);
-    simInput.type(t);
+    sim.type(t);
     el.value = '';
   };
   window._simToggleFrame = (checked) => { captureWithFrame = checked; };
@@ -361,7 +325,7 @@
   // and feed it to MediaRecorder. No server round-trip, no offscreen
   // canvases — whatever's in the live canvas is what gets recorded.
   window._simToggleRecord = async () => {
-    if (!surface) return;
+    if (!sim) return;
 
     if (recordingState.active) {
       const rec = recordingState.recorder;
@@ -405,10 +369,10 @@
       applyQuality({ scale: 1, fps: 60, bps: 8_000_000 });
 
       const rec = new window.BrowserRecorder({
-        canvas:      surface.canvas,
-        frameImg:    surface.frameImg,
+        canvas:      sim.canvas,
+        frameImg:    sim._bezel.frameImg,
         layout:      recordingState.layout,
-        overlayHost: pinchOverlay ? pinchOverlay.container : null,
+        overlayHost: sim.pinchOverlayContainer,
         fps: 60,
       });
       rec.start();
