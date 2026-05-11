@@ -31,8 +31,17 @@
 
   const BASE_SPREAD_PT = 80;            // sim-pt for pinch/pan modifier
   const DRAG_THRESHOLD_PX = 8;          // mouse delta to promote pending→drag
-  const EDGE_BAND_NORM = 0.93;          // bottom edge hot zone
-  const TOP_BAND_NORM  = 0.07;          // top edge hot zone
+  const EDGE_BAND_NORM = 0.93;          // mouse: bottom edge hot zone
+  const TOP_BAND_NORM  = 0.07;          // mouse: top edge hot zone
+  // Touch on iPhone Safari reports `clientY` as the centroid of the
+  // contact ellipse, ~10–20 px above the user's visual fingertip.
+  // A wider band catches what the user perceives as a bottom swipe.
+  // Importantly we do NOT clamp the coord — same as mouse, the wire
+  // envelope carries the real `y` and `edge:"bottom"`. iOS uses the
+  // flag only for swipe disambiguation; a tap (no motion) at
+  // yNorm=0.90 still lands on whatever app button is there.
+  const TOUCH_EDGE_BAND_NORM = 0.85;
+  const TOUCH_TOP_BAND_NORM  = 0.15;
   const WHEEL_IDLE_MS  = 120;           // wheel idle → close 2-finger
   const MOVE_FLUSH_MS  = 16;            // ~60 fps coalescing window
 
@@ -592,8 +601,35 @@
           return;
         }
         if (all.length === 1) {
-          state = { mode: 'single' };
-          this.screen.touchDown([{ x: all[0].x, y: all[0].y }]);
+          // Edge-band detection — same shape as the mouse handler.
+          // Tag the wire envelope with `edge:"bottom"` (or "top")
+          // using the touch's REAL coords; no clamp. iOS treats the
+          // flag as a swipe HINT — it commits to the home-indicator
+          // recogniser when motion follows, otherwise the touch
+          // lands as a normal tap at the real location and bottom-
+          // band UI buttons still work.
+          const r = this._el.getBoundingClientRect();
+          const xNorm = r.width  ? (all[0].vx / r.width)  : 0;
+          const yNorm = r.height ? (all[0].vy / r.height) : 0;
+          const ori = this.getOrientation();
+          const inBottomBand = ori === 'portrait-upside-down'
+            ? xNorm <= (1 - TOUCH_EDGE_BAND_NORM)
+            : yNorm >= TOUCH_EDGE_BAND_NORM;
+          const inTopBand = ori === 'portrait-upside-down'
+            ? xNorm >= TOUCH_EDGE_BAND_NORM
+            : yNorm <= TOUCH_TOP_BAND_NORM;
+          const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
+
+          if (startEdge) {
+            state = { mode: 'edge-stream', edge: startEdge };
+            this.screen.touchDown(
+              [{ x: all[0].x, y: all[0].y }],
+              { edge: startEdge }
+            );
+          } else {
+            state = { mode: 'single' };
+            this.screen.touchDown([{ x: all[0].x, y: all[0].y }]);
+          }
         }
         lastMs = 0;
       }, opts);
@@ -618,7 +654,12 @@
         const now = performance.now();
         if (now - lastMs < MOVE_FLUSH_MS) return;
         lastMs = now;
-        if (state.mode === 'single' && all.length === 1) {
+        if (state.mode === 'edge-stream' && all.length === 1) {
+          this.screen.touchMove(
+            [{ x: all[0].x, y: all[0].y }],
+            { edge: state.edge }
+          );
+        } else if (state.mode === 'single' && all.length === 1) {
           this.screen.touchMove([{ x: all[0].x, y: all[0].y }]);
         } else if (state.mode === 'single' && all.length >= 2) {
           // Late-arriving second finger after a streaming single
@@ -643,7 +684,11 @@
         }
         const ended = relFingers(e.changedTouches);
         const f = ended[0] || { x: 0, y: 0 };
-        this.screen.touchUp([{ x: f.x, y: f.y }]);
+        if (state.mode === 'edge-stream') {
+          this.screen.touchUp([{ x: f.x, y: f.y }], { edge: state.edge });
+        } else {
+          this.screen.touchUp([{ x: f.x, y: f.y }]);
+        }
         state = null;
       };
       this._on(this._el, 'touchend',    endTouch, opts);
