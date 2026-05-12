@@ -333,26 +333,34 @@ final class LiveChromes: Chromes, @unchecked Sendable {
             // edge sits at `compY + restY - imageH`, putting most of
             // the image behind the device body and the overshoot
             // above it.
-            let baseX = button.align == .trailing
-                ? compX + compositeSize.width
-                : compX
+            //
+            // offset.x is the inset from the body's trailing/leading
+            // edge to the cap's TRAILING/LEADING edge — not its
+            // centre. See SimulatorDefinition.Button.box(for:) for the
+            // matching projection that the JS SDK overlay uses.
             let restX = 2 * button.normalOffset.x - button.rolloverOffset.x
             let restY = 2 * button.normalOffset.y - button.rolloverOffset.y
-            let cx = baseX + restX
+            let leftX: Double
+            switch button.align {
+            case .trailing: leftX = compX + compositeSize.width + restX - imageSize.width
+            case .leading:  leftX = compX + restX
+            }
             let topY = compY + restY - imageSize.height
-            return Point(x: cx - imageSize.width / 2, y: topY)
+            return Point(x: leftX, y: topY)
         case .bottom:
             // Symmetric to `.top`: cap protrudes downward past the
             // body bottom. At-rest position uses the mirrored restY
             // so only `-restY` chrome-pixels poke below the body.
-            let baseX = button.align == .trailing
-                ? compX + compositeSize.width
-                : compX
+            // Same edge-aligned offset.x semantics as `.top`.
             let restX = 2 * button.normalOffset.x - button.rolloverOffset.x
             let restY = 2 * button.normalOffset.y - button.rolloverOffset.y
-            let cx = baseX + restX
+            let leftX: Double
+            switch button.align {
+            case .trailing: leftX = compX + compositeSize.width + restX - imageSize.width
+            case .leading:  leftX = compX + restX
+            }
             let topY = compY + compositeSize.height + restY
-            return Point(x: cx - imageSize.width / 2, y: topY)
+            return Point(x: leftX, y: topY)
         }
     }
 }

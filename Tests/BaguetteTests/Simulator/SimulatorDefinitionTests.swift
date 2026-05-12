@@ -132,14 +132,18 @@ struct SimulatorDefinitionTests {
         //   topPct = (restY − imageH) / bareH × 100
         //          = (13 − 16) / 1468 × 100 = −0.2044%   (NEGATIVE)
         //
-        // The current code uses `rollover.y / bareH * 100`
-        // = +0.2044% (POSITIVE) — placing the cap fully inside
-        // the device body, hidden behind the bezel. The user-visible
-        // symptom on /simulators/<udid> is a power cap that has a
-        // tooltip but no rendered cap above the iPad's top edge.
+        // For align=.trailing, offset.x is the inset from the body's
+        // RIGHT edge to the cap's TRAILING (right) edge — NOT to its
+        // centre. Mirrors how `.right` with align=.leading treats
+        // offset.y as the inset to the cap's leading (top) edge. So
+        // the cap's left edge sits at bareW + restX − imageW, putting
+        // the cap to the LEFT of where a centre-anchored placement
+        // would land. Compared to the real iPad Pro 13-inch (M4),
+        // the centre-anchored interpretation drifted the cap ~32 px
+        // (half the 63 px image width) too far right.
         let def = Self.composeFixtureWithTopButton()
         let power = def.buttons[0]
-        let expectedLeftPct  = (1050.0 / 1124.0 * 100) - (63.0 / 2.0 / 1124.0 * 100)
+        let expectedLeftPct  = (1124.0 + (-74.0) - 63.0) / 1124.0 * 100
         let expectedTopPct   = (13.0 - 16.0) / 1468.0 * 100
         let expectedWidthPct = 63.0 / 1124.0 * 100
         let expectedHeightPct = 16.0 / 1468.0 * 100

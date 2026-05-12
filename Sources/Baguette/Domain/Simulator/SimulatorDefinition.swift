@@ -367,26 +367,45 @@ extension SimulatorDefinition.Button {
             // positioned with its TOP edge at `restY - imageH` in bare
             // coords (NEGATIVE — above the bare top), so the SDK's
             // z=below scheme leaves the visible portion uncovered.
-            let baseX = b.align == .trailing ? bareW : 0
+            //
+            // For align=.trailing / .leading, offset.x is the inset
+            // from the body's trailing / leading edge to the cap's
+            // TRAILING / LEADING edge — not its centre. This matches
+            // how `.right` with align=.leading takes offset.y as the
+            // inset to the cap's leading (top) edge, not its centre.
+            // Treating offset.x as the cap's centre drifts the cap
+            // half its image width too far towards the body interior
+            // (visible on the iPad Pro 13-inch (M4) power button —
+            // it landed 32 px right of where Apple positions it).
             let restX = 2 * normal.x - rollover.x
             let restY = 2 * normal.y - rollover.y
-            let cxPct = (baseX + restX) / bareW * 100
+            let leftX: Double
+            switch b.align {
+            case .trailing: leftX = bareW + restX - imageSize.width
+            case .leading:  leftX = restX
+            }
+            let leftPctTop = leftX / bareW * 100
             let tyPct = (restY - imageSize.height) / bareH * 100
             return SimulatorDefinition.Box(
-                leftPct: cxPct - halfWPct, topPct: tyPct,
+                leftPct: leftPctTop, topPct: tyPct,
                 widthPct: widthPct, heightPct: heightPct
             )
         case .bottom:
             // Symmetric to `.top`: cap protrudes DOWNWARD past the body
             // bottom edge. At-rest position uses the mirrored restY so
             // only `-restY` chrome-pixels poke below the bare bottom.
-            let baseX = b.align == .trailing ? bareW : 0
+            // Same edge-aligned offset.x semantics as `.top`.
             let restX = 2 * normal.x - rollover.x
             let restY = 2 * normal.y - rollover.y
-            let cxPct = (baseX + restX) / bareW * 100
+            let leftX: Double
+            switch b.align {
+            case .trailing: leftX = bareW + restX - imageSize.width
+            case .leading:  leftX = restX
+            }
+            let leftPctBottom = leftX / bareW * 100
             let tyPct = (bareH + restY) / bareH * 100
             return SimulatorDefinition.Box(
-                leftPct: cxPct - halfWPct, topPct: tyPct,
+                leftPct: leftPctBottom, topPct: tyPct,
                 widthPct: widthPct, heightPct: heightPct
             )
         }
