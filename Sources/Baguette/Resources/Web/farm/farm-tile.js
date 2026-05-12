@@ -57,7 +57,6 @@
     // screen + keyboard, all wired to this.session via the transport's
     // send closure.
     this._sims = new Map();
-    this.inputLayout = null;     // chrome layout snapshot for sizing
   }
 
   // Move the canvas into whichever screen-host element the latest view
@@ -273,13 +272,12 @@
 
   // promote() / demote() now toggle stream quality only. Input is
   // wired by `Simulator.mount` inside `_mountIn` as soon as a bezel
-  // is mounted, so both the grid host and the focus host accept
-  // gestures + keyboard automatically.
-  FarmTile.prototype.promote = function (opts) {
+  // is mounted on the focus host, so the user gets gestures +
+  // keyboard automatically.
+  FarmTile.prototype.promote = function () {
     if (!this.session) { this.start(); }
     this.mode = 'full';
     this.applyConfig(FULL);
-    this.inputLayout = (opts && opts.layout) || null;
   };
 
   FarmTile.prototype.demote = function () {
@@ -312,6 +310,17 @@
   FarmTile.prototype.button = function (name) {
     const sim = this._anySim();
     if (sim) sim.pressButton(name);
+  };
+  // Pinch-overlay container of whichever mounted sim still has its
+  // PinchOverlay alive — the grid sim drops its overlay when input is
+  // detached, so this surfaces the focus sim's overlay when focused.
+  // Used by the BrowserRecorder to composite pinch dots into recordings.
+  FarmTile.prototype.overlayContainer = function () {
+    for (const sim of this._sims.values()) {
+      const c = sim.pinchOverlayContainer;
+      if (c) return c;
+    }
+    return null;
   };
   FarmTile.prototype.type = function (text) {
     const sim = this._anySim();

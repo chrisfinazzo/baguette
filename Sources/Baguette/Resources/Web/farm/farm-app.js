@@ -240,24 +240,6 @@
     }));
   };
 
-  // Project an SDK definition into the legacy chrome-layout shape the
-  // BrowserRecorder consumes (`composite`, `screen`, `innerCornerRadius`).
-  // The focus pane mounts the bare bezel via the SDK, so the recorder's
-  // bezel + screen coords must align with that — derived directly from
-  // `def.screen` for consistency.
-  FarmApp.prototype.recorderLayoutFor = function (udid) {
-    const def = this.definitions.get(udid);
-    if (!def || !def.screen) return null;
-    const s = def.screen;
-    return {
-      composite: { width: s.viewport.width, height: s.viewport.height },
-      screen: {
-        x: s.rect.x, y: s.rect.y,
-        width: s.rect.width, height: s.rect.height
-      },
-      innerCornerRadius: s.clipRadius || 0,
-    };
-  };
 
   // ---- selection / focus --------------------------------------------
   FarmApp.prototype.select = function (udid) {
@@ -286,11 +268,12 @@
       // container is whatever the tile's current input wiring built.
       getRecorderContext: () => {
         const focusScreen = this.focus && this.focus.previewScreen;
+        const def = this.definitions.get(udid) || null;
         return {
           canvas: tile?.canvas || null,
           frameImg: focusScreen ? focusScreen.querySelector('img') : null,
-          layout: this.recorderLayoutFor(udid),
-          overlayHost: tile?.pinchOverlay ? tile.pinchOverlay.container : null,
+          screen: def && def.screen ? def.screen : null,
+          overlayHost: tile?.overlayContainer() || null,
         };
       },
     });
@@ -303,11 +286,7 @@
     if (tile && this.focus.previewScreen) {
       tile.attachMirror(this.focus.previewScreen, { useBezel: this.showBezels, def });
     }
-    // Bump stream quality + wire input on the mirror. The legacy
-    // chrome layout is still useful inside the tile for input-plane
-    // sizing fallbacks (`computeScreenSize`), so project it here.
-    const layout = this.recorderLayoutFor(udid);
-    if (tile) tile.promote({ layout });
+    if (tile) tile.promote();
   };
 
   // Flip the .selected class on grid tiles + refresh the CLI footer

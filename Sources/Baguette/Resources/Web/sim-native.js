@@ -265,8 +265,8 @@
     document.body.insertAdjacentHTML('beforeend', html);
 
     // 2. Resolve device name + iOS runtime from the list endpoint.
-    //    chrome.json gives us the bezel; /simulators.json gives us
-    //    the human-readable identity that sits above it.
+    //    The SDK definition gives us the bezel; /simulators.json gives
+    //    us the human-readable identity that sits above it.
     const meta = await fetchDeviceMeta(udid);
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
@@ -505,9 +505,6 @@
     window.__nativeToggleTheme = () => {
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
     };
-    // Actionable toggle removed — the SDK always renders the bare
-    // bezel + per-button overlays. Sidebar's toggle button is a no-op.
-    window.__nativeToggleActionable = () => { /* SDK is always actionable */ };
     window.__nativeToggleLogs = () => toggleLogs();
     window.__nativeToggleAx = () => {
       if (!axInspector) return;

@@ -29,17 +29,17 @@
 
   // Recording state. BrowserRecorder spins up a compose canvas only
   // while active; references are pulled from what's already on the
-  // page (frameImg from DeviceFrame, layout from chrome.json, pinch
-  // dots from PinchOverlay's DOM container). Idle cost: zero.
+  // page (frameImg from the SDK bezel, screen geometry from
+  // sim.screen.def, pinch dots from PinchOverlay's DOM container).
+  // Idle cost: zero.
   //   state.recorder      : BrowserRecorder instance during a recording
-  //   state.layout        : cached chrome layout (composite + screen rect)
   //   state.savedQuality  : pre-recording stream config; restored on stop
   //   state.active        : true between start() and stop()
   //   state.startedAt     : ms timestamp for the live timer
   //   state.timer         : interval handle that ticks the toolbar label
   //   state.entries       : finished recordings (download links)
   const recordingState = {
-    recorder: null, layout: null, savedQuality: null,
+    recorder: null, savedQuality: null,
     active: false, startedAt: 0, timer: null,
     entries: [],
   };
@@ -180,17 +180,8 @@
     });
     session.start();
 
-    // Cache the legacy `chrome.json` for tools that haven't migrated
-    // yet (CaptureGallery's compose, BrowserRecorder's bezel layout).
-    // Once those tools consume the SDK directly this fetch + the
-    // `chrome.json` route can be deleted.
-    const layout = await fetch(
-      `/simulators/${encodeURIComponent(udid)}/chrome.json`
-    ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    recordingState.layout = layout;
-
     gallery = new window.CaptureGallery({
-      udid, layout, frameImg: sim._bezel.frameImg,
+      udid, screen: sim.screen.def, frameImg: sim._bezel.frameImg,
     });
     gallery.clear();
     renderGallery();
@@ -374,7 +365,7 @@
       const rec = new window.BrowserRecorder({
         canvas:      sim.canvas,
         frameImg:    sim._bezel.frameImg,
-        layout:      recordingState.layout,
+        screen:      sim.screen.def,
         overlayHost: sim.pinchOverlayContainer,
         fps: 60,
       });
@@ -417,7 +408,6 @@
   function resetRecordingUI() {
     recordingState.active = false;
     recordingState.recorder = null;
-    recordingState.layout = null;
     recordingState.savedQuality = null;
     recordingState.startedAt = 0;
     if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
