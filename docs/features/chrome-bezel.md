@@ -90,19 +90,38 @@ window:
 | anchor          | `offset.x` means                                  | `offset.y` means          |
 |-----------------|----------------------------------------------------|----------------------------|
 | left            | image **CENTRE** on the anchored axis              | image **TOP** edge         |
-| top             | image **CENTRE** on the anchored axis              | image **TOP** edge         |
-| bottom          | image **CENTRE** on the anchored axis              | image **TOP** edge         |
 | right           | image **LEFT (inner) edge**, measured outward from `composite.width` | image **TOP** edge |
+| top             | image **TRAILING / LEADING (outer) edge**, depending on `align` | image **BOTTOM (inner) edge**, measured outward from the body top |
+| bottom          | image **TRAILING / LEADING (outer) edge**, depending on `align` | image **TOP (inner) edge**, measured outward from the body bottom |
 
-Why y is **TOP**, not **CENTRE**: tall caps (watch4 crown 67 px,
-iPhone power 117 px) and short caps (Mute BTN 32 px) with the same
-`offset.y` are supposed to start at the same y. Treating y as centre
-drifts taller caps downward by `imgH / 2` — visible as the action
-button floating below where Apple draws it (Image #8 regression in
-the development history).
+Why y is **TOP** for left/right but **INNER EDGE** for top/bottom:
+the protrusion axis is perpendicular to the anchored axis. For left/
+right-anchored caps (vertical pills on a side rail), y just slides the
+cap UP/DOWN along the rail — using the cap's TOP edge means tall caps
+(watch4 crown 67 px) and short caps (Mute BTN 32 px) with the same
+`offset.y` start at the same y, which is the only sensible reading
+when the cap is fully contained vertically (Image #8 regression in
+the development history showed the action button drifting down when
+y was treated as centre). For top/bottom-anchored caps (horizontal
+pills on a top/bottom rail), y is the *protrusion axis* — the cap
+needs to overshoot the body's top/bottom edge by some chrome-pixels,
+exactly like x does for right-anchored caps. Hence both x and y for
+top/bottom anchors are the cap's *inner* edge facing the body, with
+the same `2N − R` at-rest mirror as right-anchor.
 
-Why x is **INNER EDGE** for right-anchor specifically: watch4 ships
-DigitalCrown (25 wide) and SideButton (36 wide) with offsets that,
+Why x is **INNER EDGE** for right-anchor and **OUTER (trailing/
+leading) EDGE** for top/bottom: again, perpendicular vs anchored axis.
+Right-anchor x is the protrusion axis (cap pokes past the right rail)
+→ measure the inner edge that anchors the cap to the body. Top/
+bottom-anchor x is the *sliding* axis (cap slides along the top/
+bottom rail) → measure the cap's edge that's flush with the body's
+trailing/leading corner. Treating top/bottom x as the centre drifts
+the cap by `imgW / 2` toward the body interior — visible on the iPad
+Pro 13-inch (M4) power button as a cap landing 32 px right of where
+Apple positions it (Image #13 regression).
+
+Why right-anchor specifically also fixes watch4 crown/side-button:
+DigitalCrown (25 wide) and SideButton (36 wide) ship offsets that,
 under a CENTRE interpretation, land the entire image inside the body
 silhouette. The overlay sits behind the bezel image's baked
 crown/side silhouette and is invisible at rest — no cap-past-rail
@@ -110,14 +129,16 @@ protrusion (Image #14 regression). Inner-edge keeps both crown and
 side-button visible past the rail with the cap-pop the chrome.json
 offsets specify.
 
-### At-rest position for right-anchor: `2N − R`
+### At-rest position: `2N − R` on the protrusion axis
 
 chrome.json's `normalOffset` is the **hover** position — the cap
 already popped past the rail — not the relaxed at-rest position.
-At-rest mirrors the rollover delta INWARD:
+At-rest mirrors the rollover delta INWARD on the protrusion axis:
 
 ```
-restX = 2 * normalOffset.x - rolloverOffset.x
+right-anchor : restX = 2 · normalOffset.x − rolloverOffset.x
+top-anchor   : restY = 2 · normalOffset.y − rolloverOffset.y
+bottom-anchor: restY = 2 · normalOffset.y − rolloverOffset.y
 ```
 
 For watch4's side-button (`normal=-30`, `rollover=-25`) that gives
@@ -129,17 +150,27 @@ side-button. For caps without a hover animation (DigitalCrown ships
 `normal == rollover = -23`) the formula collapses to `normalOffset.x`
 and the cap stays fixed at 2 px protrusion.
 
-### `buttonTopLeft` (Swift) and `_size` (JS) summary
+For the iPad Pro 13-inch (M4) power button (`anchor=top`,
+`align=trailing`, `normal=(-74, 8)`, `rollover=(-74, 3)`) the same
+mirror on y gives `restY = 13` → image bottom edge 13 chrome-px
+below the body top, so 3 chrome-px of the 16-tall cap protrude above
+at rest; hover translates upward by `rollover − normal = -5` chrome-
+px, popping the cap to 8 px protrusion.
 
-| anchor | Swift `buttonTopLeft` → top-left point | JS `_size` → CSS `left`/`top` |
+### `buttonTopLeft` (Swift) and `Button.box` (JS SDK) summary
+
+| anchor | Swift `buttonTopLeft` → top-left point | JS `box` → CSS `left`/`top` |
 |---|---|---|
-| left   | `(compX + offset.x - imgW/2, compY + offset.y)` | `cxPct − halfWPct%`, `tyPct%` |
+| left   | `(compX + offset.x − imgW/2, compY + offset.y)` | `cxPct − halfWPct%`, `tyPct%` |
 | right  | `(compX + compW + (2N.x − R.x), compY + (2N.y − R.y))` | `(bareW + 2N.x − R.x) / bareW %`, `(2N.y − R.y) / bareH %` |
-| top    | `(baseX + offset.x − imgW/2, compY + offset.y)` | `cxPct − halfWPct%`, `tyPct%` |
-| bottom | `(baseX + offset.x − imgW/2, compY + compH + offset.y)` | `cxPct − halfWPct%`, `(bareH + offset.y) / bareH %` |
+| top, trailing | `(compX + compW + restX − imgW, compY + restY − imgH)` | `(bareW + restX − imgW) / bareW %`, `(restY − imgH) / bareH %` |
+| top, leading  | `(compX + restX, compY + restY − imgH)`                | `restX / bareW %`,               `(restY − imgH) / bareH %` |
+| bottom, trailing | `(compX + compW + restX − imgW, compY + compH + restY)` | `(bareW + restX − imgW) / bareW %`, `(bareH + restY) / bareH %` |
+| bottom, leading  | `(compX + restX, compY + compH + restY)`                | `restX / bareW %`,                  `(bareH + restY) / bareH %` |
 
 `compX = buttonMargins.left`, `compY = buttonMargins.top` (the canvas
 margins added around the rasterized composite — see below).
+`restX = 2N.x − R.x`, `restY = 2N.y − R.y`.
 
 ## Canvas margins — `images.devicePadding`
 
@@ -165,18 +196,21 @@ shipping no buttons at all). The screen rect inside `layoutJSON` is
 shifted by `(devicePadding.left, devicePadding.top)` so it lands on
 the real screen cutout in the merged image.
 
-## Hover animation (actionable mode)
+## Hover animation (SDK overlay buttons)
 
-`bezel-buttons.js` drives a three-state animation off chrome.json's
-two offsets:
+The Baguette SDK's `_Button` part (`Resources/Web/baguette/parts/button.js`)
+drives a three-state animation off chrome.json's two offsets — same
+mirror everywhere now, all four anchors:
 
-- **At rest** — position via `2N − R` (right anchor) or `rolloverOffset`
-  (others). For onTop:false caps the overlay sits behind the bezel
-  `<img>` (z=0) and only the cap-past-bezel portion is visible. For
-  onTop:true caps (watch4 action) the overlay sits in front (z=2).
+- **At rest** — position via `2N − R` on the protrusion axis (x for
+  left/right, y for top/bottom). For `onTop:false` caps the overlay
+  sits behind the bezel `<img>` (z=0) and only the cap-past-bezel
+  portion is visible. For `onTop:true` caps (watch4 action) the
+  overlay sits in front (z=2).
 - **Hover** (`mouseenter`) — CSS transform translates outward by the
-  chrome.json `rollover − normal` delta. For right-anchor that lands
-  the cap at `normalOffset.x` — the "popped out" hover state.
+  chrome.json `rollover − normal` delta on the protrusion axis. The
+  cap pops out from the rest position to `normalOffset` — the
+  "popped out" hover state.
 - **Press** (`mousedown`) — translates by `−delta` (inward of at-rest)
   and swaps the sprite to `imageDown.pdf`'s rasterized variant. On
   `mouseup`/`mouseleave` the cap snaps back to rest with the
@@ -200,10 +234,11 @@ Ring", iPhone power's Siri / SOS).
    with the (page, usage) pair from chrome.json's `usagePage` /
    `usage` fields and a wire name matching chrome.json's `name`.
 3. Extend `Press.allowed` (`Sources/Baguette/Domain/Input/Press.swift`)
-   so the gesture registry accepts the new wire name. Add the same
-   name to `WIRE_BUTTON` in
-   `Sources/Baguette/Resources/Web/bezel-buttons.js` so the actionable
-   overlay routes clicks through `simInput.button(...)`.
+   so the gesture registry accepts the new wire name. Also widen
+   `SimulatorDefinition.Button.wireButton(for:)` so the chrome.json
+   name flows into the SDK's `definition.json` payload — the JS
+   `_Button` part routes clicks through whatever envelope the
+   definition advertises, no per-button JS edit needed.
 4. The geometry path is data-driven — no code change needed for
    new chrome bundles unless their `inputs[]` carries a previously
    unseen `anchor` or `align` value.
@@ -223,7 +258,12 @@ curl -s "http://127.0.0.1:8421/simulators/<UDID>/bezel.png" \
 curl -s "http://127.0.0.1:8421/simulators/<UDID>/bezel.png?buttons=false" \
   -o /tmp/bare.png && sips -g pixelWidth -g pixelHeight /tmp/bare.png
 
-# Inspect the layout JSON the front-end consumes:
+# Inspect the SDK bootstrap the front-end consumes (button boxes
+# in CSS-percent space, bezel image URLs, screen rect / clip radius):
+curl -s "http://127.0.0.1:8421/simulators/<UDID>/definition.json" | jq
+
+# The legacy chrome.json route is still served for external tooling,
+# but the SDK and every consumer page now read definition.json:
 curl -s "http://127.0.0.1:8421/simulators/<UDID>/chrome.json" | jq
 ```
 
