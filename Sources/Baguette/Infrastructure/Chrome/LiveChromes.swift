@@ -325,18 +325,33 @@ final class LiveChromes: Chromes, @unchecked Sendable {
             let topY = compY + restY
             return Point(x: leftX, y: topY)
         case .top:
+            // Mirror the rollover-delta inward — same rationale as
+            // `.right`. chrome.json's normalOffset.y is the hover
+            // position (cap popped further up past the body's top
+            // edge); at-rest mirrors that delta downward so only
+            // `imageH - restY` chrome-pixels protrude. The cap's TOP
+            // edge sits at `compY + restY - imageH`, putting most of
+            // the image behind the device body and the overshoot
+            // above it.
             let baseX = button.align == .trailing
                 ? compX + compositeSize.width
                 : compX
-            let cx = baseX + button.offset.x
-            let topY = compY + button.offset.y
+            let restX = 2 * button.normalOffset.x - button.rolloverOffset.x
+            let restY = 2 * button.normalOffset.y - button.rolloverOffset.y
+            let cx = baseX + restX
+            let topY = compY + restY - imageSize.height
             return Point(x: cx - imageSize.width / 2, y: topY)
         case .bottom:
+            // Symmetric to `.top`: cap protrudes downward past the
+            // body bottom. At-rest position uses the mirrored restY
+            // so only `-restY` chrome-pixels poke below the body.
             let baseX = button.align == .trailing
                 ? compX + compositeSize.width
                 : compX
-            let cx = baseX + button.offset.x
-            let topY = compY + compositeSize.height + button.offset.y
+            let restX = 2 * button.normalOffset.x - button.rolloverOffset.x
+            let restY = 2 * button.normalOffset.y - button.rolloverOffset.y
+            let cx = baseX + restX
+            let topY = compY + compositeSize.height + restY
             return Point(x: cx - imageSize.width / 2, y: topY)
         }
     }

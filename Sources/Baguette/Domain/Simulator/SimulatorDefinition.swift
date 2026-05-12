@@ -358,17 +358,33 @@ extension SimulatorDefinition.Button {
                 widthPct: widthPct, heightPct: heightPct
             )
         case .top:
+            // Mirror the rollover-delta inward — same rationale as the
+            // `.right` arm above. chrome.json's normalOffset.y is the
+            // hover position (cap popped further up past the body's top
+            // edge); at-rest mirrors that delta DOWNWARD so the cap
+            // mostly hides inside the body and only `imageH - restY`
+            // chrome-pixels protrude above the top edge. The cap is
+            // positioned with its TOP edge at `restY - imageH` in bare
+            // coords (NEGATIVE — above the bare top), so the SDK's
+            // z=below scheme leaves the visible portion uncovered.
             let baseX = b.align == .trailing ? bareW : 0
-            let cxPct = (baseX + rollover.x) / bareW * 100
-            let tyPct = rollover.y / bareH * 100
+            let restX = 2 * normal.x - rollover.x
+            let restY = 2 * normal.y - rollover.y
+            let cxPct = (baseX + restX) / bareW * 100
+            let tyPct = (restY - imageSize.height) / bareH * 100
             return SimulatorDefinition.Box(
                 leftPct: cxPct - halfWPct, topPct: tyPct,
                 widthPct: widthPct, heightPct: heightPct
             )
         case .bottom:
+            // Symmetric to `.top`: cap protrudes DOWNWARD past the body
+            // bottom edge. At-rest position uses the mirrored restY so
+            // only `-restY` chrome-pixels poke below the bare bottom.
             let baseX = b.align == .trailing ? bareW : 0
-            let cxPct = (baseX + rollover.x) / bareW * 100
-            let tyPct = (bareH + rollover.y) / bareH * 100
+            let restX = 2 * normal.x - rollover.x
+            let restY = 2 * normal.y - rollover.y
+            let cxPct = (baseX + restX) / bareW * 100
+            let tyPct = (bareH + restY) / bareH * 100
             return SimulatorDefinition.Box(
                 leftPct: cxPct - halfWPct, topPct: tyPct,
                 widthPct: widthPct, heightPct: heightPct

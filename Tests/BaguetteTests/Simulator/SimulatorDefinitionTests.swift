@@ -118,6 +118,41 @@ struct SimulatorDefinitionTests {
         #expect(abs(power.box.heightPct - 3.75)  < 0.001)
     }
 
+    @Test func `top-anchor button protrudes above the bare composite, like right-anchor protrudes past the right edge`() {
+        // iPad Pro 13-inch (M4) data, abridged: tablet5 ships the
+        // power button as anchor=.top, align=.trailing with
+        // normal=(-74, 8), rollover=(-74, 3) and a 63×16 cap, on a
+        // 1124×1468 bare bezel.
+        //
+        // Top-anchor caps must protrude UPWARD past the bare top
+        // edge — analogous to right-anchor caps protruding past
+        // the right rail. Mirroring the rollover-delta inward
+        // mirrors what the existing right-anchor formula does:
+        //   restY  = 2·8 − 3 = 13
+        //   topPct = (restY − imageH) / bareH × 100
+        //          = (13 − 16) / 1468 × 100 = −0.2044%   (NEGATIVE)
+        //
+        // The current code uses `rollover.y / bareH * 100`
+        // = +0.2044% (POSITIVE) — placing the cap fully inside
+        // the device body, hidden behind the bezel. The user-visible
+        // symptom on /simulators/<udid> is a power cap that has a
+        // tooltip but no rendered cap above the iPad's top edge.
+        let def = Self.composeFixtureWithTopButton()
+        let power = def.buttons[0]
+        let expectedLeftPct  = (1050.0 / 1124.0 * 100) - (63.0 / 2.0 / 1124.0 * 100)
+        let expectedTopPct   = (13.0 - 16.0) / 1468.0 * 100
+        let expectedWidthPct = 63.0 / 1124.0 * 100
+        let expectedHeightPct = 16.0 / 1468.0 * 100
+        #expect(abs(power.box.leftPct   - expectedLeftPct)   < 0.001)
+        #expect(abs(power.box.topPct    - expectedTopPct)    < 0.001)
+        #expect(abs(power.box.widthPct  - expectedWidthPct)  < 0.001)
+        #expect(abs(power.box.heightPct - expectedHeightPct) < 0.001)
+        // Negative topPct is the load-bearing invariant — the cap
+        // must sit ABOVE the bare top edge for the SDK's z=below
+        // overlay scheme to leave the visible portion uncovered.
+        #expect(power.box.topPct < 0)
+    }
+
     @Test func `left-anchor button positions at the rollover point, centred horizontally`() {
         // volume-up: anchor=.left, offset=(8, 240)  (normal == rollover)
         // image 10×30, bare bezel 400×800.
@@ -240,6 +275,50 @@ struct SimulatorDefinitionTests {
         )
         return SimulatorDefinition.compose(
             from: sim, chrome: assets, urlPrefix: "/simulators/UDID-1"
+        )
+    }
+
+    /// iPad-style fixture: a single top-anchor, trailing-aligned
+    /// power button on a 1124×1468 bare bezel, mirroring the
+    /// tablet5/iPad Pro 13-inch (M4) chrome data — 63×16 cap with
+    /// normal=(-74, 8), rollover=(-74, 3), and a `top: 9` device
+    /// padding so the merged canvas reserves room for the cap to
+    /// poke up past the body.
+    static func composeFixtureWithTopButton() -> SimulatorDefinition {
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("UDID-IPAD")
+        given(sim).name.willReturn("iPad Pro 13-inch (M4)")
+        given(sim).deviceTypeName.willReturn("iPad Pro 13-inch (M4)")
+
+        let chrome = DeviceChrome(
+            identifier: "tablet5",
+            screenInsets: Insets(top: 46, left: 46, bottom: 46, right: 46),
+            outerCornerRadius: 81,
+            buttons: [
+                ChromeButton(
+                    name: "power",
+                    imageName: "PWR",
+                    anchor: .top, align: .trailing,
+                    normalOffset: Point(x: -74, y: 8),
+                    rolloverOffset: Point(x: -74, y: 3),
+                    onTop: false
+                ),
+            ],
+            compositeImageName: "iPadBase"
+        )
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(
+                data: Data("MERGED".utf8),
+                size: Size(width: 1134, height: 1477)
+            ),
+            buttonImages: [
+                "power": ChromeImage(data: Data("PWR".utf8), size: Size(width: 63, height: 16)),
+            ],
+            buttonMargins: Insets(top: 9, left: 0, bottom: 0, right: 10)
+        )
+        return SimulatorDefinition.compose(
+            from: sim, chrome: assets, urlPrefix: "/simulators/UDID-IPAD"
         )
     }
 
