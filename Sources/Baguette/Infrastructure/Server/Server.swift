@@ -139,6 +139,14 @@ struct Server: Sendable {
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             return Self.chromeJSON(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
         }
+        // SDK bootstrap — the single endpoint `Baguette.use(udid)` hits
+        // to instantiate the JS-side `Simulator` facade. Strict superset
+        // of `chrome.json` (which stays for migration); once every
+        // page consumes the SDK this route becomes the only chrome read.
+        router.get("/simulators/:udid/definition.json") { [simulators, chromes] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            return Self.definitionJSON(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
+        }
         router.get("/simulators/:udid/bezel.png") { [simulators, chromes] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             // ?buttons=false → bare device body (no buttons baked in).
@@ -204,6 +212,29 @@ struct Server: Sendable {
             let name = String(r.uri.path.split(separator: "/").last ?? "")
                 .removingPercentEncoding ?? ""
             return Self.staticAsset("farm/\(name)")
+        }
+
+        // Baguette SDK — served from `Resources/Web/baguette/`. The
+        // SDK's two-level layout (`parts/`, `gestures/`) needs literal
+        // subdirectory routes; Hummingbird's router rejects two
+        // placeholder routes that share a path slot with different
+        // param names (`/baguette/:file` vs `/baguette/:dir/:file`
+        // both bind position 2 but disagree on the name), so we
+        // register one route per known subdirectory instead.
+        router.get("/baguette/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("baguette/\(name)")
+        }
+        router.get("/baguette/parts/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("baguette/parts/\(name)")
+        }
+        router.get("/baguette/gestures/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("baguette/gestures/\(name)")
         }
 
         // Live stream — encoded frames downstream as binary; upstream
@@ -339,6 +370,23 @@ struct Server: Sendable {
         )
     }
 
+    private static func definitionJSON(
+        udid: String,
+        simulators: any Simulators,
+        chromes: any Chromes
+    ) -> Response {
+        guard let json = definitionJSONString(
+            udid: udid, simulators: simulators, chromes: chromes
+        ) else {
+            return errorJSON("no definition for udid \(udid)", status: .notFound)
+        }
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+            body: .init(byteBuffer: ByteBuffer(string: json))
+        )
+    }
+
     /// Pure data producer for `chrome.json`. Internal so handler-level
     /// tests can drive it with mock `Simulators` + `Chromes` and assert
     /// on the JSON string directly. The route closure (`chromeJSON`)
@@ -359,6 +407,27 @@ struct Server: Sendable {
         return assets.layoutJSON(
             buttonImageURLPrefix: "/simulators/\(udid)/chrome-button/"
         )
+    }
+
+    /// Pure data producer for the SDK bootstrap endpoint
+    /// `/simulators/<udid>/definition.json`. Composes a
+    /// `SimulatorDefinition` and serialises it. The route closure
+    /// (`definitionJSON`) wraps the result into a 200/404 response.
+    static func definitionJSONString(
+        udid: String,
+        simulators: any Simulators,
+        chromes: any Chromes
+    ) -> String? {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
+              let assets = sim.chrome(in: chromes) else {
+            return nil
+        }
+        let def = SimulatorDefinition.compose(
+            from: sim,
+            chrome: assets,
+            urlPrefix: "/simulators/\(udid)"
+        )
+        return def.toJSON()
     }
 
     private static func screenshotJPEG(
