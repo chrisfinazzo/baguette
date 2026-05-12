@@ -26,6 +26,28 @@ server side; clients always send points.
 
 `duration` is the dwell time in seconds. Default ~0.05 if omitted.
 
+## Double-tap (4 lines, one connection)
+
+There is no `{"type":"double-tap"}` envelope. UIKit's
+`UITapGestureRecognizer(numberOfTapsRequired: 2)` and SwiftUI's
+`TapGesture(count: 2)` both fire when two `touch1-down`/`touch1-up`
+pairs arrive at the same coordinate within ~250 ms, so the existing
+streaming primitives already cover this:
+
+```json
+{"type":"touch1-down","x":219,"y":478,"width":438,"height":954}
+{"type":"touch1-up",  "x":219,"y":478,"width":438,"height":954}
+{"type":"touch1-down","x":219,"y":478,"width":438,"height":954}
+{"type":"touch1-up",  "x":219,"y":478,"width":438,"height":954}
+```
+
+Send all four on **one** connection (one `baguette input` process,
+one WS); separate processes spend too long in startup for the
+recognizer to aggregate. A known-good cadence is ~80 ms hold per
+tap and ~50 ms gap between taps. For a one-shot CLI shape with the
+same recipe baked in, use `baguette double-tap` — see
+[`docs/features/double-tap.md`](../../../docs/features/double-tap.md).
+
 ## Swipe (one-shot, server interpolates)
 
 ```json

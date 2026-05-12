@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- **`baguette double-tap` — one-shot native iOS double-tap from the CLI ([#11](https://github.com/tddworks/baguette/issues/11)).** New `baguette double-tap --udid <UDID> --x <X> --y <Y> --width <W> --height <H> [--interval <sec>] [--duration <sec>]` subcommand sequences a `touch1-down → touch1-up → touch1-down → touch1-up` recipe inside one process, separated by `duration` (per-tap hold, default 0.08 s) and `interval` (tap-1-up → tap-2-down gap, default 0.05 s). UIKit's `UITapGestureRecognizer(numberOfTapsRequired: 2)` and SwiftUI's `TapGesture(count: 2)` both fire on the result. The wire path (`baguette serve` WS / `baguette input` stdin) already covered this via four `touch1-*` lines on one long-lived connection; what was missing was a CLI shape that didn't pay the ~150–300 ms process-startup cost twice — back-to-back `baguette tap` invocations spent so long in process startup that the recognizer timed out between them. The four-line wire recipe is unchanged and remains the path for browser / scripting clients that need their own timing control. No new wire envelope (`{"type":"double-tap"}` is intentionally not added — the streaming primitives already produce the right HID sequence). See [`docs/features/double-tap.md`](docs/features/double-tap.md).
+
 ---
 
 ## [0.1.71] - 2026-05-12
