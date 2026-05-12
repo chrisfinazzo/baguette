@@ -88,8 +88,11 @@
     });
   }
 
-  /** Draw the screenshot inside the bezel cutout (clipped to the
-   *  inner corner radius), then overlay the bezel image on top. */
+  /** Draw the bezel as background, then the screenshot on top
+   *  clipped to the inner corner radius. DeviceKit composites have
+   *  opaque dark "off" glass where the screen sits, so the screen
+   *  must go ABOVE the bezel — same Z order as Apple's Simulator
+   *  window and as BrowserRecorder. */
   function composite(screenshotDataUrl, frameImg, screen) {
     return new Promise((resolve) => {
       const fw = frameImg.naturalWidth, fh = frameImg.naturalHeight;
@@ -107,6 +110,7 @@
 
       const ssImg = new Image();
       ssImg.onload = () => {
+        ctx.drawImage(frameImg, 0, 0, fw, fh);
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(ix + radius, iy);
@@ -122,7 +126,6 @@
         ctx.clip();
         ctx.drawImage(ssImg, ix, iy, sw, sh);
         ctx.restore();
-        ctx.drawImage(frameImg, 0, 0, fw, fh);
         resolve(canvas.toDataURL('image/png'));
       };
       ssImg.src = screenshotDataUrl;

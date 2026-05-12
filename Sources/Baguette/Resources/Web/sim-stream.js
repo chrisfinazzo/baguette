@@ -362,10 +362,13 @@
       recordingState.savedQuality = readActiveQuality();
       applyQuality({ scale: 1, fps: 60, bps: 8_000_000 });
 
+      // The "with frame" toggle drives both screenshots AND
+      // recordings — passing `screen: null` to the recorder makes it
+      // fall through to bare-screen mode (no bezel composite).
       const rec = new window.BrowserRecorder({
         canvas:      sim.canvas,
-        frameImg:    sim._bezel.frameImg,
-        screen:      sim.screen.def,
+        frameImg:    captureWithFrame ? sim._bezel.frameImg     : null,
+        screen:      captureWithFrame ? sim.screen.def          : null,
         overlayHost: sim.pinchOverlayContainer,
         fps: 60,
       });
