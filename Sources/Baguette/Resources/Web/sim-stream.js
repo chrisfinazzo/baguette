@@ -21,6 +21,7 @@
   let gallery = null;       // CaptureGallery
   let logPanel = null;
   let axInspector = null;   // AXInspector — accessibility-tree overlay
+  let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
 
   let activeUdid = null;
   let activeName = null;
@@ -212,6 +213,18 @@
         getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
       });
     }
+
+    // Camera control card — opens its own WS to
+    // /simulators/<udid>/camera and pumps Mac webcam frames into the
+    // shared-memory buffer the VirtualCamera dylib reads. Independent
+    // of the stream socket and the logs socket — closing the page
+    // tears all three down.
+    const cameraHost = document.getElementById('simCameraPanel');
+    if (cameraHost && window.CameraPanel) {
+      cameraHost.innerHTML = '';
+      cameraPanel = new window.CameraPanel();
+      cameraPanel.attach(cameraHost, udid);
+    }
   }
 
   function stopStream() {
@@ -219,6 +232,7 @@
       try { recordingState.recorder.cancel(); } catch { /* ignore */ }
     }
     if (axInspector) { axInspector.detach(); axInspector = null; }
+    if (cameraPanel) { cameraPanel.detach(); cameraPanel = null; }
     if (session) { session.stop(); session = null; }
     if (sim) { sim.detach(); sim = null; }
     if (logPanel) { logPanel.detach(); logPanel = null; }
