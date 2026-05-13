@@ -17,16 +17,69 @@ enum VirtualCameraInstaller {
     }
 
     /// Resolve the dylib bundled inside the running baguette binary.
-    /// Returns `nil` in dev configurations that didn't stage the
-    /// dylib (`build.sh` runs `VirtualCamera/build.sh` first; running
-    /// `swift test` without that step leaves the resource absent —
-    /// camera features then simply refuse to start).
+    /// Returns `nil` when the dylib can't be located — the caller
+    /// surfaces a `camera_state.error` instead of crashing.
+    ///
+    /// Lookup order (matches `WebRoot.swift`'s pattern):
+    ///   1. `$BAGUETTE_VIRTUALCAMERA_DYLIB` — explicit override.
+    ///   2. Source-tree fallback — when running out of `.build/`,
+    ///      walk up to find `VirtualCamera/VirtualCamera.dylib`.
+    ///   3. Sidecar `Baguette_Baguette.bundle` next to the executable.
+    ///   4. Sibling of the executable (`./VirtualCamera.dylib`) —
+    ///      flat binary installs / Homebrew bottles that didn't ship
+    ///      the resource bundle.
+    ///
+    /// Crucially does NOT use `Bundle.module` — that accessor
+    /// `fatalError`s when the bundle is missing, which crashes
+    /// Homebrew installs.
     static func bundledDylibURL() -> URL? {
-        Bundle.module.url(
+        if let env = ProcessInfo.processInfo.environment["BAGUETTE_VIRTUALCAMERA_DYLIB"],
+           FileManager.default.fileExists(atPath: env) {
+            return URL(fileURLWithPath: env)
+        }
+        if let dev = sourceTreeDylib() { return dev }
+        if let bundled = sidecarBundleDylib() { return bundled }
+        if let sibling = executableSiblingDylib() { return sibling }
+        return nil
+    }
+
+    private static func sourceTreeDylib() -> URL? {
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0,
+              let cstr = info.dli_fname else { return nil }
+        var url = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
+        for _ in 0..<6 {
+            let candidate = url.appendingPathComponent("VirtualCamera/VirtualCamera.dylib")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            url = url.deletingLastPathComponent()
+        }
+        return nil
+    }
+
+    private static func sidecarBundleDylib() -> URL? {
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0,
+              let cstr = info.dli_fname else { return nil }
+        let exeDir = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
+        let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
+        guard FileManager.default.fileExists(atPath: bundleURL.path),
+              let bundle = Bundle(url: bundleURL) else { return nil }
+        return bundle.url(
             forResource: "VirtualCamera",
             withExtension: "dylib",
             subdirectory: "VirtualCamera"
         )
+    }
+
+    private static func executableSiblingDylib() -> URL? {
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0,
+              let cstr = info.dli_fname else { return nil }
+        let exeDir = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
+        let url = exeDir.appendingPathComponent("VirtualCamera.dylib")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     /// Read the bundled bytes, compute the install plan, apply it
