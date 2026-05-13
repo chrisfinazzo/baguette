@@ -900,6 +900,22 @@ struct Server: Sendable {
 
         defer { Task { await session.stop() } }
 
+        // 1-Hz heartbeat: sample FPS off the frame counter and push
+        // `camera_state` so the browser's "streaming · X fps" readout
+        // updates while frames flow. Detached child task — cancelled
+        // when the WS loop exits.
+        let heartbeat = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { break }
+                session.sampleFPS()
+                if case .streaming = session.phase {
+                    await sendCameraState(session: session, outbound: outbound)
+                }
+            }
+        }
+        defer { heartbeat.cancel() }
+
         do {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
