@@ -35,6 +35,7 @@
   let sim = null;           // Baguette SDK Simulator
   let logPanel = null;
   let axInspector = null;
+  let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
 
@@ -506,6 +507,7 @@
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
     };
     window.__nativeToggleLogs = () => toggleLogs();
+    window.__nativeToggleCamera = () => toggleCamera();
     window.__nativeToggleAx = () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
@@ -598,11 +600,42 @@
     }
   }
 
+  // Camera sheet — same lazy-mount pattern as logs. The CameraPanel
+  // owns its WS (/simulators/<udid>/camera); closing the sheet leaves
+  // the panel mounted so reopening doesn't drop the streaming state
+  // or device selection. The toolbar button's `.streaming` class
+  // tracks the panel's reported phase so the user sees "camera on"
+  // at a glance even when the sheet is closed.
+  function toggleCamera() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('nativeCameraHost');
+    const btn  = document.getElementById('nativeCameraToggle');
+    const open = view && view.getAttribute('data-camera') === 'open';
+    if (!view || !host) return;
+    if (open) {
+      view.removeAttribute('data-camera');
+      if (btn) btn.classList.remove('active');
+    } else {
+      view.setAttribute('data-camera', 'open');
+      if (btn) btn.classList.add('active');
+      if (!cameraPanel && window.CameraPanel && udid) {
+        host.innerHTML = '';
+        cameraPanel = new window.CameraPanel();
+        cameraPanel.onPhaseChange = (phase) => {
+          const indicator = document.getElementById('nativeCameraToggle');
+          if (indicator) indicator.classList.toggle('streaming', phase === 'streaming');
+        };
+        cameraPanel.attach(host, udid);
+      }
+    }
+  }
+
   function wireUnload() {
     window.addEventListener('beforeunload', () => {
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
+      try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
     });
   }
 
