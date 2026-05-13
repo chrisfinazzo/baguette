@@ -412,42 +412,52 @@
     flex: 1; min-height: 0; max-height: none !important;
   }
 
-  /* Camera sheet — same glass + slide-up shape as `.logs-sheet`,
-     narrower because the CameraPanel is a control card (3 rows of
-     selects/buttons) rather than a log stream. Centered horizontally
-     so it doesn't overlap the device frame's right edge on wider
-     viewports. */
-  #simNativeView .camera-sheet {
-    position: fixed;
-    left: 50%;
-    transform: translateX(-50%) translateY(calc(100% + 24px));
-    bottom: 16px;
-    width: min(380px, calc(100% - 32px));
-    display: flex; flex-direction: column;
+  /* Camera control card. Mirrors `.ax-host` (top-right) on the
+     LEFT side so the two floating panels can coexist without
+     stacking conflicts. Sized for a control card — narrow, glass-
+     styled, slight fade animation. Crucially does NOT cover the
+     device frame: the user opens this to start the camera and then
+     looks at the iOS app's actual preview rendered on the
+     simulator screen — a bottom-anchored sheet would obscure that
+     exact area. */
+  #simNativeView .camera-host {
+    position: absolute;
+    top: 84px;
+    left: 24px;
+    z-index: 40;
+    width: 260px;
+    padding: 12px 14px;
     background: var(--nv-bar-bg);
     border: 1px solid var(--nv-bar-border);
-    border-radius: 14px;
+    border-radius: 12px;
     box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
     backdrop-filter: blur(18px) saturate(1.5);
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     color: var(--nv-text);
     opacity: 0;
     pointer-events: none;
-    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
-                opacity 0.18s ease;
-    z-index: 60;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
   }
-  #simNativeView[data-camera="open"] .camera-sheet {
-    transform: translateX(-50%) translateY(0);
+  #simNativeView[data-camera="open"] .camera-host {
     opacity: 1;
     pointer-events: auto;
+    transform: translateY(0);
   }
-  #simNativeView .camera-sheet[aria-hidden="true"] { display: flex; }
-  #simNativeView .camera-sheet-body { padding: 10px 14px 12px 14px; }
+  #simNativeView .camera-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: -2px 0 8px 0;
+    font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .camera-host-close {
+    width: 22px; height: 22px;
+    color: var(--nv-text-muted);
+  }
 
   /* Streaming indicator on the camera toolbar button — small green
      dot in the top-right corner while the WS is reporting
-     `phase=streaming`. Persists when the sheet is closed, so the
+     `phase=streaming`. Persists when the card is closed, so the
      user always knows the camera is on. */
   #simNativeView #nativeCameraToggle { position: relative; }
   #simNativeView #nativeCameraToggle.streaming::after {
@@ -708,24 +718,26 @@
     <div id="nativeLogsHost" class="logs-sheet-body"></div>
   </aside>
 
-  <!-- Camera sheet — same slide-up pattern as logs, narrower
-       (control card, not a log stream). Hosts a CameraPanel
-       (sim-camera.js) lazy-mounted on first open. Toolbar's
-       `nativeCameraToggle` flips `[data-camera="open"]` on the
-       root. -->
-  <aside id="nativeCameraSheet" class="camera-sheet" aria-hidden="true">
-    <header class="logs-sheet-header">
-      <strong>Camera</strong>
-      <button class="ico-btn logs-sheet-close" title="Close camera"
+  <!-- Camera control card — floating glass panel, anchored top-left
+       of the device column (mirror of `.ax-host` on the right). The
+       toolbar's `nativeCameraToggle` flips `[data-camera="open"]`
+       on the root; CSS fades the card in/out. The CameraPanel
+       (sim-camera.js) is lazy-mounted on first open and retained
+       across subsequent toggles so the WS + selected camera survive
+       a close→reopen cycle. -->
+  <aside id="nativeCameraSheet" class="camera-host" aria-hidden="true">
+    <header class="camera-host-head">
+      <span>Camera</span>
+      <button class="ico-btn camera-host-close" title="Close camera"
               aria-label="Close camera"
               onclick="window.__nativeToggleCamera && window.__nativeToggleCamera()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
         </svg>
       </button>
     </header>
-    <div id="nativeCameraHost" class="camera-sheet-body"></div>
+    <div id="nativeCameraHost"></div>
   </aside>
 </div>
 
