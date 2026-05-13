@@ -26,13 +26,31 @@ final class HostVideoCapture: NSObject, VideoCapture, @unchecked Sendable {
         self.onFrame = onFrame
 
         let out = AVCaptureVideoDataOutput()
+        // Pin the output size to the shared-buffer canvas cap. Without
+        // these keys AVFoundation emits at the camera's *native*
+        // resolution (1080p / 4K on modern FaceTime HD), which exceeds
+        // `SharedFrameLayout.maxCanvasWidth/Height` (1280×1280) and
+        // every frame gets rejected before reaching the dylib's
+        // reader. SimCamMac does the same — `.hd1280x720` preset +
+        // pinned width/height — see asc-pro/SimCam/AVCameraSource.
         out.videoSettings = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey  as String: 1280,
+            kCVPixelBufferHeightKey as String: 720,
         ]
         out.alwaysDiscardsLateVideoFrames = true
         out.setSampleBufferDelegate(self, queue: queue)
 
         session.beginConfiguration()
+        // Pick the most-specific preset this device supports up to
+        // 1280×720. Continuity Camera devices don't advertise every
+        // preset; degrade gracefully.
+        for preset: AVCaptureSession.Preset in [.hd1280x720, .high, .medium] {
+            if session.canSetSessionPreset(preset) {
+                session.sessionPreset = preset
+                break
+            }
+        }
         if session.canAddInput(input) { session.addInput(input) }
         if session.canAddOutput(out) { session.addOutput(out) }
         session.commitConfiguration()

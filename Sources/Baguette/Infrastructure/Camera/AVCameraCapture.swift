@@ -14,6 +14,7 @@ final class AVCameraCapture: CameraCapture, @unchecked Sendable {
     private let video: any VideoCapture
     private let lock = NSLock()
     private var sequence: UInt32 = 0
+    private var dropCount: UInt64 = 0
 
     init(video: any VideoCapture) {
         self.video = video
@@ -42,8 +43,12 @@ final class AVCameraCapture: CameraCapture, @unchecked Sendable {
                 )
                 onFrame(frame)
             } catch {
-                // Single-frame conversion failures are non-fatal —
-                // skip and keep streaming.
+                // Single-frame conversion failures are non-fatal but
+                // should be visible — silently dropping every frame
+                // looks identical to "the dylib's not loaded" from
+                // the user's POV. Log once per 60 dropped frames so
+                // the operator sees the symptom without log spam.
+                self.recordDrop(error: error)
             }
         }
     }
@@ -61,5 +66,19 @@ final class AVCameraCapture: CameraCapture, @unchecked Sendable {
     private func resetSequence() {
         lock.lock(); defer { lock.unlock() }
         sequence = 0
+        dropCount = 0
+    }
+
+    private func recordDrop(error: Error) {
+        lock.lock()
+        dropCount &+= 1
+        let shouldLog = dropCount == 1 || dropCount % 60 == 0
+        let total = dropCount
+        lock.unlock()
+        if shouldLog {
+            FileHandle.standardError.write(Data(
+                "[camera] dropped \(total) frame(s) — last: \(error)\n".utf8
+            ))
+        }
     }
 }
