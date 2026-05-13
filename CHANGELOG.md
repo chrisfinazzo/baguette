@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.72] - 2026-05-13
+
 ### Added
 - **Virtual camera — pipe a Mac webcam into the iOS simulator's `AVCaptureVideoPreviewLayer` / `AVCapturePhotoOutput` / `UIImagePickerController`.** New WebSocket route `/simulators/:udid/camera` and a browser camera card (sidebar view) let the user pick a Mac camera (FaceTime HD, USB webcam, Continuity Camera), Start/Stop streaming, toggle Fit/Fill and Mirror, and watch a live FPS readout. The Mac side runs `AVCameraCapture` → `BGRAConverter` → `SharedMemoryFrameSink`, writing into `/tmp/SimCam.bgra` (24-byte LE header + BGRA pixels). The iOS-simulator side runs `VirtualCamera.dylib` (vendored under `VirtualCamera/` from `asc-pro/SimCam@ee513da7`, fat arm64 + x86_64, linker-signed adhoc), loaded via `DYLD_INSERT_LIBRARIES` armed on the simulator's launchd domain by `SimctlSimulatorInjection`. The dylib is bundled inside the baguette release tarball; `VirtualCameraInstaller` resolves it from `Bundle.module`, sha256-keys the bytes, and copies into a per-hash subdirectory under `~/Library/Application Support/Baguette/builds/` — the per-hash dir dodges iOS 26's simulator dyld page-hash cache rejecting replaced dylibs at the same path with `code:codesigning(3) invalid-page(2)`. Wire envelopes: `camera_list` / `camera_start` / `camera_stop` / `camera_set_flags` upstream, `camera_devices` / `camera_state` downstream. Domain bounded context `Domain/Camera/` is 100% unit-covered (`CameraFlags`, `CameraDevice`, `CameraFrame`, `SharedFrameLayout`, `BGRAConverter`, `CameraSession`, `CameraMessage`, `VirtualCameraInstallPlan`); infrastructure orchestrators (`AVCameraCapture`, `SimctlSimulatorInjection`, `SharedMemoryFrameSink`, `VirtualCameraInstaller`) ≥90% unit-covered via `MockVideoCapture` / `MockSubprocess` / temp-dir fixtures. Only `HostVideoCapture` (the `AVCaptureSession` plumbing) and `AVCameras` (the `AVCaptureDevice.DiscoverySession` enumeration) are integration-only. See [`docs/features/camera.md`](docs/features/camera.md).
 - **`baguette double-tap` — one-shot native iOS double-tap from the CLI ([#11](https://github.com/tddworks/baguette/issues/11)).** New `baguette double-tap --udid <UDID> --x <X> --y <Y> --width <W> --height <H> [--interval <sec>] [--duration <sec>]` subcommand sequences a `touch1-down → touch1-up → touch1-down → touch1-up` recipe inside one process, separated by `duration` (per-tap hold, default 0.08 s) and `interval` (tap-1-up → tap-2-down gap, default 0.05 s). UIKit's `UITapGestureRecognizer(numberOfTapsRequired: 2)` and SwiftUI's `TapGesture(count: 2)` both fire on the result. The wire path (`baguette serve` WS / `baguette input` stdin) already covered this via four `touch1-*` lines on one long-lived connection; what was missing was a CLI shape that didn't pay the ~150–300 ms process-startup cost twice — back-to-back `baguette tap` invocations spent so long in process startup that the recognizer timed out between them. The four-line wire recipe is unchanged and remains the path for browser / scripting clients that need their own timing control. No new wire envelope (`{"type":"double-tap"}` is intentionally not added — the streaming primitives already produce the right HID sequence). See [`docs/features/double-tap.md`](docs/features/double-tap.md).
@@ -165,7 +169,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.71...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.72...HEAD
+[0.1.72]: https://github.com/tddworks/baguette/compare/v0.1.71...v0.1.72
 [0.1.71]: https://github.com/tddworks/baguette/compare/v0.1.70...v0.1.71
 [0.1.70]: https://github.com/tddworks/baguette/compare/v0.1.69...v0.1.70
 [0.1.69]: https://github.com/tddworks/baguette/compare/v0.1.68...v0.1.69
