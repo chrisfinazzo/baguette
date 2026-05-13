@@ -42,6 +42,11 @@
       this.fit = 'fit';
       this.mirror = false;
       this.lastError = null;
+      // Optional callback: `(phase) => void`. Set by callers that
+      // want to surface the camera state outside the panel — e.g.
+      // the focus-mode toolbar lights a streaming dot on its
+      // camera button regardless of whether the sheet is open.
+      this.onPhaseChange = null;
     }
 
     /**
@@ -62,6 +67,11 @@
         this.ws = null;
       }
       if (this.host) { this.host.innerHTML = ''; this.host = null; }
+      const prevPhase = this.phase;
+      this.phase = 'idle';
+      if (prevPhase !== 'idle' && typeof this.onPhaseChange === 'function') {
+        try { this.onPhaseChange('idle'); } catch (_) { /* ignore */ }
+      }
     }
 
     // --- WS ---
@@ -94,10 +104,14 @@
         }
         this._renderDeviceList();
       } else if (msg.type === 'camera_state') {
+        const prevPhase = this.phase;
         this.phase = msg.phase || 'idle';
         this.fps = typeof msg.fps === 'number' ? msg.fps : 0;
         this.lastError = msg.ok === false ? (msg.error || 'unknown error') : null;
         this._renderStatus();
+        if (prevPhase !== this.phase && typeof this.onPhaseChange === 'function') {
+          try { this.onPhaseChange(this.phase); } catch (_) { /* ignore */ }
+        }
       }
     }
 

@@ -412,6 +412,54 @@
     flex: 1; min-height: 0; max-height: none !important;
   }
 
+  /* Camera sheet — same glass + slide-up shape as `.logs-sheet`,
+     narrower because the CameraPanel is a control card (3 rows of
+     selects/buttons) rather than a log stream. Centered horizontally
+     so it doesn't overlap the device frame's right edge on wider
+     viewports. */
+  #simNativeView .camera-sheet {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%) translateY(calc(100% + 24px));
+    bottom: 16px;
+    width: min(380px, calc(100% - 32px));
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+                opacity 0.18s ease;
+    z-index: 60;
+  }
+  #simNativeView[data-camera="open"] .camera-sheet {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #simNativeView .camera-sheet[aria-hidden="true"] { display: flex; }
+  #simNativeView .camera-sheet-body { padding: 10px 14px 12px 14px; }
+
+  /* Streaming indicator on the camera toolbar button — small green
+     dot in the top-right corner while the WS is reporting
+     `phase=streaming`. Persists when the sheet is closed, so the
+     user always knows the camera is on. */
+  #simNativeView #nativeCameraToggle { position: relative; }
+  #simNativeView #nativeCameraToggle.streaming::after {
+    content: '';
+    position: absolute;
+    top: 5px; right: 5px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+  }
+
   /* Accessibility-inspector floating panel. Sits top-right of the
      device column, glass-styled to match the toolbar. Hidden until
      the user clicks an element while the inspector is enabled (the
@@ -538,6 +586,22 @@
       </button>
 
       <div class="tb-actions">
+<!-- Camera toggle. Mirrors the logs-sheet pattern: click flips
+             `[data-camera="open"]` on `#simNativeView`, the bottom
+             sheet slides up. While the camera is streaming the
+             button's `.streaming` class lights a green dot in the
+             corner so the user sees the camera is on without
+             opening the sheet. -->
+        <button class="ico-btn" id="nativeCameraToggle" title="Toggle camera control"
+                aria-label="Toggle camera control"
+                onclick="window.__nativeToggleCamera && window.__nativeToggleCamera()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <!-- Video-camera glyph: rectangle body + triangular lens flare. -->
+            <rect x="3" y="6.5" width="13" height="11" rx="2"/>
+            <path d="M16 10.5 21 8v8l-5-2.5z"/>
+          </svg>
+        </button>
         <button class="ico-btn" id="nativeLogsToggle" title="Toggle live log sheet"
                 aria-label="Toggle live log sheet"
                 onclick="window.__nativeToggleLogs && window.__nativeToggleLogs()">
@@ -642,6 +706,26 @@
       </button>
     </header>
     <div id="nativeLogsHost" class="logs-sheet-body"></div>
+  </aside>
+
+  <!-- Camera sheet — same slide-up pattern as logs, narrower
+       (control card, not a log stream). Hosts a CameraPanel
+       (sim-camera.js) lazy-mounted on first open. Toolbar's
+       `nativeCameraToggle` flips `[data-camera="open"]` on the
+       root. -->
+  <aside id="nativeCameraSheet" class="camera-sheet" aria-hidden="true">
+    <header class="logs-sheet-header">
+      <strong>Camera</strong>
+      <button class="ico-btn logs-sheet-close" title="Close camera"
+              aria-label="Close camera"
+              onclick="window.__nativeToggleCamera && window.__nativeToggleCamera()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeCameraHost" class="camera-sheet-body"></div>
   </aside>
 </div>
 
