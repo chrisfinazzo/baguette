@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+- **Server-side AX hit-test for `describeAt(point:)`.** The method was previously falling back to a client-side tree walk because the 0-arg `objectAtPoint:` variant has a chicken/egg problem with `bridgeDelegateToken` — the returned translation needs the token stamped before the call. `AXPTranslator` exposes a **3-arg** variant — `objectAtPoint:displayId:bridgeDelegateToken:` — that takes the token as a parameter, which the dispatcher entry registered in `hitTestServerSide` resolves correctly on the very first XPC sub-request. Meta's idb has used this selector internally for years (`FBSimulatorAccessibilityCommands.m`'s `FBAXTranslationRequest_Point`, backing its describe-point CLI). The practical payoff is that `describeAt(point:)` now returns elements the static tree walk *misses* — most notably SwiftUI tab-bar items inside an `AXGroup` that `describeAll` reports as childless. Falls back to the original client-side walk only when the AXP selector isn't present (defensive only — present on every AXP we've seen on Xcode 26+). Adds `AXFrameTransform.unmap(_:)` for the device-point → host-coordinate inverse and `AXPTranslatorAccessibility.supportsServerSideHitTest` as the capability gate; both fully unit-covered.
+
 ---
 
 ## [0.1.73] - 2026-05-13
