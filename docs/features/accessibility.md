@@ -199,6 +199,9 @@ column (e.g. `accessibilityTraits`):
 
 ## Further reading
 
+- [How `describe-ui` finds every element](ax-hit-test-sweep.md) — why
+  the full tree includes the status bar and tab-bar items the recursive
+  walk can't reach (the grid hit-test sweep + merge).
 - `Sources/Baguette/Infrastructure/Accessibility/AXPTranslatorAccessibility.swift`
   — the dispatcher recipe with inline commentary.
 - `Sources/Baguette/Domain/Accessibility/AXNode.swift` — the value

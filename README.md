@@ -99,7 +99,7 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
 ## Install
 
 ```bash
-brew install tddworks/tap/baguette
+brew install baguette
 ```
 
 Apple Silicon only. Requires Xcode 26 — `baguette` links against private
