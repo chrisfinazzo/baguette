@@ -160,62 +160,122 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         ))
     }
 
+    /// Grid step / point cap for the hit-test sweep. 32 pt is fine
+    /// enough to land in a status-bar glyph or a tab-bar item without
+    /// exploding the XPC count.
+    private static let gridStep: Double = 32
+    private static let gridCap: Int = 600
+    /// The sweep can issue hundreds of XPC round-trips; bound its
+    /// wall-clock so `describe-ui` stays responsive. The recursive
+    /// walk already produced a usable tree — this only caps the
+    /// *extra* hit-test work.
+    private static let sweepBudgetSeconds: Double = 2.5
+    /// Depth for a *sweep* hit-test: zero. Each grid point yields just
+    /// the single deepest element under it; a deeper per-point walk
+    /// fans out into dozens of XPC sub-requests, which is what made
+    /// the sweep time out before reaching the bottom tab bar.
+    private static let sweepDepth = 0
+
     private func fetchTree(hitTest: Point?) throws -> AXNode? {
         try withAXPContext { ctx in
             Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
             Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
-            return AXNode.walk(
+            let base = AXNode.walk(
                 from: ctx.frontmostRoot,
                 transform: ctx.transform,
                 depthCap: Self.maxDepth,
                 deadline: ctx.deadline
             )
+            // Only `describeAll` augments the walk with the sweep; the
+            // `describeAt` fallback just needs the raw tree.
+            guard hitTest == nil, Self.supportsServerSideHitTest else { return base }
+            return hitTestSweep(base: base, ctx: ctx)
         }
     }
 
-    /// Server-side hit-test path. Walks the same handshake as
-    /// `fetchTree` — register a token, resolve the frontmost app
-    /// to get a root frame for the device→host coordinate
-    /// transform — then calls
-    /// `objectAtPoint:displayId:bridgeDelegateToken:` on AXP
-    /// directly. The translator returns the deepest accessibility
-    /// element under the point, including elements that the
-    /// recursive children walk in `fetchTree` would have missed
-    /// (the canonical case: SwiftUI tab-bar items inside an empty
-    /// `AXGroup`). The returned translation is walked into an
-    /// `AXNode` subtree using the same `AXNode.walk` factory
-    /// `fetchTree` uses, so callers get identical value-type
-    /// semantics either way.
-    private func hitTestServerSide(point: Point) throws -> AXNode? {
-        try withAXPContext { ctx in
-            let hostPoint = ctx.transform.unmap(CGPoint(x: point.x, y: point.y))
-
-            guard let hitTranslation = Self.objectAtPoint(
-                translator: ctx.translator,
-                point: hostPoint,
-                displayId: 0,
-                token: ctx.token
-            ) else {
-                // No element under that point. Distinct from "selector
-                // missing" — that case is gated by
-                // `supportsServerSideHitTest` upstream.
-                return nil
+    /// Recover elements the process-scoped recursive walk can't reach
+    /// — SpringBoard's status bar and the contents of childless
+    /// containers (tab bars, nav bars, toolbars) — by hit-testing an
+    /// `AXHitTestGrid` across the screen, then merging the discoveries
+    /// into `base`.
+    ///
+    /// The grid skips only points inside genuine *content leaves*
+    /// (`AXNode.contentLeafFrames`), never childless containers: an
+    /// empty `AXGroup "Tab Bar"` is exactly where hit-test-only
+    /// children live, so probing must continue inside it. Each hit-test
+    /// is shallow (depth 0) so the full screen is covered fast, and the
+    /// merge grafts every discovery under the deepest container that
+    /// holds it — so a recovered tab-bar button is selectable rather
+    /// than shadowed by its group.
+    private func hitTestSweep(base: AXNode, ctx: AXPContext) -> AXNode {
+        let pointSize = ctx.transform.pointSize
+        let deadline = min(
+            ctx.deadline,
+            Date().addingTimeInterval(Self.sweepBudgetSeconds)
+        )
+        let grid = AXHitTestGrid(
+            size: Size(width: pointSize.width, height: pointSize.height),
+            step: Self.gridStep, cap: Self.gridCap
+        )
+        var discovered: [AXNode] = []
+        var probed = 0
+        for point in grid.samplePoints(covered: base.contentLeafFrames()) {
+            if Date() >= deadline { break }
+            probed += 1
+            if let node = discover(at: point, ctx: ctx, depthCap: Self.sweepDepth) {
+                discovered.append(node)
             }
-            Self.stamp(token: ctx.token, on: hitTranslation)
-
-            guard let hitElement = Self.macPlatformElement(
-                translator: ctx.translator, translation: hitTranslation
-            ) else { return nil }
-            Self.stampElementTranslation(token: ctx.token, on: hitElement)
-            Self.stampSubtree(hitElement, token: ctx.token, depthCap: Self.maxDepth)
-
-            return AXNode.walk(
-                from: hitElement,
-                transform: ctx.transform,
-                depthCap: Self.maxDepth,
-                deadline: ctx.deadline
-            )
         }
+        let merged = base.merging(discovered: discovered)
+        log("[ax] hit-test sweep: probed=\(probed) discovered=\(discovered.count)")
+        return merged
+    }
+
+    /// Resolve the deepest accessibility element at a single
+    /// device-point `point` via the server-side hit-test, returning it
+    /// (walked `depthCap` levels deep) as an `AXNode`. Shared by the
+    /// `describeAt` server-side path (full depth) and the `describeAll`
+    /// hit-test sweep (depth 0). `objectAtPoint:displayId:bridgeDelegateToken:`
+    /// is the 3-arg form (token as a parameter, so it plays nicely
+    /// with the dispatcher); it returns the deepest element under the
+    /// point and crosses process boundaries — which is how the
+    /// SpringBoard status bar and childless-container contents
+    /// (tab-bar items inside an empty `AXGroup`) surface at all.
+    /// Discovered in Meta's idb (`FBSimulatorAccessibilityCommands.m`),
+    /// which backs its describe-point CLI with the same selector.
+    private func discover(at point: Point, ctx: AXPContext, depthCap: Int) -> AXNode? {
+        let hostPoint = ctx.transform.unmap(CGPoint(x: point.x, y: point.y))
+        guard let hitTranslation = Self.objectAtPoint(
+            translator: ctx.translator, point: hostPoint,
+            displayId: 0, token: ctx.token
+        ) else { return nil }
+        Self.stamp(token: ctx.token, on: hitTranslation)
+
+        guard let hitElement = Self.macPlatformElement(
+            translator: ctx.translator, translation: hitTranslation
+        ) else { return nil }
+        Self.stampElementTranslation(token: ctx.token, on: hitElement)
+        // Only stamp the subtree when we'll actually walk it — a
+        // shallow (depth 0) sweep hit reads no children.
+        if depthCap > 0 {
+            Self.stampSubtree(hitElement, token: ctx.token, depthCap: depthCap)
+        }
+
+        return AXNode.walk(
+            from: hitElement,
+            transform: ctx.transform,
+            depthCap: depthCap,
+            deadline: ctx.deadline
+        )
+    }
+
+    private func hitTestServerSide(point: Point) throws -> AXNode? {
+        // No element under the point returns nil — distinct from
+        // "selector missing", which is gated by
+        // `supportsServerSideHitTest` upstream. `describeAt` keeps the
+        // full-depth walk so a single-point caller still gets the
+        // element's subtree.
+        try withAXPContext { ctx in discover(at: point, ctx: ctx, depthCap: Self.maxDepth) }
     }
 
     /// Stamp every reachable child translation with `token` so
