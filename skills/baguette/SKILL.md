@@ -268,7 +268,7 @@ read `wire-protocol.md`; debugging which subcommand to use → read
 ## Install (only when missing)
 
 ```bash
-brew install tddworks/tap/baguette
+brew install baguette
 baguette --version
 ```
 
