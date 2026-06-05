@@ -219,16 +219,23 @@
         }
 
         // Promote pending → drag-stream once the cursor moves past
-        // the tap threshold. Use 2 coincident fingers because iOS
-        // 26.4 misroutes single-point streaming.
+        // the tap threshold. Stream a SINGLE finger (`touch1-*`): the
+        // digitizer recipe (IOHIDDigitizerDispatch) threads one
+        // continuous touch with a sticky identifier, which is what
+        // drives single-finger recognisers — SwiftUI `DragGesture`,
+        // `ScrollView` pan, table/list scroll. The old two-coincident-
+        // finger hack (`touch2-*`) routed through the legacy mouse path
+        // and landed as a degenerate two-finger gesture that those
+        // single-touch recognisers ignore. Pinch / pan stay 2-finger
+        // and are gated behind the Alt / Shift modifiers above.
         if (state.mode === 'pending') {
           if (Math.hypot(vx - state.startVx, vy - state.startVy) < DRAG_THRESHOLD_PX) return;
           const start = this._pointInScreen({
             clientX: state.startVx + (e.clientX - vx),
             clientY: state.startVy + (e.clientY - vy),
           });
-          state = { mode: 'drag-stream', f1: { ...start }, f2: { ...start } };
-          sendTouch2('down', state.f1, state.f2);
+          state = { mode: 'drag-stream' };
+          this.screen.touchDown([start]);
           lastMoveMs = 0;
         }
 
@@ -236,9 +243,7 @@
           const now = performance.now();
           if (now - lastMoveMs < MOVE_FLUSH_MS) return;
           lastMoveMs = now;
-          const cur = this._pointInScreen(e);
-          state.f1 = cur; state.f2 = { ...cur };
-          sendTouch2('move', state.f1, state.f2);
+          this.screen.touchMove([this._pointInScreen(e)]);
         }
       });
 
@@ -255,8 +260,7 @@
           if (this.overlay) this.overlay.clear();
           this.log(`${state.mode} end`);
         } else if (state.mode === 'drag-stream') {
-          const cur = this._pointInScreen(e);
-          sendTouch2('up', cur, { ...cur });
+          this.screen.touchUp([this._pointInScreen(e)]);
           this.log('drag end');
         } else if (state.mode === 'pending') {
           // Never promoted past tap threshold → one-shot tap.
