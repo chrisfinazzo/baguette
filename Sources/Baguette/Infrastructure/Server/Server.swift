@@ -134,6 +134,45 @@ struct Server: Sendable {
             }
         }
 
+        // Status bar — `POST` sets overrides from a JSON body,
+        // `DELETE` clears them. Backed by `simctl status_bar`; pure
+        // parse + dispatch lives in `Server.applyStatusBar` /
+        // `clearStatusBar` for unit testing. DELETE (rather than a
+        // deeper `/clear` path) keeps the udid second-to-last so
+        // `udidParam` extracts it uniformly.
+        router.post("/simulators/:udid/status-bar") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let buffer = try? await r.body.collect(upTo: 64 * 1024)
+            let body = buffer.map { String(buffer: $0) } ?? ""
+            switch await Self.applyStatusBar(
+                udid: Self.udidParam(r), body: body, simulators: simulators
+            ) {
+            case .ok:
+                return jsonOK
+            case .invalidBody:
+                return errorJSON("status-bar body must be a JSON object of valid override fields", status: .badRequest)
+            case .emptyOverride:
+                return errorJSON("set at least one status-bar field", status: .badRequest)
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON("status-bar override failed (simctl error)", status: .internalServerError)
+            }
+        }
+        router.delete("/simulators/:udid/status-bar") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            switch await Self.clearStatusBar(udid: Self.udidParam(r), simulators: simulators) {
+            case .ok:
+                return jsonOK
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON("status-bar clear failed (simctl error)", status: .internalServerError)
+            case .invalidBody, .emptyOverride:
+                return jsonOK // unreachable for clear; keep the switch total
+            }
+        }
+
         // Chrome / bezel — DeviceKit-sourced layout + rasterized PNG.
         router.get("/simulators/:udid/chrome.json") { [simulators, chromes] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -343,6 +382,100 @@ struct Server: Sendable {
             return .unknownDevice
         }
         return sim.orientation().set(orientation) ? .ok : .dispatchFailed
+    }
+
+    /// Outcome of the status-bar routes — one case per HTTP-status
+    /// branch. Lives next to the helpers so the route closures stay a
+    /// `switch outcome → Response` translation.
+    enum StatusBarOutcome: Equatable {
+        case ok
+        case invalidBody
+        case emptyOverride
+        case unknownDevice
+        case dispatchFailed
+    }
+
+    /// Parse a `StatusBarOverride` from a JSON request body. Returns
+    /// `nil` for malformed JSON or a present enum field with an
+    /// unrecognised value — fail loud rather than silently dropping it.
+    /// Numeric fields are accepted as JSON numbers; range clamping is
+    /// the value type's job.
+    static func parseStatusBarOverride(json: String) -> StatusBarOverride? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dict = object as? [String: Any] else {
+            return nil
+        }
+        var override = StatusBarOverride()
+        override.time = dict["time"] as? String
+        override.operatorName = dict["operatorName"] as? String
+        if let raw = dict["dataNetwork"] as? String {
+            guard let value = DataNetwork(wireName: raw) else { return nil }
+            override.dataNetwork = value
+        }
+        if let raw = dict["wifiMode"] as? String {
+            guard let value = WifiMode(wireName: raw) else { return nil }
+            override.wifiMode = value
+        }
+        if let raw = dict["cellularMode"] as? String {
+            guard let value = CellularMode(wireName: raw) else { return nil }
+            override.cellularMode = value
+        }
+        if let raw = dict["batteryState"] as? String {
+            guard let value = BatteryState(wireName: raw) else { return nil }
+            override.batteryState = value
+        }
+        override.wifiBars = intField(dict["wifiBars"])
+        override.cellularBars = intField(dict["cellularBars"])
+        override.batteryLevel = intField(dict["batteryLevel"])
+        return override
+    }
+
+    /// JSON numbers arrive as `NSNumber`; accept either an `Int` or a
+    /// `Double` spelling so `3` and `3.0` both work.
+    private static func intField(_ value: Any?) -> Int? {
+        if let i = value as? Int { return i }
+        if let d = value as? Double { return Int(d) }
+        return nil
+    }
+
+    /// Pure parse + dispatch for `POST /simulators/:udid/status-bar`.
+    /// Split from the route closure so unit tests can drive every
+    /// branch with `MockSimulators` + `MockStatusBar`.
+    static func applyStatusBar(
+        udid: String,
+        body: String,
+        simulators: any Simulators
+    ) async -> StatusBarOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        guard let override = parseStatusBarOverride(json: body) else {
+            return .invalidBody
+        }
+        guard !override.isEmpty else { return .emptyOverride }
+        do {
+            try await sim.statusBar().override(override)
+            return .ok
+        } catch {
+            return .dispatchFailed
+        }
+    }
+
+    /// Pure dispatch for `DELETE /simulators/:udid/status-bar`.
+    static func clearStatusBar(
+        udid: String,
+        simulators: any Simulators
+    ) async -> StatusBarOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        do {
+            try await sim.statusBar().clear()
+            return .ok
+        } catch {
+            return .dispatchFailed
+        }
     }
 
     private static func lifecycle(

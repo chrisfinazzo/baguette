@@ -50,6 +50,12 @@ protocol Simulator: Sendable {
     /// returns a fresh handle; the underlying GSEvent dispatch is
     /// stateless.
     func orientation() -> any Orientation
+
+    /// Override this simulator's status bar (time, carrier, network,
+    /// signal bars, battery) or clear back to live values. Each call
+    /// returns a fresh handle; the underlying `simctl status_bar`
+    /// invocation is stateless.
+    func statusBar() -> any StatusBar
 }
 
 /// `Simulator.State` lifted to a top-level enum so the protocol can

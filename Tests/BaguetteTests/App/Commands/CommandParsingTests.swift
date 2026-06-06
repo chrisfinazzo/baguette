@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
-            "orientation", "diag-digitizer-trackpad",
+            "orientation", "status-bar", "diag-digitizer-trackpad",
         ])
     }
 
@@ -114,6 +114,64 @@ struct CommandParsingTests {
         #expect(throws: (any Error).self) {
             try OrientationCommand.parse(["portrait"])
         }
+    }
+
+    // MARK: - status-bar
+
+    @Test func `status-bar lists override and clear leaves`() {
+        let names = StatusBarCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["override", "clear"])
+        #expect(StatusBarCommand.configuration.commandName == "status-bar")
+    }
+
+    @Test func `status-bar override parses every field into a typed override`() throws {
+        let cmd = try StatusBarCommand.Override.parse([
+            "--udid", "U",
+            "--time", "9:41",
+            "--operator-name", "Baguette",
+            "--data-network", "5g",
+            "--wifi-mode", "active",
+            "--wifi-bars", "3",
+            "--cellular-mode", "active",
+            "--cellular-bars", "4",
+            "--battery-state", "charged",
+            "--battery-level", "68",
+        ])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.override == StatusBarOverride(
+            time: "9:41",
+            operatorName: "Baguette",
+            dataNetwork: .fiveG,
+            wifiMode: .active,
+            wifiBars: 3,
+            cellularMode: .active,
+            cellularBars: 4,
+            batteryState: .charged,
+            batteryLevel: 68
+        ))
+    }
+
+    @Test func `status-bar override with no fields builds an empty override`() throws {
+        let cmd = try StatusBarCommand.Override.parse(["--udid", "U"])
+        #expect(cmd.override.isEmpty)
+    }
+
+    @Test func `status-bar override rejects an unknown data network`() {
+        #expect(throws: (any Error).self) {
+            try StatusBarCommand.Override.parse(["--udid", "U", "--data-network", "6g"])
+        }
+    }
+
+    @Test func `status-bar override requires --udid`() {
+        #expect(throws: (any Error).self) {
+            try StatusBarCommand.Override.parse(["--battery-level", "50"])
+        }
+    }
+
+    @Test func `status-bar clear parses --udid`() throws {
+        let cmd = try StatusBarCommand.Clear.parse(["--udid", "U"])
+        #expect(cmd.options.udid == "U")
+        #expect(StatusBarCommand.Clear.configuration.commandName == "clear")
     }
 
     // MARK: - diag-digitizer-trackpad

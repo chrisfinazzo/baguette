@@ -95,4 +95,8 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     func orientation() -> any Orientation {
         PurpleEventOrientation(udid: udid, host: host)
     }
+
+    func statusBar() -> any StatusBar {
+        SimctlStatusBar(udid: udid)
+    }
 }
