@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Network Speed control — mockup</title>
+<!--
+  ────────────────────────────────────────────────────────────────────
+  Baguette · Network Speed control — design mockup (single file, no build)
+  ────────────────────────────────────────────────────────────────────
+
+  Goal: add per-simulator network throttling to baguette's focus-mode UI.
+  The whole feature is THREE numbers (see docs/design/network-speed-control.md):
+        bandwidthInBytes : UInt64   bytes/sec ceiling, 0 = unlimited
+        latency          : ms       added delay
+        packetLoss       : 0…1      fraction of packets dropped
+  Presets (LTE / 3G / Edge / 100% loss / Airplane) are sugar that resolve
+  to those three fields — the sliders are the truth.
+
+  Design intent — same focus-mode language as status-bar-control.html:
+    • A new toolbar .ico-btn (gauge glyph) sits in the focus toolbar,
+      mirroring the camera / status-bar / AX / logs toggles.
+    • Clicking it opens a floating GLASS CARD — same --nv-* tokens,
+      accent #2563eb, label-left / control-right rows grouped by divider.
+    • Presets are .pill buttons; each shape field is a slim slider with a
+      monospace readout. Selecting a preset moves the three sliders;
+      moving a slider drops the preset to "Custom".
+    • The placeholder device LIVE-REFLECTS the throttle: a mock download
+      card whose bar fills slower as bandwidth drops, a "ping" readout
+      that tracks latency, and dropped-tick flecks that track loss.
+      Airplane / 100% loss flips the device to a "No Connection" state.
+
+  Wire note (for whoever implements this): unlike taps/swipes AND unlike
+  status-bar (which is a simctl call), this is a macOS NetworkExtension
+  content-filter System Extension. The card is a thin front-end over
+  `baguette net --udid <UDID> --bandwidth <b/s> --latency <ms> --loss <0..1>`
+  / `baguette net clear`. Requires a host activator bundle + entitlement —
+  see the design doc.
+-->
+<style>
+  /* ── Theme tokens — lifted verbatim from status-bar-control.html /
+     sim-native.html so the mockup matches focus mode pixel-for-pixel.
+     Default dark; [data-theme="light"] flips to light. ──────────── */
+  #view {
+    color-scheme: light dark;
+    --nv-page-bg:        #1a1a1f;
+    --nv-bar-bg:         rgba(20, 20, 24, 0.78);
+    --nv-bar-border:     rgba(255, 255, 255, 0.08);
+    --nv-bar-shadow:     0 8px 24px rgba(0, 0, 0, 0.45);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --nv-text:           #f5f5f7;
+    --nv-text-muted:     rgba(245, 245, 247, 0.55);
+    --nv-text-faint:     rgba(245, 245, 247, 0.5);
+    --nv-divider:        rgba(255, 255, 255, 0.12);
+    --nv-btn-hover:      rgba(255, 255, 255, 0.10);
+    --nv-btn-active:     rgba(255, 255, 255, 0.18);
+    --nv-field-bg:       rgba(255, 255, 255, 0.06);
+    --nv-field-border:   rgba(255, 255, 255, 0.10);
+    --nv-seg-track-bg:   rgba(255, 255, 255, 0.06);
+    --nv-seg-track-border: rgba(255, 255, 255, 0.06);
+    --nv-seg-btn-text:   rgba(245, 245, 247, 0.65);
+    --nv-accent:         #2563eb;
+    --nv-accent-text:    #fff;
+    --nv-warn:           #ff453a;
+    --nv-ok:             #30d158;
+  }
+  #view[data-theme="light"] {
+    --nv-page-bg:        #f1f3f6;
+    --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+    --nv-bar-border:     rgba(15, 23, 42, 0.08);
+    --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    --nv-text:           #1d1d1f;
+    --nv-text-muted:     rgba(29, 29, 31, 0.65);
+    --nv-text-faint:     rgba(29, 29, 31, 0.55);
+    --nv-divider:        rgba(15, 23, 42, 0.14);
+    --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+    --nv-btn-active:     rgba(15, 23, 42, 0.12);
+    --nv-field-bg:       rgba(15, 23, 42, 0.04);
+    --nv-field-border:   rgba(15, 23, 42, 0.10);
+    --nv-seg-track-bg:   rgba(15, 23, 42, 0.06);
+    --nv-seg-track-border: rgba(15, 23, 42, 0.06);
+    --nv-seg-btn-text:   rgba(29, 29, 31, 0.65);
+  }
+
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #view {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px; box-sizing: border-box;
+    background: var(--nv-page-bg);
+    color: var(--nv-text);
+    font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ── Device column: toolbar pill above a free-floating device ──── */
+  .device-column { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+  /* ── Toolbar pill (existing focus-mode chrome) ────────────────── */
+  .top-bar {
+    display: inline-flex; align-items: center; gap: 12px;
+    height: 36px; padding: 4px 6px 4px 4px;
+    background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  }
+  .tb-label { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 8px;
+    border-radius: 999px; color: inherit; text-decoration: none; }
+  .tb-label:hover { background: var(--nv-btn-hover); }
+  .tb-back { color: var(--nv-text-muted); }
+  .tb-name { font: 600 13px/1.1 -apple-system, sans-serif; letter-spacing: 0.01em; }
+  .tb-os   { color: var(--nv-text-faint); font: 500 11px/1.1 -apple-system, sans-serif;
+    padding-left: 8px; border-left: 1px solid var(--nv-divider); }
+  .tb-controls { display: inline-flex; align-items: center; gap: 8px; padding-right: 4px; }
+  .tb-status { color: var(--nv-text-muted); font: 500 10px/1 ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums; padding: 0 2px; }
+
+  .fmt-picker { display: inline-flex; padding: 2px; background: var(--nv-seg-track-bg);
+    border: 1px solid var(--nv-seg-track-border); border-radius: 999px; }
+  .fmt-btn { appearance: none; border: 0; padding: 0 10px; height: 22px; background: transparent;
+    color: var(--nv-seg-btn-text); font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.04em;
+    border-radius: 999px; cursor: pointer; }
+  .fmt-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+
+  .tb-actions { display: inline-flex; align-items: center; gap: 2px; }
+  .ico-btn { display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0; background: transparent; border: 0; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer; transition: background 0.12s ease; }
+  .ico-btn:hover { background: var(--nv-btn-hover); }
+  .ico-btn:active { background: var(--nv-btn-active); }
+  .ico-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  .ico-btn svg { display: block; }
+
+  /* ── Placeholder device + live network preview ────────────────── */
+  .device {
+    position: relative;
+    width: 300px; height: 620px;
+    border-radius: 54px;
+    background: #000;
+    padding: 5px;
+    box-shadow: 0 22px 60px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.06) inset;
+  }
+  .screen {
+    position: relative; width: 100%; height: 100%; border-radius: 49px; overflow: hidden;
+    background: linear-gradient(160deg, #4f7cd6 0%, #7db4e6 38%, #bfe3df 70%, #d6efe9 100%);
+  }
+  .island { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 92px; height: 30px; background: #000; border-radius: 18px; z-index: 3; }
+  .ios-statusbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 54px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 30px 0; box-sizing: border-box;
+    color: #fff; font: 600 16px/1 -apple-system, "SF Pro Text", sans-serif;
+    font-variant-numeric: tabular-nums; z-index: 2;
+  }
+  .sb-right { display: flex; align-items: center; gap: 7px; }
+  .sb-net { font: 700 11px/1 -apple-system, sans-serif; opacity: 0.92; align-self: flex-end; padding-bottom: 1px; }
+
+  /* mock "download" app card inside the device, driven by the throttle */
+  .app {
+    position: absolute; left: 22px; right: 22px; top: 92px;
+    background: rgba(255,255,255,0.92); border-radius: 20px; padding: 16px;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.18); color: #1d1d1f;
+  }
+  .app-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .app-title { font: 700 13px/1 -apple-system, sans-serif; }
+  .app-ping { font: 600 10px/1 ui-monospace, Menlo, monospace; color: #6b7280;
+    font-variant-numeric: tabular-nums; }
+  .dl { height: 8px; border-radius: 999px; background: #e6e8ec; overflow: hidden; position: relative; }
+  .dl-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: var(--nv-accent); border-radius: 999px; }
+  .dl-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 8px;
+    font: 600 10.5px/1 ui-monospace, Menlo, monospace; color: #6b7280; font-variant-numeric: tabular-nums; }
+  .dl-speed { color: #1d1d1f; }
+  /* loss flecks strip */
+  .loss-strip { display: flex; gap: 3px; margin-top: 12px; height: 14px; align-items: flex-end; }
+  .loss-tick { flex: 1; height: 10px; border-radius: 2px; background: var(--nv-ok); opacity: 0.85; }
+  .loss-tick.dropped { background: var(--nv-warn); height: 5px; opacity: 0.9; }
+
+  /* offline overlay for airplane / 100% loss */
+  .offline {
+    position: absolute; inset: 0; z-index: 4; display: none;
+    align-items: center; justify-content: center; flex-direction: column; gap: 10px;
+    background: rgba(10,12,18,0.55); color: #fff; backdrop-filter: blur(2px);
+  }
+  .offline.show { display: flex; }
+  .offline-title { font: 700 15px/1 -apple-system, sans-serif; }
+  .offline-sub { font: 500 11px/1.4 -apple-system, sans-serif; opacity: 0.8; }
+
+  .device.airplane .screen { filter: saturate(0.4) brightness(0.8); }
+
+  /* ── Network control card (the new piece) ─────────────────────── */
+  .sb-card {
+    position: fixed; top: 64px; right: 28px; z-index: 40;
+    width: 312px;
+    background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 16px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text); overflow: hidden;
+  }
+  .sb-card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px 10px; border-bottom: 1px solid var(--nv-divider);
+  }
+  .sb-card-title { display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, sans-serif; letter-spacing: 0.01em; }
+  .sb-card-title svg { color: var(--nv-text-muted); }
+  .sb-head-actions { display: inline-flex; align-items: center; gap: 4px; }
+  .sb-clear { appearance: none; border: 0; background: transparent; color: var(--nv-accent);
+    font: 600 11px/1 -apple-system, sans-serif; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+  .sb-clear:hover { background: var(--nv-btn-hover); }
+  .sb-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+
+  .sb-body { padding: 4px 14px 14px; }
+  .sb-section { padding: 12px 0; border-bottom: 1px solid var(--nv-divider); }
+  .sb-section:last-child { border-bottom: 0; padding-bottom: 2px; }
+  .sb-section-title { color: var(--nv-text-faint);
+    font: 700 9.5px/1 -apple-system, sans-serif; letter-spacing: 0.10em; text-transform: uppercase;
+    margin: 0 0 10px; }
+
+  /* preset pills (wrap) */
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { appearance: none; border: 1px solid var(--nv-field-border); background: var(--nv-field-bg);
+    color: var(--nv-text-muted); font: 600 10.5px/1 -apple-system, sans-serif;
+    padding: 7px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+  .pill:hover { color: var(--nv-text); }
+  .pill.active { background: var(--nv-accent); color: var(--nv-accent-text); border-color: transparent; }
+  .pill.warn.active { background: var(--nv-warn); }
+
+  /* shape sliders */
+  .shape-row { margin-top: 14px; }
+  .shape-row:first-child { margin-top: 2px; }
+  .shape-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
+  .shape-label { color: var(--nv-text-muted); font: 500 11px/1.2 -apple-system, sans-serif; }
+  .shape-val { color: var(--nv-text); font: 700 11px/1 ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums; }
+  .shape-val.warn { color: var(--nv-warn); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    border-radius: 999px; background: var(--nv-field-border); outline: none; margin: 0; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,0.18);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer; }
+
+  /* target chip */
+  .target { display: flex; align-items: center; gap: 8px;
+    background: var(--nv-field-bg); border: 1px solid var(--nv-field-border);
+    border-radius: 9px; padding: 8px 10px; }
+  .target svg { color: var(--nv-text-muted); flex: 0 0 auto; }
+  .target-text { font: 500 11px/1.3 -apple-system, sans-serif; color: var(--nv-text); }
+  .target-text b { font-weight: 700; }
+  .target-text span { color: var(--nv-text-faint); }
+
+  /* apply footer */
+  .apply-row { display: flex; align-items: center; gap: 8px; padding-top: 12px; }
+  .apply-btn { flex: 1; appearance: none; border: 0; border-radius: 10px;
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    font: 700 12px/1 -apple-system, sans-serif; padding: 10px; cursor: pointer; }
+  .apply-btn.off { background: var(--nv-field-bg); color: var(--nv-text-muted); }
+  .applied-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--nv-ok);
+    box-shadow: 0 0 8px var(--nv-ok); flex: 0 0 auto; }
+
+  /* ── Floating theme toggle (bottom-right) ─────────────────────── */
+  .theme-toggle { position: fixed; right: 16px; bottom: 16px; width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border); border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text); cursor: pointer; z-index: 50; }
+  .theme-toggle:active { transform: scale(0.96); }
+  #view[data-theme="light"] .ic-moon { display: block; }
+  #view[data-theme="light"] .ic-sun  { display: none; }
+  .ic-moon { display: none; }
+  .ic-sun  { display: block; }
+
+  .note { position: fixed; left: 16px; bottom: 16px; max-width: 360px;
+    color: var(--nv-text-faint); font: 500 10.5px/1.5 -apple-system, sans-serif; z-index: 50; }
+  .note code { font: 600 10px ui-monospace, Menlo, monospace; color: var(--nv-text-muted); }
+</style>
+</head>
+<body>
+<div id="view">
+
+  <div class="device-column">
+    <!-- ── existing focus-mode toolbar; the new Network button is
+            highlighted active because its card is open ───────────── -->
+    <div class="top-bar" role="toolbar" aria-label="Simulator controls">
+      <a class="tb-label" href="#">
+        <svg class="tb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="tb-name">iPhone 17 Pro Max</span>
+        <span class="tb-os">iOS 26.4</span>
+      </a>
+      <div class="tb-controls">
+        <span class="tb-status">52 fps</span>
+        <div class="fmt-picker">
+          <button class="fmt-btn active">H.264</button>
+          <button class="fmt-btn">MJPEG</button>
+        </div>
+
+        <!-- NEW · Network Speed toggle — gauge glyph, sits with the
+             other panel toggles (status-bar / camera / AX / logs). -->
+        <button class="ico-btn active" id="netToggle" title="Network speed control"
+                aria-label="Toggle network speed control">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
+            <path d="M12 13a8 8 0 0 1 7.5-8 9 9 0 1 0-15 0A8 8 0 0 1 12 13z" fill="none"/>
+            <path d="M3.5 14a9 9 0 0 1 17 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.4" fill="currentColor"/>
+          </svg>
+        </button>
+
+        <div class="tb-actions">
+          <button class="ico-btn" title="Status bar">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true">
+              <rect x="3" y="13" width="3" height="6" rx="1"/><rect x="8" y="10" width="3" height="9" rx="1"/>
+              <rect x="13" y="7" width="3" height="12" rx="1"/><rect x="18" y="4" width="3" height="15" rx="1"/></svg>
+          </button>
+          <button class="ico-btn" title="Camera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+              <rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5z"/></svg>
+          </button>
+          <button class="ico-btn" title="Home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+              <path d="M3 11.2 12 4l9 7.2"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── placeholder device with a LIVE network preview ────────── -->
+    <div class="device" id="device">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-statusbar">
+          <span>9:41</span>
+          <span class="sb-right"><span class="sb-net" id="pvNet">5G</span></span>
+        </div>
+
+        <div class="app">
+          <div class="app-head">
+            <span class="app-title">Downloading…</span>
+            <span class="app-ping" id="pvPing">ping 8 ms</span>
+          </div>
+          <div class="dl"><div class="dl-fill" id="dlFill"></div></div>
+          <div class="dl-meta">
+            <span id="dlPct">0%</span>
+            <span class="dl-speed" id="dlSpeed">12.0 MB/s</span>
+          </div>
+          <div class="loss-strip" id="lossStrip"></div>
+        </div>
+
+        <div class="offline" id="offline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="34" height="34">
+            <path d="M2 8.5a16 16 0 0 1 20 0"/><path d="M5 12a11 11 0 0 1 14 0"/>
+            <path d="M8.5 15.5a6 6 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/>
+            <path d="M3 3 21 21" stroke="var(--nv-warn)"/></svg>
+          <span class="offline-title" id="offTitle">No Connection</span>
+          <span class="offline-sub" id="offSub">Simulator Airplane Mode</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Network control card ────────────────────────────────────── -->
+  <aside class="sb-card" aria-label="Network speed control">
+    <div class="sb-card-head">
+      <span class="sb-card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+          <path d="M3.5 14a9 9 0 0 1 17 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.4" fill="currentColor"/></svg>
+        Network Speed
+      </span>
+      <span class="sb-head-actions">
+        <button class="sb-clear" id="clearBtn" title="Remove throttle">Clear</button>
+        <button class="ico-btn sb-close" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+            <path d="M6 6 18 18"/><path d="M18 6 6 18"/></svg>
+        </button>
+      </span>
+    </div>
+
+    <div class="sb-body">
+
+      <!-- Presets -->
+      <div class="sb-section">
+        <p class="sb-section-title">Preset</p>
+        <div class="pills" id="presets">
+          <button class="pill active" data-p="unlimited">Unlimited</button>
+          <button class="pill" data-p="lte">LTE</button>
+          <button class="pill" data-p="3g">3G</button>
+          <button class="pill" data-p="edge">Edge</button>
+          <button class="pill warn" data-p="loss100">100% Loss</button>
+          <button class="pill warn" data-p="airplane">Airplane</button>
+        </div>
+      </div>
+
+      <!-- Shape — the three real fields -->
+      <div class="sb-section">
+        <p class="sb-section-title">Shape</p>
+
+        <div class="shape-row">
+          <div class="shape-head">
+            <span class="shape-label">Bandwidth</span>
+            <span class="shape-val" id="bwVal">Unlimited</span>
+          </div>
+          <!-- range is an exponent index; mapped to bytes/s in JS -->
+          <input type="range" id="bw" min="0" max="32" value="32" aria-label="Bandwidth">
+        </div>
+
+        <div class="shape-row">
+          <div class="shape-head">
+            <span class="shape-label">Latency</span>
+            <span class="shape-val" id="latVal">0 ms</span>
+          </div>
+          <input type="range" id="lat" min="0" max="2000" step="10" value="0" aria-label="Latency">
+        </div>
+
+        <div class="shape-row">
+          <div class="shape-head">
+            <span class="shape-label">Packet loss</span>
+            <span class="shape-val" id="lossVal">0%</span>
+          </div>
+          <input type="range" id="loss" min="0" max="100" value="0" aria-label="Packet loss">
+        </div>
+      </div>
+
+      <!-- Target -->
+      <div class="sb-section">
+        <p class="sb-section-title">Target</p>
+        <div class="target">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+            <rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M10.5 19h3"/></svg>
+          <span class="target-text"><b>iPhone 17 Pro Max</b><br><span>all flows · per-UDID scoping pending spike</span></span>
+        </div>
+
+        <div class="apply-row">
+          <button class="apply-btn off" id="applyBtn">Throttle is off</button>
+          <span class="applied-dot" id="appliedDot" style="display:none"></span>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+    <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+         stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/>
+      <path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/>
+      <path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+         stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+
+  <p class="note">Mockup only · maps to <code>baguette net --udid &lt;UDID&gt; --bandwidth &lt;b/s&gt; --latency &lt;ms&gt; --loss &lt;0..1&gt;</code> —
+     a NetworkExtension content-filter path, not SimulatorHID. Toggle theme bottom-right.</p>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // ── bandwidth slider: exponential map, index 0..32 → bytes/sec ───
+  // idx 32 = unlimited; otherwise ~4 KB/s … ~50 MB/s on a log curve.
+  function bwBytes(idx) {
+    if (idx >= 32) return 0;                       // 0 = unlimited
+    const min = Math.log(4 * 1024), max = Math.log(50 * 1024 * 1024);
+    return Math.round(Math.exp(min + (max - min) * (idx / 31)));
+  }
+  function fmtBytes(b) {
+    if (b === 0) return 'Unlimited';
+    if (b >= 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB/s';
+    if (b >= 1024)        return (b / 1024).toFixed(0) + ' KB/s';
+    return b + ' B/s';
+  }
+  // nearest slider index for a target bytes/sec (for presets)
+  function bwIndex(bytes) {
+    if (bytes === 0) return 32;
+    const min = Math.log(4 * 1024), max = Math.log(50 * 1024 * 1024);
+    return Math.round(((Math.log(bytes) - min) / (max - min)) * 31);
+  }
+
+  // ── presets resolve to the three fields (bytes/s, ms, % loss) ────
+  // (bandwidth values are illustrative; the design doc fixes the real table)
+  const PRESETS = {
+    unlimited: { bw: 0,        lat: 0,    loss: 0,   net: '5G',  off: null },
+    lte:       { bw: 6500000,  lat: 60,   loss: 0,   net: 'LTE', off: null },
+    '3g':      { bw: 97000,    lat: 300,  loss: 1,   net: '3G',  off: null },
+    edge:      { bw: 30000,    lat: 420,  loss: 2,   net: 'E',   off: null },
+    loss100:   { bw: 0,        lat: 0,    loss: 100, net: '5G',  off: ['No Connection', '100% packet loss'] },
+    airplane:  { bw: 0,        lat: 0,    loss: 100, net: '',    off: ['No Connection', 'Simulator Airplane Mode'] },
+  };
+
+  const state = { applied: false, preset: 'unlimited' };
+  let lossTimer = null, dlTimer = null;
+
+  function readSliders() {
+    return {
+      bytes: bwBytes(+$('bw').value),
+      lat:   +$('lat').value,
+      loss:  +$('loss').value,
+    };
+  }
+
+  function syncReadouts() {
+    const s = readSliders();
+    $('bwVal').textContent = fmtBytes(s.bytes);
+    $('latVal').textContent = s.lat + ' ms';
+    const lv = $('lossVal');
+    lv.textContent = s.loss + '%';
+    lv.classList.toggle('warn', s.loss >= 50);
+    return s;
+  }
+
+  // ── live device preview reflects the shape ───────────────────────
+  function renderPreview() {
+    const s = readSliders();
+    const p = PRESETS[state.preset];
+    const offline = state.applied && (s.loss >= 100);
+
+    // status-bar network glyph
+    $('pvNet').textContent = state.applied ? (p && p.net !== undefined && state.preset !== 'unlimited' ? p.net : (s.bytes ? '3G' : '5G')) : '5G';
+    if (state.preset === 'airplane' && state.applied) $('pvNet').textContent = '';
+
+    // offline overlay
+    const off = $('offline');
+    if (offline) {
+      off.classList.add('show');
+      $('device').classList.toggle('airplane', state.preset === 'airplane');
+      $('offTitle').textContent = (p && p.off) ? p.off[0] : 'No Connection';
+      $('offSub').textContent   = (p && p.off) ? p.off[1] : 'All packets dropped';
+    } else {
+      off.classList.remove('show');
+      $('device').classList.remove('airplane');
+    }
+
+    // ping readout tracks latency
+    $('pvPing').textContent = 'ping ' + (state.applied ? (8 + s.lat) : 8) + ' ms';
+
+    // download speed text + bar animation speed track bandwidth
+    const effBytes = state.applied && s.bytes ? s.bytes : 12 * 1024 * 1024;
+    $('dlSpeed').textContent = fmtBytes(effBytes);
+    // bar fill duration: faster bandwidth → quicker loop
+    const secs = Math.max(0.6, Math.min(18, (1.5 * 1024 * 1024) / effBytes * 6));
+    if (dlTimer) clearInterval(dlTimer);
+    let pct = 0;
+    const startDelay = state.applied ? s.lat : 8;     // latency delays first byte
+    let waited = -startDelay;
+    dlTimer = setInterval(() => {
+      waited += 80;
+      if (waited < 0) return;
+      pct += 80 / (secs * 1000) * 100;
+      if (pct >= 100) pct = 0;
+      $('dlFill').style.width = pct + '%';
+      $('dlPct').textContent = Math.round(pct) + '%';
+    }, 80);
+
+    // loss flecks
+    renderLoss(state.applied ? s.loss : 0);
+  }
+
+  function renderLoss(lossPct) {
+    const host = $('lossStrip');
+    host.innerHTML = '';
+    const N = 18;
+    const dropEvery = lossPct <= 0 ? 0 : Math.max(1, Math.round(100 / lossPct));
+    for (let i = 0; i < N; i++) {
+      const t = document.createElement('span');
+      const dropped = dropEvery && (i % dropEvery === dropEvery - 1) && lossPct < 100;
+      t.className = 'loss-tick' + (dropped || lossPct >= 100 ? ' dropped' : '');
+      host.appendChild(t);
+    }
+  }
+
+  // ── preset selection moves the three sliders ─────────────────────
+  function applyPreset(name) {
+    const p = PRESETS[name]; if (!p) return;
+    state.preset = name;
+    $('bw').value = bwIndex(p.bw);
+    $('lat').value = p.lat;
+    $('loss').value = p.loss;
+    [...$('presets').children].forEach((c) => c.classList.toggle('active', c.dataset.p === name));
+    syncReadouts();
+    if (state.applied) renderPreview();
+  }
+
+  // moving any slider drops the preset chip to "custom" (none active)
+  function markCustom() {
+    state.preset = 'custom';
+    [...$('presets').children].forEach((c) => c.classList.remove('active'));
+    syncReadouts();
+    if (state.applied) renderPreview();
+  }
+
+  function setApplied(on) {
+    state.applied = on;
+    const btn = $('applyBtn');
+    btn.classList.toggle('off', !on);
+    btn.textContent = on ? 'Throttling — tap to stop' : 'Apply throttle';
+    $('appliedDot').style.display = on ? 'block' : 'none';
+    renderPreview();
+  }
+
+  // ── wiring ───────────────────────────────────────────────────────
+  $('presets').onclick = (e) => { const b = e.target.closest('.pill'); if (b) applyPreset(b.dataset.p); };
+  ['bw', 'lat', 'loss'].forEach((id) => $(id).oninput = markCustom);
+
+  $('applyBtn').onclick = () => setApplied(!state.applied);
+  $('clearBtn').onclick = () => { applyPreset('unlimited'); setApplied(false); };
+
+  $('themeToggle').onclick = () => {
+    const v = $('view'); v.dataset.theme = v.dataset.theme === 'light' ? 'dark' : 'light';
+  };
+
+  // initial: idle, unthrottled, but show the live "fast" baseline
+  syncReadouts();
+  setApplied(false);
+</script>
+</body>
+</html>
