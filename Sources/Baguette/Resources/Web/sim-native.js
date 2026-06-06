@@ -36,6 +36,7 @@
   let logPanel = null;
   let axInspector = null;
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
+  let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
 
@@ -508,6 +509,7 @@
     };
     window.__nativeToggleLogs = () => toggleLogs();
     window.__nativeToggleCamera = () => toggleCamera();
+    window.__nativeToggleStatusBar = () => toggleStatusBar();
     window.__nativeToggleAx = () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
@@ -630,12 +632,37 @@
     }
   }
 
+  // Status-bar card — same lazy-mount pattern as the camera sheet.
+  // StatusBarPanel posts `simctl status_bar` overrides; closing the
+  // card leaves it mounted so reopening keeps the control state. The
+  // toolbar button's `.active` class tracks open/closed.
+  function toggleStatusBar() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('nativeStatusBarHost');
+    const btn  = document.getElementById('nativeStatusBarToggle');
+    const open = view && view.getAttribute('data-statusbar') === 'open';
+    if (!view || !host) return;
+    if (open) {
+      view.removeAttribute('data-statusbar');
+      if (btn) btn.classList.remove('active');
+    } else {
+      view.setAttribute('data-statusbar', 'open');
+      if (btn) btn.classList.add('active');
+      if (!statusBarPanel && window.StatusBarPanel && udid) {
+        host.innerHTML = '';
+        statusBarPanel = new window.StatusBarPanel();
+        statusBarPanel.attach(host, udid);
+      }
+    }
+  }
+
   function wireUnload() {
     window.addEventListener('beforeunload', () => {
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
       try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (statusBarPanel) statusBarPanel.detach(); } catch (_) { /* ignore */ }
     });
   }
 

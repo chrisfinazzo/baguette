@@ -470,6 +470,141 @@
     box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
   }
 
+  /* Status-bar override card. Mirror of `.camera-host` but anchored
+     top-right and sized for a settings panel. The toolbar's
+     `nativeStatusBarToggle` flips `[data-statusbar="open"]` on the
+     root; CSS fades it in. All inner control styles are scoped under
+     `.status-bar-host` so the generic class names (.sb-field, .sb-seg,
+     .sb-pill …) can't leak into the rest of the focus chrome. */
+  #simNativeView .status-bar-host {
+    position: absolute;
+    top: 84px;
+    right: 24px;
+    z-index: 40;
+    width: 290px;
+    max-height: calc(100dvh - 120px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-statusbar="open"] .status-bar-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .status-bar-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .status-bar-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .status-bar-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .status-bar-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeStatusBarHost { overflow-y: auto; padding: 2px 14px 12px; }
+
+  #simNativeView .status-bar-host .sb-section {
+    padding: 10px 0; border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .status-bar-host .sb-section:last-child { border-bottom: 0; }
+  #simNativeView .status-bar-host .sb-footer { padding-bottom: 2px; }
+  #simNativeView .status-bar-host .sb-section-title {
+    color: var(--nv-text-faint);
+    font: 700 9.5px/1 -apple-system, sans-serif; letter-spacing: 0.10em; text-transform: uppercase;
+    margin: 0 0 8px;
+  }
+  #simNativeView .status-bar-host .sb-row {
+    display: flex; align-items: center; min-height: 30px; gap: 10px;
+  }
+  #simNativeView .status-bar-host .sb-row + .sb-row { margin-top: 8px; }
+  #simNativeView .status-bar-host .sb-row-label {
+    flex: 0 0 60px; color: var(--nv-text-muted);
+    font: 500 11px/1.2 -apple-system, sans-serif;
+  }
+  #simNativeView .status-bar-host .sb-row-control {
+    flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0;
+  }
+  #simNativeView .status-bar-host .sb-field {
+    appearance: none; -webkit-appearance: none;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 8px; color: var(--nv-text);
+    font: 500 12px/1 -apple-system, sans-serif; padding: 6px 8px;
+    min-width: 0; width: 100%; box-sizing: border-box;
+  }
+  #simNativeView .status-bar-host select.sb-field { cursor: pointer; }
+  #simNativeView .status-bar-host .sb-field:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .status-bar-host .sb-time {
+    width: 86px; flex: 0 0 auto; text-align: center; font-variant-numeric: tabular-nums;
+  }
+  #simNativeView .status-bar-host .sb-mode {
+    flex: 0 0 auto; width: auto; min-width: 78px; font-size: 11px; padding: 6px 6px;
+  }
+  #simNativeView .status-bar-host .sb-chip {
+    appearance: none; border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg);
+    color: var(--nv-text); font: 600 11px/1 -apple-system, sans-serif; letter-spacing: 0.02em;
+    padding: 6px 9px; border-radius: 8px; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+  }
+  #simNativeView .status-bar-host .sb-chip:hover { background: var(--nv-btn-hover); }
+  #simNativeView .status-bar-host .sb-seg {
+    display: inline-flex; padding: 2px; gap: 2px;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-fmt-track-border);
+    border-radius: 10px; flex: 0 0 auto;
+  }
+  #simNativeView .status-bar-host .sb-seg-btn {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    width: 28px; height: 24px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--nv-fmt-btn-text); transition: background 0.12s ease, color 0.12s ease;
+  }
+  #simNativeView .status-bar-host .sb-seg-btn:hover { color: var(--nv-text); }
+  #simNativeView .status-bar-host .sb-seg-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  #simNativeView .status-bar-host .sb-seg-btn svg { display: block; }
+  #simNativeView .status-bar-host .sb-pills { display: inline-flex; gap: 4px; }
+  #simNativeView .status-bar-host .sb-pill {
+    appearance: none; border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg);
+    color: var(--nv-text-muted); font: 600 10.5px/1 -apple-system, sans-serif;
+    padding: 6px 9px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  #simNativeView .status-bar-host .sb-pill:hover { color: var(--nv-text); }
+  #simNativeView .status-bar-host .sb-pill.active {
+    background: var(--nv-accent); color: var(--nv-accent-text); border-color: transparent;
+  }
+  #simNativeView .status-bar-host .sb-level-row {
+    display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  }
+  #simNativeView .status-bar-host .sb-range {
+    -webkit-appearance: none; appearance: none; flex: 1; height: 4px;
+    border-radius: 999px; background: var(--nv-bar-border); outline: none;
+  }
+  #simNativeView .status-bar-host .sb-range::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; border: 1px solid rgba(0,0,0,0.18);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer;
+  }
+  #simNativeView .status-bar-host .sb-level-val {
+    flex: 0 0 auto; width: 34px; text-align: right;
+    color: var(--nv-text); font: 600 11px/1 ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  #simNativeView .status-bar-host .sb-clear {
+    appearance: none; width: 100%; border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-accent); font: 600 12px/1 -apple-system, sans-serif;
+    padding: 8px; border-radius: 8px; cursor: pointer;
+  }
+  #simNativeView .status-bar-host .sb-clear:hover { background: var(--nv-btn-hover); }
+
   /* Accessibility-inspector floating panel. Sits top-right of the
      device column, glass-styled to match the toolbar. Hidden until
      the user clicks an element while the inspector is enabled (the
@@ -592,6 +727,23 @@
           <line x1="12" y1="18"  x2="12" y2="21.5"/>
           <line x1="2.5" y1="12" x2="6"  y2="12"/>
           <line x1="18"  y1="12" x2="21.5" y2="12"/>
+        </svg>
+      </button>
+
+<!-- Status-bar toggle. Opens a floating glass card (mirror of
+           the camera card) that overrides time / carrier / network /
+           signal / battery via `simctl status_bar`. Active = card open.
+           Signal-bars glyph matches the card's title + segmented
+           controls. -->
+      <button class="ico-btn" id="nativeStatusBarToggle"
+              title="Status bar overrides"
+              aria-label="Toggle status bar overrides"
+              onclick="window.__nativeToggleStatusBar && window.__nativeToggleStatusBar()">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true">
+          <rect x="3"  y="13" width="3" height="6"  rx="1"/>
+          <rect x="8"  y="10" width="3" height="9"  rx="1"/>
+          <rect x="13" y="7"  width="3" height="12" rx="1"/>
+          <rect x="18" y="4"  width="3" height="15" rx="1"/>
         </svg>
       </button>
 
@@ -738,6 +890,32 @@
       </button>
     </header>
     <div id="nativeCameraHost"></div>
+  </aside>
+
+  <!-- Status-bar override card — floating glass panel anchored
+       top-right of the device column. The toolbar's
+       `nativeStatusBarToggle` flips `[data-statusbar="open"]` on the
+       root; CSS fades the card in/out. StatusBarPanel (sim-status-bar.js)
+       is lazy-mounted into #nativeStatusBarHost on first open. -->
+  <aside id="nativeStatusBarSheet" class="status-bar-host" aria-hidden="true">
+    <header class="status-bar-host-head">
+      <span class="status-bar-host-title">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+          <rect x="3" y="13" width="3" height="6" rx="1"/><rect x="8" y="10" width="3" height="9" rx="1"/>
+          <rect x="13" y="7" width="3" height="12" rx="1"/><rect x="18" y="4" width="3" height="15" rx="1"/>
+        </svg>
+        Status Bar
+      </span>
+      <button class="ico-btn status-bar-host-close" title="Close status bar overrides"
+              aria-label="Close status bar overrides"
+              onclick="window.__nativeToggleStatusBar && window.__nativeToggleStatusBar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeStatusBarHost"></div>
   </aside>
 </div>
 
