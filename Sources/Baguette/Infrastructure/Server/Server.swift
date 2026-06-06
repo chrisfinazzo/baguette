@@ -159,6 +159,24 @@ struct Server: Sendable {
                 return errorJSON("status-bar override failed (simctl error)", status: .internalServerError)
             }
         }
+        // Read current overrides so the browser panel hydrates its
+        // controls from the device instead of guessing. Pure parse +
+        // dispatch in `Server.readStatusBar`.
+        router.get("/simulators/:udid/status-bar") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            switch await Self.readStatusBar(udid: Self.udidParam(r), simulators: simulators) {
+            case .ok(let override):
+                return Response(
+                    status: .ok,
+                    headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                    body: .init(byteBuffer: ByteBuffer(string: override.jsonString))
+                )
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .failed:
+                return errorJSON("status-bar read failed (simctl error)", status: .internalServerError)
+            }
+        }
         router.delete("/simulators/:udid/status-bar") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             switch await Self.clearStatusBar(udid: Self.udidParam(r), simulators: simulators) {
@@ -475,6 +493,30 @@ struct Server: Sendable {
             return .ok
         } catch {
             return .dispatchFailed
+        }
+    }
+
+    /// Outcome of `GET /simulators/:udid/status-bar`.
+    enum StatusBarReadOutcome: Equatable {
+        case ok(StatusBarOverride)
+        case unknownDevice
+        case failed
+    }
+
+    /// Pure read for the status-bar GET route. Split from the closure so
+    /// unit tests can drive every branch with `MockSimulators` +
+    /// `MockStatusBar`.
+    static func readStatusBar(
+        udid: String,
+        simulators: any Simulators
+    ) async -> StatusBarReadOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        do {
+            return .ok(try await sim.statusBar().read())
+        } catch {
+            return .failed
         }
     }
 

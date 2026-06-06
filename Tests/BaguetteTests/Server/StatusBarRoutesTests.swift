@@ -113,4 +113,34 @@ struct StatusBarRoutesTests {
         let host = MockSimulators()
         #expect(await Server.clearStatusBar(udid: "", simulators: host) == .unknownDevice)
     }
+
+    // MARK: - read
+
+    @Test func `readStatusBar returns the simulator's current overrides`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let statusBar = MockStatusBar()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).statusBar().willReturn(statusBar)
+        given(statusBar).read().willReturn(StatusBarOverride(dataNetwork: .wifi, wifiBars: 2))
+
+        #expect(await Server.readStatusBar(udid: "U", simulators: host)
+            == .ok(StatusBarOverride(dataNetwork: .wifi, wifiBars: 2)))
+    }
+
+    @Test func `readStatusBar reports unknownDevice for an empty udid`() async {
+        let host = MockSimulators()
+        #expect(await Server.readStatusBar(udid: "", simulators: host) == .unknownDevice)
+    }
+
+    @Test func `readStatusBar reports failed when the read throws`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let statusBar = MockStatusBar()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).statusBar().willReturn(statusBar)
+        given(statusBar).read().willThrow(StatusBarError.simctlFailed(status: 1))
+
+        #expect(await Server.readStatusBar(udid: "U", simulators: host) == .failed)
+    }
 }

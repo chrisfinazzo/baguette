@@ -77,7 +77,23 @@
       if (!host || !udid) return;
       this.host = host;
       this.udid = udid;
-      this._build();
+      this._build();     // responsive immediately with defaults…
+      this._hydrate();   // …then reflect the device's current overrides
+    }
+
+    // Read the simulator's current status-bar overrides and populate the
+    // controls, so the panel shows what's actually on the device. Only
+    // overridden fields come back; anything absent keeps its default.
+    async _hydrate() {
+      try {
+        const res = await fetch(`/simulators/${encodeURIComponent(this.udid)}/status-bar`);
+        if (!res.ok) return;
+        const data = await res.json();
+        Object.keys(data).forEach((k) => {
+          if (k in this.state) this.state[k] = data[k];
+        });
+        if (this.host) this._build();
+      } catch (e) { /* keep defaults */ }
     }
 
     detach() {
@@ -163,7 +179,7 @@
           this.state[key] = i;
           host.querySelectorAll('.sb-seg-btn').forEach((c) => c.classList.remove('active'));
           b.classList.add('active');
-          this._scheduleApply();
+          this._scheduleApply(key);
         };
         host.appendChild(b);
       }
@@ -184,7 +200,7 @@
           } else {
             this.state[key] = el.value;
           }
-          this._scheduleApply();
+          this._scheduleApply(key);
         });
       });
 
@@ -196,7 +212,7 @@
           this.state.batteryState = b.getAttribute('data-s');
           pills.querySelectorAll('.sb-pill').forEach((c) => c.classList.remove('active'));
           b.classList.add('active');
-          this._scheduleApply();
+          this._scheduleApply('batteryState');
         });
       }
 
@@ -205,7 +221,7 @@
         this.state.time = '9:41';
         const f = h.querySelector('[data-k="time"]');
         if (f) f.value = '9:41';
-        this._scheduleApply();
+        this._scheduleApply('time');
       };
 
       const clearBtn = h.querySelector('[data-act="clear"]');
@@ -214,28 +230,34 @@
 
     // ---- network --------------------------------------------------
 
-    // Coalesce rapid changes (slider drags, typing) into one POST.
-    _scheduleApply() {
+    // Coalesce rapid changes (slider drags, typing) and remember which
+    // fields changed, then POST ONLY those. simctl merges, so sending a
+    // single field updates just that indicator — changing Wi-Fi bars
+    // sends `{wifiBars}` alone and never disturbs the data-network type
+    // (so it can't flash "5G"), the battery, or anything else.
+    _scheduleApply(key) {
+      if (!key) return;
+      if (!this._dirty) this._dirty = new Set();
+      this._dirty.add(key);
       if (this._timer) clearTimeout(this._timer);
       this._timer = setTimeout(() => this._apply(), 250);
     }
 
     _apply() {
-      if (!this.udid) return;
+      if (!this.udid || !this._dirty || !this._dirty.size) return;
       const s = this.state;
-      const body = {
-        operatorName: s.operatorName,
-        dataNetwork: s.dataNetwork,
-        wifiMode: s.wifiMode,
-        wifiBars: s.wifiBars,
-        cellularMode: s.cellularMode,
-        cellularBars: s.cellularBars,
-        batteryState: s.batteryState,
-        batteryLevel: s.batteryLevel,
-      };
-      // An empty time string would make simctl reject the batch, so
-      // only pin the clock when the user actually set one.
-      if (s.time && s.time.trim()) body.time = s.time.trim();
+      const body = {};
+      this._dirty.forEach((k) => {
+        if (k === 'time') {
+          // An empty time string would make simctl reject the call.
+          const t = s.time && s.time.trim();
+          if (t) body.time = t;
+        } else {
+          body[k] = s[k];
+        }
+      });
+      this._dirty = new Set();
+      if (!Object.keys(body).length) return;
 
       fetch(`/simulators/${encodeURIComponent(this.udid)}/status-bar`, {
         method: 'POST',
