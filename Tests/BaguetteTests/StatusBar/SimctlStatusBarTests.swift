@@ -42,6 +42,27 @@ struct SimctlStatusBarTests {
         ])
     }
 
+    @Test func `read runs simctl status_bar list and parses the output`() async throws {
+        let sub = MockSubprocess()
+        let captures = Captures()
+        given(sub).run(
+            executable: .any, arguments: .any, onBytes: .any, onExit: .any
+        ).willProduce { exe, args, onBytes, onExit in
+            captures.executable = exe
+            captures.arguments = args
+            onBytes(Data("DataNetworkType: 1\nWiFi Mode: 3, WiFi Bars: 2\n".utf8))
+            onExit(0)
+        }
+        given(sub).terminate().willReturn()
+        let statusBar = SimctlStatusBar(udid: "U", subprocess: sub)
+
+        let reading = try await statusBar.read()
+        #expect(captures.arguments == ["simctl", "status_bar", "U", "list"])
+        #expect(reading.dataNetwork == .wifi)
+        #expect(reading.wifiMode == .active)
+        #expect(reading.wifiBars == 2)
+    }
+
     @Test func `clear spawns xcrun simctl status_bar clear`() async throws {
         let (statusBar, captures) = makeStatusBar()
         try await statusBar.clear()

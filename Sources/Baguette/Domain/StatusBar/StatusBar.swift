@@ -19,6 +19,12 @@ protocol StatusBar: Sendable {
 
     /// Clear every status-bar override, restoring live values.
     func clear() async throws
+
+    /// Read the simulator's current status-bar overrides (via
+    /// `simctl status_bar … list`). Returns an empty override when
+    /// nothing is pinned. Lets a UI hydrate its controls from the
+    /// device instead of guessing.
+    func read() async throws -> StatusBarOverride
 }
 
 /// Failure modes the status-bar surface surfaces. Each maps to a CLI

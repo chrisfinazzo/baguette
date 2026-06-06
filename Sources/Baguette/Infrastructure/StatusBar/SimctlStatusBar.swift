@@ -32,6 +32,42 @@ final class SimctlStatusBar: StatusBar, @unchecked Sendable {
         try await spawn(["simctl", "status_bar", udid, "clear"])
     }
 
+    func read() async throws -> StatusBarOverride {
+        let output = try await capture(["simctl", "status_bar", udid, "list"])
+        return StatusBarOverride.fromListOutput(output)
+    }
+
+    /// Run a command, accumulate its stdout, and return it as a string
+    /// on a clean exit. `onBytes` may fire on a background queue, so the
+    /// buffer is lock-guarded.
+    private func capture(_ arguments: [String]) async throws -> String {
+        final class Box: @unchecked Sendable {
+            private let lock = NSLock()
+            private var data = Data()
+            func append(_ chunk: Data) { lock.lock(); data.append(chunk); lock.unlock() }
+            var string: String { lock.lock(); defer { lock.unlock() }; return String(decoding: data, as: UTF8.self) }
+        }
+        let box = Box()
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            do {
+                try subprocess.run(
+                    executable: xcrun,
+                    arguments: arguments,
+                    onBytes: { box.append($0) },
+                    onExit: { code in
+                        if code == 0 {
+                            continuation.resume(returning: box.string)
+                        } else {
+                            continuation.resume(throwing: StatusBarError.simctlFailed(status: code))
+                        }
+                    }
+                )
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
     private func spawn(_ arguments: [String]) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             do {
