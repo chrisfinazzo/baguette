@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- **Status bar overrides.** Pin the booted simulator's status bar to a fixed state — time, carrier, data-network type, Wi-Fi / cellular mode + signal bars, battery state + level — or clear it back to live values. Three entry points share one path: `baguette status-bar override --udid <UDID> [flags…]` / `baguette status-bar clear`, `POST` / `DELETE /simulators/:udid/status-bar` on `baguette serve`, and a focus-mode **Status Bar** glass card (signal-bars toolbar button) that live-applies as you change controls. Unlike taps/swipes this is **not** a SimulatorHID path — it shells out to `xcrun simctl status_bar <udid> override | clear` (the same mechanism Xcode's Simulator menu uses), so the orchestration runs through the existing `Subprocess` collaborator and is fully unit-covered via `MockSubprocess`. The flag spellings (`5g-uwb`, `notSupported`, bar ranges 0-3 / 0-4, level 0-100) are verified against the Xcode 26 simctl surface and live in one Domain spelling table shared by the CLI, the HTTP body parser, and the argv projection. See [`docs/features/status-bar.md`](docs/features/status-bar.md).
+
 ---
 
 ## [0.1.74] - 2026-06-05
