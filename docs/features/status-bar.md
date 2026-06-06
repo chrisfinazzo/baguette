@@ -44,14 +44,22 @@ baguette status-bar clear --udid <UDID>
 ```
 
 ```
+GET    /simulators/:udid/status-bar     → current overrides as JSON ({} if none)
 POST   /simulators/:udid/status-bar     body: {"batteryLevel":68,"dataNetwork":"5g",…}
 DELETE /simulators/:udid/status-bar     clears all overrides
 
-   200 application/json   {"ok":true}
+   200 application/json   {"ok":true}                          (POST/DELETE)
+   200 application/json   {"dataNetwork":"wifi","wifiBars":2,…} (GET)
    400 application/json   {"ok":false,"error":"set at least one status-bar field"}
    404 application/json   {"ok":false,"error":"unknown udid: <udid>"}
    500 application/json   {"ok":false,"error":"status-bar override failed (simctl error)"}
 ```
+
+`POST` accepts any subset of fields — send just the one you're changing
+(e.g. `{"wifiBars":1}`); simctl merges it into the existing overrides, so
+a single-field POST updates only that indicator. `GET` reads the device's
+current overrides back (parsed from `simctl status_bar … list`) so a UI
+can hydrate from reality instead of guessing.
 
 The JSON body keys are the camelCase field names (`time`,
 `operatorName`, `dataNetwork`, `wifiMode`, `wifiBars`, `cellularMode`,
@@ -110,10 +118,18 @@ place (`StatusBarOverride.swift`) and every entry point follows.
 The focus page (`/simulators/<udid>`) gains a signal-bars toolbar button
 that opens a floating glass **Status Bar** card (mirror of the camera
 card). `Resources/Web/sim-status-bar.js` builds the controls and is a
-**dumb sender**: every change debounces (250 ms) into a `POST
-…/status-bar` with the full override as JSON; "Clear overrides" sends
-`DELETE`. There is no client-side preview — the live device stream shows
-the result. All domain logic (argv, clamping, validation) stays in Swift.
+**dumb sender**:
+
+- **On open** it `GET`s the current overrides and populates the controls,
+  so the card reflects the device.
+- **On change** it debounces (250 ms) and `POST`s **only the field that
+  changed** — changing Wi-Fi bars sends `{"wifiBars":N}` alone, so the
+  data-network indicator can't flip to "5G" and the battery isn't
+  re-applied. "Clear overrides" sends `DELETE`.
+
+There is no client-side preview — the live device stream shows the
+result. All domain logic (the `list` parse, argv, clamping, validation)
+stays in Swift.
 
 ## Files
 
