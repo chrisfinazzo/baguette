@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status Bar control — mockup</title>
+<!--
+  ────────────────────────────────────────────────────────────────────
+  Baguette · Status Bar control — design mockup (single file, no build)
+  ────────────────────────────────────────────────────────────────────
+
+  Goal: add status-bar override controls (time / carrier / network /
+  Wi-Fi / cellular / battery) to baguette's focus-mode UI.
+
+  Design intent — fit OUR focus-mode language, not a flat macOS Form:
+    • A new toolbar .ico-btn (signal-bars glyph) sits in the focus
+      toolbar, mirroring the camera / AX / logs toggles.
+    • Clicking it opens a floating GLASS CARD — same tokens as the
+      camera-host (top-left) and ax-host (top-right) panels: blurred
+      translucent surface, --nv-* light/dark tokens, accent #2563eb.
+    • Controls are compact label-left / control-right rows grouped by
+      divider — never a tall scrolling form. Bars use the .seg
+      segmented control (sibling of .fmt-picker). Battery state uses
+      pills; level uses a slim slider.
+    • The placeholder device's iOS status bar LIVE-REFLECTS every
+      control, so the panel's purpose is obvious at a glance.
+
+  Wire note (for whoever implements this): unlike taps/swipes, status
+  bar overrides are NOT a SimulatorHID path — they map to
+  `xcrun simctl status_bar <udid> override …` / `clear`. The card is a
+  thin front-end over that one call.
+-->
+<style>
+  /* ── Theme tokens — lifted verbatim from sim-native.html so the
+     mockup matches focus mode pixel-for-pixel. Default dark; the
+     [data-theme="light"] block + media query flip to light. ─────── */
+  #view {
+    color-scheme: light dark;
+    --nv-page-bg:        #1a1a1f;
+    --nv-bar-bg:         rgba(20, 20, 24, 0.78);
+    --nv-bar-border:     rgba(255, 255, 255, 0.08);
+    --nv-bar-shadow:     0 8px 24px rgba(0, 0, 0, 0.45);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --nv-text:           #f5f5f7;
+    --nv-text-muted:     rgba(245, 245, 247, 0.55);
+    --nv-text-faint:     rgba(245, 245, 247, 0.5);
+    --nv-divider:        rgba(255, 255, 255, 0.12);
+    --nv-btn-hover:      rgba(255, 255, 255, 0.10);
+    --nv-btn-active:     rgba(255, 255, 255, 0.18);
+    --nv-field-bg:       rgba(255, 255, 255, 0.06);
+    --nv-field-border:   rgba(255, 255, 255, 0.10);
+    --nv-seg-track-bg:   rgba(255, 255, 255, 0.06);
+    --nv-seg-track-border: rgba(255, 255, 255, 0.06);
+    --nv-seg-btn-text:   rgba(245, 245, 247, 0.65);
+    --nv-accent:         #2563eb;
+    --nv-accent-text:    #fff;
+  }
+  #view[data-theme="light"] {
+    --nv-page-bg:        #f1f3f6;
+    --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+    --nv-bar-border:     rgba(15, 23, 42, 0.08);
+    --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    --nv-text:           #1d1d1f;
+    --nv-text-muted:     rgba(29, 29, 31, 0.65);
+    --nv-text-faint:     rgba(29, 29, 31, 0.55);
+    --nv-divider:        rgba(15, 23, 42, 0.14);
+    --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+    --nv-btn-active:     rgba(15, 23, 42, 0.12);
+    --nv-field-bg:       rgba(15, 23, 42, 0.04);
+    --nv-field-border:   rgba(15, 23, 42, 0.10);
+    --nv-seg-track-bg:   rgba(15, 23, 42, 0.06);
+    --nv-seg-track-border: rgba(15, 23, 42, 0.06);
+    --nv-seg-btn-text:   rgba(29, 29, 31, 0.65);
+  }
+
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #view {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px; box-sizing: border-box;
+    background: var(--nv-page-bg);
+    color: var(--nv-text);
+    font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ── Device column: toolbar pill above a free-floating device ──── */
+  .device-column { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+  /* ── Toolbar pill (existing focus-mode chrome) ────────────────── */
+  .top-bar {
+    display: inline-flex; align-items: center; gap: 12px;
+    height: 36px; padding: 4px 6px 4px 4px;
+    background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  }
+  .tb-label { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 8px;
+    border-radius: 999px; color: inherit; text-decoration: none; }
+  .tb-label:hover { background: var(--nv-btn-hover); }
+  .tb-back { color: var(--nv-text-muted); }
+  .tb-name { font: 600 13px/1.1 -apple-system, sans-serif; letter-spacing: 0.01em; }
+  .tb-os   { color: var(--nv-text-faint); font: 500 11px/1.1 -apple-system, sans-serif;
+    padding-left: 8px; border-left: 1px solid var(--nv-divider); }
+  .tb-controls { display: inline-flex; align-items: center; gap: 8px; padding-right: 4px; }
+  .tb-status { color: var(--nv-text-muted); font: 500 10px/1 ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums; padding: 0 2px; }
+
+  .fmt-picker { display: inline-flex; padding: 2px; background: var(--nv-seg-track-bg);
+    border: 1px solid var(--nv-seg-track-border); border-radius: 999px; }
+  .fmt-btn { appearance: none; border: 0; padding: 0 10px; height: 22px; background: transparent;
+    color: var(--nv-seg-btn-text); font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.04em;
+    border-radius: 999px; cursor: pointer; }
+  .fmt-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+
+  .tb-actions { display: inline-flex; align-items: center; gap: 2px; }
+  .ico-btn { display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0; background: transparent; border: 0; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer; transition: background 0.12s ease; }
+  .ico-btn:hover { background: var(--nv-btn-hover); }
+  .ico-btn:active { background: var(--nv-btn-active); }
+  .ico-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  .ico-btn svg { display: block; }
+
+  /* ── Placeholder device + live iOS status bar ─────────────────── */
+  .device {
+    position: relative;
+    width: 300px; height: 620px;
+    border-radius: 54px;
+    background: #000;
+    padding: 5px;
+    box-shadow: 0 22px 60px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.06) inset;
+  }
+  .screen {
+    position: relative; width: 100%; height: 100%; border-radius: 49px; overflow: hidden;
+    background: linear-gradient(160deg, #4f7cd6 0%, #7db4e6 38%, #bfe3df 70%, #d6efe9 100%);
+  }
+  /* iOS status bar that mirrors the control card */
+  .ios-statusbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 54px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 30px 0; box-sizing: border-box;
+    color: #fff; font: 600 16px/1 -apple-system, "SF Pro Text", sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .island { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 92px; height: 30px; background: #000; border-radius: 18px; }
+  .sb-time { letter-spacing: 0.02em; }
+  .sb-right { display: flex; align-items: center; gap: 7px; }
+  .sb-carrier { font: 600 12px/1 -apple-system, sans-serif; opacity: 0.92; margin-right: 1px; }
+  .sb-net { font: 700 11px/1 -apple-system, sans-serif; opacity: 0.92;
+    align-self: flex-end; padding-bottom: 1px; }
+  .sb-icon { display: block; }
+  /* Battery glyph */
+  .sb-batt { position: relative; width: 26px; height: 13px; }
+  .sb-batt-shell { position: absolute; inset: 0; border: 1.4px solid rgba(255,255,255,0.85);
+    border-radius: 4px; }
+  .sb-batt-cap { position: absolute; right: -3px; top: 4px; width: 2px; height: 5px;
+    background: rgba(255,255,255,0.6); border-radius: 0 1px 1px 0; }
+  .sb-batt-fill { position: absolute; top: 2px; left: 2px; bottom: 2px; border-radius: 2px;
+    background: #fff; transition: width 0.18s ease, background 0.18s ease; }
+  .sb-batt-fill.low { background: #ff453a; }
+  .sb-bolt { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 9px; height: 9px; color: #000; }
+
+  .wallpaper-hint { position: absolute; left: 0; right: 0; bottom: 40px; text-align: center;
+    color: rgba(255,255,255,0.5); font: 500 11px/1 -apple-system, sans-serif; }
+
+  /* ── Status Bar control card (the new piece) ──────────────────── */
+  .sb-card {
+    position: fixed; top: 64px; right: 28px; z-index: 40;
+    width: 300px;
+    background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 16px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    overflow: hidden;
+  }
+  .sb-card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  .sb-card-title { display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, sans-serif; letter-spacing: 0.01em; }
+  .sb-card-title svg { color: var(--nv-text-muted); }
+  .sb-head-actions { display: inline-flex; align-items: center; gap: 4px; }
+  .sb-clear { appearance: none; border: 0; background: transparent; color: var(--nv-accent);
+    font: 600 11px/1 -apple-system, sans-serif; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+  .sb-clear:hover { background: var(--nv-btn-hover); }
+  .sb-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+
+  .sb-body { padding: 4px 14px 14px; }
+  .sb-section { padding: 10px 0; border-bottom: 1px solid var(--nv-divider); }
+  .sb-section:last-child { border-bottom: 0; padding-bottom: 2px; }
+
+  .sb-row { display: flex; align-items: center; min-height: 30px; gap: 10px; }
+  .sb-row + .sb-row { margin-top: 8px; }
+  .sb-row-label { flex: 0 0 64px; color: var(--nv-text-muted);
+    font: 500 11px/1.2 -apple-system, sans-serif; }
+  .sb-row-control { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+
+  /* text + time inputs */
+  .field {
+    appearance: none; -webkit-appearance: none;
+    background: var(--nv-field-bg); border: 1px solid var(--nv-field-border);
+    border-radius: 8px; color: var(--nv-text);
+    font: 500 12px/1 -apple-system, sans-serif; padding: 6px 8px; min-width: 0; width: 100%;
+    box-sizing: border-box;
+  }
+  .field:focus { outline: none; border-color: var(--nv-accent); }
+  .field.time { width: 92px; flex: 0 0 auto; text-align: center; font-variant-numeric: tabular-nums; }
+
+  /* ghost select (network / mode dropdowns) */
+  select.field {
+    background-image: none; cursor: pointer; padding-right: 8px; text-align: left;
+  }
+
+  /* chip button (Set 9:41) */
+  .chip { appearance: none; border: 1px solid var(--nv-field-border); background: var(--nv-field-bg);
+    color: var(--nv-text); font: 600 11px/1 -apple-system, sans-serif; letter-spacing: 0.02em;
+    padding: 6px 9px; border-radius: 8px; cursor: pointer; white-space: nowrap; flex: 0 0 auto; }
+  .chip:hover { background: var(--nv-btn-hover); }
+
+  /* segmented bars control — sibling of .fmt-picker, sized for icons */
+  .seg { display: inline-flex; padding: 2px; gap: 2px;
+    background: var(--nv-seg-track-bg); border: 1px solid var(--nv-seg-track-border);
+    border-radius: 10px; }
+  .seg-btn { appearance: none; border: 0; background: transparent; cursor: pointer;
+    width: 30px; height: 24px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--nv-seg-btn-text); transition: background 0.12s ease, color 0.12s ease; }
+  .seg-btn:hover { color: var(--nv-text); }
+  .seg-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  .seg-btn svg { display: block; }
+
+  /* small inline mode select next to bars */
+  .mode-select { flex: 0 0 auto; width: auto; min-width: 84px;
+    font: 500 11px/1 -apple-system, sans-serif; padding: 6px 6px; }
+
+  /* battery state pills */
+  .pills { display: inline-flex; gap: 4px; }
+  .pill { appearance: none; border: 1px solid var(--nv-field-border); background: var(--nv-field-bg);
+    color: var(--nv-text-muted); font: 600 10.5px/1 -apple-system, sans-serif;
+    padding: 6px 9px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+  .pill:hover { color: var(--nv-text); }
+  .pill.active { background: var(--nv-accent); color: var(--nv-accent-text); border-color: transparent; }
+
+  /* battery level slider */
+  .level-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .level-val { flex: 0 0 auto; color: var(--nv-text); font: 600 11px/1 ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums; width: 34px; text-align: right; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px;
+    border-radius: 999px; background: var(--nv-field-border); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,0.18);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer; }
+
+  .sb-section-title { color: var(--nv-text-faint);
+    font: 700 9.5px/1 -apple-system, sans-serif; letter-spacing: 0.10em; text-transform: uppercase;
+    margin: 0 0 8px; }
+
+  /* ── Floating theme toggle (bottom-right) ─────────────────────── */
+  .theme-toggle { position: fixed; right: 16px; bottom: 16px; width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border); border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text); cursor: pointer; z-index: 50; }
+  .theme-toggle:active { transform: scale(0.96); }
+  #view[data-theme="light"] .ic-moon { display: block; }
+  #view[data-theme="light"] .ic-sun  { display: none; }
+  .ic-moon { display: none; }
+  .ic-sun  { display: block; }
+
+  .note { position: fixed; left: 16px; bottom: 16px; max-width: 340px;
+    color: var(--nv-text-faint); font: 500 10.5px/1.5 -apple-system, sans-serif; z-index: 50; }
+  .note code { font: 600 10px ui-monospace, Menlo, monospace; color: var(--nv-text-muted); }
+</style>
+</head>
+<body>
+<div id="view">
+
+  <div class="device-column">
+    <!-- ── existing focus-mode toolbar; the new Status Bar button is
+            highlighted active because its card is open ───────────── -->
+    <div class="top-bar" role="toolbar" aria-label="Simulator controls">
+      <a class="tb-label" href="#">
+        <svg class="tb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="tb-name">iPhone 17 Pro Max</span>
+        <span class="tb-os">iOS 26.4</span>
+      </a>
+      <div class="tb-controls">
+        <span class="tb-status">52 fps</span>
+        <div class="fmt-picker">
+          <button class="fmt-btn active">H.264</button>
+          <button class="fmt-btn">MJPEG</button>
+        </div>
+
+        <!-- NEW · Status Bar toggle — signal-bars glyph, sits with the
+             other panel toggles (camera / AX / logs). Active = open. -->
+        <button class="ico-btn active" id="statusBarToggle" title="Status bar overrides"
+                aria-label="Toggle status bar overrides">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true">
+            <rect x="3"  y="13" width="3" height="6"  rx="1"/>
+            <rect x="8"  y="10" width="3" height="9"  rx="1"/>
+            <rect x="13" y="7"  width="3" height="12" rx="1"/>
+            <rect x="18" y="4"  width="3" height="15" rx="1"/>
+          </svg>
+        </button>
+
+        <div class="tb-actions">
+          <button class="ico-btn" title="Camera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+              <rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5z"/></svg>
+          </button>
+          <button class="ico-btn" title="Home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+              <path d="M3 11.2 12 4l9 7.2"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+          </button>
+          <button class="ico-btn" title="Screenshot">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+              <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
+              <circle cx="12" cy="13" r="3.5"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── placeholder device with a LIVE status bar ─────────────── -->
+    <div class="device">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-statusbar">
+          <span class="sb-time" id="pvTime">9:41</span>
+          <span class="sb-right">
+            <span class="sb-carrier" id="pvCarrier">Baguette</span>
+            <span class="sb-net" id="pvNet">5G</span>
+            <span id="pvCellular" class="sb-icon"></span>
+            <span id="pvWifi" class="sb-icon"></span>
+            <span class="sb-batt">
+              <span class="sb-batt-shell"></span><span class="sb-batt-cap"></span>
+              <span class="sb-batt-fill" id="pvBattFill" style="width:18px"></span>
+              <svg class="sb-bolt" id="pvBolt" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+                <path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+            </span>
+          </span>
+        </div>
+        <div class="wallpaper-hint">live preview reflects the panel →</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Status Bar control card ─────────────────────────────────── -->
+  <aside class="sb-card" aria-label="Status bar overrides">
+    <div class="sb-card-head">
+      <span class="sb-card-title">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" aria-hidden="true">
+          <rect x="3" y="13" width="3" height="6" rx="1"/><rect x="8" y="10" width="3" height="9" rx="1"/>
+          <rect x="13" y="7" width="3" height="12" rx="1"/><rect x="18" y="4" width="3" height="15" rx="1"/>
+        </svg>
+        Status Bar
+      </span>
+      <span class="sb-head-actions">
+        <button class="sb-clear" id="clearBtn" title="Clear all overrides">Clear</button>
+        <button class="ico-btn sb-close" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+            <path d="M6 6 18 18"/><path d="M18 6 6 18"/></svg>
+        </button>
+      </span>
+    </div>
+
+    <div class="sb-body">
+
+      <!-- Time -->
+      <div class="sb-section">
+        <div class="sb-row">
+          <span class="sb-row-label">Time</span>
+          <div class="sb-row-control">
+            <input class="field time" id="timeInput" type="text" value="9:41" inputmode="numeric"
+                   aria-label="Status bar time">
+            <button class="chip" id="appleTime">9:41</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Carrier + Network -->
+      <div class="sb-section">
+        <div class="sb-row">
+          <span class="sb-row-label">Carrier</span>
+          <div class="sb-row-control">
+            <input class="field" id="carrierInput" type="text" value="Baguette" aria-label="Carrier name">
+          </div>
+        </div>
+        <div class="sb-row">
+          <span class="sb-row-label">Network</span>
+          <div class="sb-row-control">
+            <select class="field" id="netSelect" aria-label="Network type">
+              <option>Wi-Fi</option><option>3G</option><option>4G</option>
+              <option>LTE</option><option>LTE-A</option><option>LTE+</option>
+              <option selected>5G</option><option>5G+</option><option>5G-UWB</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signal: cellular + Wi-Fi bars (+ inline mode) -->
+      <div class="sb-section">
+        <p class="sb-section-title">Signal</p>
+        <div class="sb-row">
+          <span class="sb-row-label">Cellular</span>
+          <div class="sb-row-control">
+            <select class="field mode-select" id="cellMode" aria-label="Cellular mode">
+              <option selected>Active</option><option>Searching</option>
+              <option>Failed</option><option>Not Supported</option>
+            </select>
+            <div class="seg" id="cellBars" role="group" aria-label="Cellular bars"></div>
+          </div>
+        </div>
+        <div class="sb-row">
+          <span class="sb-row-label">Wi-Fi</span>
+          <div class="sb-row-control">
+            <select class="field mode-select" id="wifiMode" aria-label="Wi-Fi mode">
+              <option selected>Active</option><option>Searching</option><option>Failed</option>
+            </select>
+            <div class="seg" id="wifiBars" role="group" aria-label="Wi-Fi bars"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Battery -->
+      <div class="sb-section">
+        <p class="sb-section-title">Battery</p>
+        <div class="sb-row">
+          <span class="sb-row-label">State</span>
+          <div class="sb-row-control">
+            <div class="pills" id="battState">
+              <button class="pill" data-s="charging">Charging</button>
+              <button class="pill active" data-s="charged">Charged</button>
+              <button class="pill" data-s="discharging">Discharging</button>
+            </div>
+          </div>
+        </div>
+        <div class="level-row">
+          <input type="range" id="battLevel" min="0" max="100" value="68" aria-label="Battery level">
+          <span class="level-val" id="battVal">68%</span>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+    <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+         stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/>
+      <path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/>
+      <path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+         stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+
+  <p class="note">Mockup only · maps to <code>simctl status_bar &lt;udid&gt; override</code> / <code>clear</code> —
+     a non-HID path, unlike taps. Toggle theme bottom-right.</p>
+</div>
+
+<script>
+  // ── tiny helpers so the live preview demonstrates intent ─────────
+  const $ = (id) => document.getElementById(id);
+
+  // Draw a signal-bars SVG with `n` of `max` bars filled.
+  function barsSVG(n, max, color) {
+    const w = 16, gap = 2, bw = (w - gap * (max - 1)) / max, h = 12;
+    let r = `<svg viewBox="0 0 ${w} ${h}" width="${max>3?17:15}" height="13" aria-hidden="true">`;
+    for (let i = 0; i < max; i++) {
+      const bh = 4 + (h - 4) * (i / (max - 1));
+      const on = i < n;
+      r += `<rect x="${i*(bw+gap)}" y="${h-bh}" width="${bw}" height="${bh}" rx="1"
+              fill="${color}" opacity="${on?1:0.32}"/>`;
+    }
+    return r + '</svg>';
+  }
+  // wifi arc glyph, `n` of 3
+  function wifiSVG(n, color) {
+    const op = (k) => k <= n ? 1 : 0.32;
+    return `<svg viewBox="0 0 18 14" width="16" height="13" fill="none" stroke="${color}"
+      stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+      <path d="M2 5.5A11 11 0 0 1 16 5.5" opacity="${op(3)}"/>
+      <path d="M4.5 8A7 7 0 0 1 13.5 8" opacity="${op(2)}"/>
+      <path d="M7 10.5A3 3 0 0 1 11 10.5" opacity="${op(1)}"/>
+      <circle cx="9" cy="12.6" r="0.9" fill="${color}" stroke="none" opacity="${op(1)}"/></svg>`;
+  }
+
+  // Build the two segmented bar pickers.
+  function buildSeg(host, max, glyph, initial, onPick) {
+    host.innerHTML = '';
+    for (let i = 0; i <= max; i++) {
+      const b = document.createElement('button');
+      b.className = 'seg-btn' + (i === initial ? ' active' : '');
+      b.innerHTML = glyph(i, 'currentColor');
+      b.onclick = () => {
+        [...host.children].forEach((c) => c.classList.remove('active'));
+        b.classList.add('active'); onPick(i);
+      };
+      host.appendChild(b);
+    }
+  }
+
+  const state = { cell: 4, wifi: 3, net: '5G', battState: 'charged', battLevel: 68 };
+
+  function render() {
+    // preview status bar
+    $('pvCellular').innerHTML = barsSVG(state.cell, 4, '#fff');
+    $('pvWifi').innerHTML = wifiSVG(state.wifi, '#fff');
+    $('pvNet').textContent = state.net === 'Wi-Fi' ? '' : state.net;
+    $('pvNet').style.display = state.net === 'Wi-Fi' ? 'none' : 'block';
+    $('pvCellular').style.display = state.net === 'Wi-Fi' ? 'none' : 'block';
+    const fill = $('pvBattFill');
+    fill.style.width = (2 + 22 * state.battLevel / 100) + 'px';
+    fill.classList.toggle('low', state.battLevel <= 20 && state.battState !== 'charging');
+    $('pvBolt').style.display = state.battState === 'charging' ? 'block' : 'none';
+  }
+
+  buildSeg($('cellBars'), 4, (i, c) => barsSVG(i, 4, c), state.cell, (n) => { state.cell = n; render(); });
+  buildSeg($('wifiBars'), 3, (i, c) => wifiSVG(i, c), state.wifi, (n) => { state.wifi = n; render(); });
+
+  $('netSelect').onchange = (e) => { state.net = e.target.value; render(); };
+  $('carrierInput').oninput = (e) => { $('pvCarrier').textContent = e.target.value || ' '; };
+  $('timeInput').oninput = (e) => { $('pvTime').textContent = e.target.value || '9:41'; };
+  $('appleTime').onclick = () => { $('timeInput').value = '9:41'; $('pvTime').textContent = '9:41'; };
+
+  $('battLevel').oninput = (e) => {
+    state.battLevel = +e.target.value; $('battVal').textContent = state.battLevel + '%'; render();
+  };
+  $('battState').onclick = (e) => {
+    const b = e.target.closest('.pill'); if (!b) return;
+    [...$('battState').children].forEach((c) => c.classList.remove('active'));
+    b.classList.add('active'); state.battState = b.dataset.s; render();
+  };
+
+  $('clearBtn').onclick = () => {
+    state.cell = 4; state.wifi = 3; state.net = '5G'; state.battState = 'charged'; state.battLevel = 100;
+    $('carrierInput').value = 'Carrier'; $('pvCarrier').textContent = 'Carrier';
+    $('timeInput').value = '9:41'; $('pvTime').textContent = '9:41';
+    $('netSelect').value = '5G'; $('battLevel').value = 100; $('battVal').textContent = '100%';
+    buildSeg($('cellBars'), 4, (i, c) => barsSVG(i, 4, c), 4, (n) => { state.cell = n; render(); });
+    buildSeg($('wifiBars'), 3, (i, c) => wifiSVG(i, c), 3, (n) => { state.wifi = n; render(); });
+    [...$('battState').children].forEach((c) => c.classList.toggle('active', c.dataset.s === 'charged'));
+    render();
+  };
+
+  $('themeToggle').onclick = () => {
+    const v = $('view'); v.dataset.theme = v.dataset.theme === 'light' ? 'dark' : 'light';
+  };
+
+  render();
+</script>
+</body>
+</html>
