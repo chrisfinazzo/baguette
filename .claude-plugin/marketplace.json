@@ -1,0 +1,23 @@
+{
+  "name": "baguette",
+  "description": "Baguette — headless iOS simulator control for Claude Code",
+  "owner": {
+    "name": "tddworks"
+  },
+  "plugins": [
+    {
+      "name": "baguette",
+      "source": "./",
+      "description": "Drive iOS simulators programmatically via the baguette CLI — taps, swipes, multi-finger gestures, hardware buttons, keyboard, and frame capture without opening Xcode.",
+      "version": "0.1.75",
+      "author": {
+        "name": "tddworks",
+        "url": "https://github.com/tddworks"
+      },
+      "homepage": "https://tddworks.github.io/baguette/",
+      "license": "Apache-2.0",
+      "category": "development",
+      "keywords": ["ios", "simulator", "automation", "testing", "agent"]
+    }
+  ]
+}
