@@ -2,23 +2,18 @@
 name: baguette
 description: |
   Drive iOS simulators programmatically via the `baguette` CLI — taps, swipes,
-  multi-finger gestures, hardware buttons, frame capture, all without opening
-  Xcode. Use this skill when:
-  (1) The agent needs to interact with a booted iOS simulator from a script
-      (tap a coordinate, swipe between points, send Home / Lock / Volume /
-      Action / Power, type ASCII text via the keyboard)
-  (2) Building a smoke test, demo recording, or UI flow that drives a
-      simulator end-to-end
-  (3) Pairing iOS development with Claude Code, where the agent needs to
-      verify on-screen state after a code change
-  (4) User asks "tap the simulator from a script", "automate iPhone gestures",
-      "control iOS sim programmatically", "drive simulator without Xcode"
-  (5) User mentions `baguette`, `baguette input`, `baguette tap`,
-      `baguette serve`, or `baguette stream` by name
-  (6) An iOS smoke-test / fixture / SwiftUI verification needs to actually
-      *touch* the running app, not just inspect static code
-  Avoid using this skill for plain "open the iOS Simulator" / "install Xcode"
-  questions — those are about Xcode itself, not about driving a sim.
+  multi-finger gestures, hardware buttons (Home / Lock / Volume / Action /
+  Power), ASCII keyboard text, and frame capture, all without opening Xcode.
+  Use when: (1) an agent needs to drive a booted iOS simulator from a script —
+  tap a coordinate, swipe, type text; (2) building a smoke test, demo, or
+  end-to-end UI flow on a simulator; (3) pairing iOS dev with Claude Code to
+  verify on-screen state after a code change; (4) the user asks to "automate
+  iPhone gestures", "control iOS sim programmatically", or "drive simulator
+  without Xcode"; (5) the user names `baguette`, `baguette input`,
+  `baguette tap`, `baguette serve`, or `baguette stream`; (6) a SwiftUI
+  verification needs to touch the running app, not just inspect static code.
+  Avoid for plain "open the iOS Simulator" / "install Xcode" questions — those
+  are about Xcode itself, not driving a sim.
 ---
 
 # baguette — programmatic iOS simulator control
