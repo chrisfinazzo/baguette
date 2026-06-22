@@ -307,6 +307,13 @@
     wireUnload();
     applyStoredTheme();
 
+    // Drag-and-drop: drop an .ipa/.app to install, or an image/video to
+    // add to Photos. Dumb sender — POSTs the bytes to `/files`; the
+    // Swift side routes by extension. See docs/features/file-upload.md.
+    if (window.SimFileDrop) {
+      window.SimFileDrop.attach(document.getElementById('simNativeView'), { udid });
+    }
+
     // Reset iOS to portrait on page boot. Without this, a page
     // reload would leave our JS state at `currentOrientation =
     // 'portrait'` (rotation degrees 0) while iOS still holds

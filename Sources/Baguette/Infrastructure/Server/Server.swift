@@ -191,6 +191,62 @@ struct Server: Sendable {
             }
         }
 
+        // File upload — drag-and-drop a file onto the device view. One
+        // dumb entry point: the browser POSTs raw bytes with `?name=`,
+        // and `Server.addFile` routes by extension to the right device
+        // collection (apps → install, media → Photos). Anything with no
+        // home on a simulator is refused with 415, never swallowed.
+        router.post("/simulators/:udid/files") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let udid = Self.udidParam(r)
+            // Strip any path components from the client-supplied name so
+            // `?name=../../etc/x` can't escape the temp directory.
+            let rawName = String(r.uri.queryParameters.get("name") ?? "upload")
+            let filename = (rawName as NSString).lastPathComponent
+            let nameURL = URL(fileURLWithPath: filename)
+
+            // Cheap reject before reading the body: if the extension has
+            // no home on a simulator, don't bother uploading megabytes.
+            guard AppBundle.at(nameURL) != nil || MediaItem.at(nameURL) != nil else {
+                return errorJSON(
+                    "no home for .\(nameURL.pathExtension) on a simulator (apps and media only)",
+                    status: .unsupportedMediaType
+                )
+            }
+            guard let buffer = try? await r.body.collect(upTo: Self.maxUploadBytes) else {
+                return errorJSON("upload too large (max \(Self.maxUploadBytes / (1 << 20)) MiB) or unreadable", status: .badRequest)
+            }
+
+            // Materialise into a unique temp dir (preserving the name so
+            // the extension — and simctl's bundle detection — survives),
+            // dispatch, then clean up regardless of outcome.
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("baguette-upload-\(UUID().uuidString)")
+            let tempURL = dir.appendingPathComponent(filename)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            do {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try Data(buffer: buffer).write(to: tempURL)
+            } catch {
+                return errorJSON("could not stage upload: \(error)", status: .internalServerError)
+            }
+
+            switch await Self.addFile(udid: udid, path: tempURL, simulators: simulators) {
+            case .installed:
+                return Response(status: .ok, headers: [.contentType: "application/json"],
+                                body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"app\"}")))
+            case .added:
+                return Response(status: .ok, headers: [.contentType: "application/json"],
+                                body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"media\"}")))
+            case .unsupported(let ext):
+                return errorJSON("no home for .\(ext) on a simulator (apps and media only)", status: .unsupportedMediaType)
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(udid)", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON("file upload failed (simctl error — is the device booted?)", status: .internalServerError)
+            }
+        }
+
         // Chrome / bezel — DeviceKit-sourced layout + rasterized PNG.
         router.get("/simulators/:udid/chrome.json") { [simulators, chromes] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -517,6 +573,51 @@ struct Server: Sendable {
             return .ok(try await sim.statusBar().read())
         } catch {
             return .failed
+        }
+    }
+
+    /// Upper bound on a single drag-and-drop upload, collected into
+    /// memory before staging to a temp file. 1 GiB comfortably covers
+    /// `.ipa` apps and media clips; this is a localhost dev tool, so a
+    /// generous cap is fine.
+    static let maxUploadBytes = 1 << 30
+
+    /// Outcome of `POST /simulators/:udid/files`.
+    enum AddFileOutcome: Equatable {
+        case installed              // an app → simctl install
+        case added                  // media → simctl addmedia
+        case unsupported(ext: String)
+        case unknownDevice
+        case dispatchFailed
+    }
+
+    /// Pure dispatch for `POST /simulators/:udid/files`. The thin
+    /// "which collection?" router: classify the already-materialised
+    /// file by extension and hand it to the matching device collection.
+    /// A file with no home on a simulator is refused (`.unsupported`)
+    /// rather than silently dropped. Split from the route closure so
+    /// unit tests drive every branch with `MockSimulators` + `MockApps`
+    /// / `MockPhotoLibrary`.
+    static func addFile(
+        udid: String,
+        path: URL,
+        simulators: any Simulators
+    ) async -> AddFileOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        do {
+            if let app = AppBundle.at(path) {
+                try await sim.apps().install(app)
+                return .installed
+            }
+            if let media = MediaItem.at(path) {
+                try await sim.photos().add(media)
+                return .added
+            }
+            return .unsupported(ext: path.pathExtension.lowercased())
+        } catch {
+            return .dispatchFailed
         }
     }
 

@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- **Drag-and-drop file upload to the device.** Add a file to a booted simulator by handing it the file — drop an app to install it, drop a photo or video to land it in Photos. Three entry points share one path: `baguette install --udid <UDID> <path>` (an `.ipa` / `.app`), `baguette add-media --udid <UDID> <path>` (an image / video), and `POST /simulators/:udid/files?name=<filename>` on `baguette serve`, which the focus page's drag-and-drop target posts raw bytes to. The domain is modelled the way the user thinks of it — not a generic file classifier but the **two collections that live on a phone**: `Apps` (install an `AppBundle`) and `PhotoLibrary` (add a `MediaItem`), each hanging off `Simulator` beside `statusBar()`. Classification lives on the values themselves (`AppBundle.at` / `MediaItem.at`, pure extension checks), and the `serve` route is a thin "which collection?" dispatcher that routes by type and **refuses anything with no home on a simulator** (a `.pdf` gets a `415`, never a silent drop). Like the status bar this is a `simctl` path, not SimulatorHID — `xcrun simctl install` / `addmedia` run through the existing `Subprocess` collaborator and are fully unit-covered via `MockSubprocess`. The serve route stages the upload into a per-request temp dir (filename sanitised to its last path component so `?name=../…` can't escape) and rejects unsupported extensions before reading the body. Known limits: single files only (zip a folder `.app` to `.ipa` for the browser; the CLI takes a real `.app` directly), and the drop UI is focus-mode only for now. See [`docs/features/file-upload.md`](docs/features/file-upload.md).
+
 ---
 
 ## [0.1.75] - 2026-06-09

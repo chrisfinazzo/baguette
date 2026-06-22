@@ -56,6 +56,16 @@ protocol Simulator: Sendable {
     /// returns a fresh handle; the underlying `simctl status_bar`
     /// invocation is stateless.
     func statusBar() -> any StatusBar
+
+    /// The apps installed on this simulator — install an `AppBundle`
+    /// (`.ipa` / `.app`). Each call returns a fresh handle; the
+    /// underlying `simctl install` invocation is stateless.
+    func apps() -> any Apps
+
+    /// This simulator's photo library — import a `MediaItem` (image or
+    /// video). Each call returns a fresh handle; the underlying `simctl
+    /// addmedia` invocation is stateless.
+    func photos() -> any PhotoLibrary
 }
 
 /// `Simulator.State` lifted to a top-level enum so the protocol can

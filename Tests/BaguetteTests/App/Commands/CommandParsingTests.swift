@@ -20,7 +20,8 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
-            "orientation", "status-bar", "diag-digitizer-trackpad",
+            "orientation", "status-bar", "install", "add-media",
+            "diag-digitizer-trackpad",
         ])
     }
 
@@ -172,6 +173,40 @@ struct CommandParsingTests {
         let cmd = try StatusBarCommand.Clear.parse(["--udid", "U"])
         #expect(cmd.options.udid == "U")
         #expect(StatusBarCommand.Clear.configuration.commandName == "clear")
+    }
+
+    // MARK: - install / add-media
+
+    @Test func `install parses --udid and a file path`() throws {
+        let cmd = try InstallCommand.parse(["--udid", "U", "/tmp/MyApp.ipa"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.path == "/tmp/MyApp.ipa")
+        #expect(InstallCommand.configuration.commandName == "install")
+    }
+
+    @Test func `install requires --udid`() {
+        #expect(throws: (any Error).self) {
+            try InstallCommand.parse(["/tmp/MyApp.ipa"])
+        }
+    }
+
+    @Test func `install requires a path argument`() {
+        #expect(throws: (any Error).self) {
+            try InstallCommand.parse(["--udid", "U"])
+        }
+    }
+
+    @Test func `add-media parses --udid and a file path`() throws {
+        let cmd = try AddMediaCommand.parse(["--udid", "U", "/tmp/clip.mov"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.path == "/tmp/clip.mov")
+        #expect(AddMediaCommand.configuration.commandName == "add-media")
+    }
+
+    @Test func `add-media requires --udid`() {
+        #expect(throws: (any Error).self) {
+            try AddMediaCommand.parse(["/tmp/clip.mov"])
+        }
     }
 
     // MARK: - diag-digitizer-trackpad
