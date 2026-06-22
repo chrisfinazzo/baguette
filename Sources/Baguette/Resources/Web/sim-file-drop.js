@@ -10,35 +10,45 @@
 // the "no home on a simulator" rejection — lives on the Swift side
 // (`Server.addFile`, `AppBundle`, `MediaItem`). See
 // docs/features/file-upload.md.
+//
+// The drop highlight traces the device *screen* — the bezel exposes a
+// `screenArea` rect with the exact clip-radius (Bezel.mount), so the
+// overlay mirrors its geometry and reads as a clean rounded rectangle on
+// the phone rather than a boxy bounding box with the side buttons poking
+// through.
 
 (function () {
   'use strict';
 
-  // One-time injected styles for the drop overlay + toasts.
   function ensureStyles() {
     if (document.getElementById('simFileDropStyles')) return;
     const s = document.createElement('style');
     s.id = 'simFileDropStyles';
     s.textContent = `
-      .sfd-host { position: relative; }
       .sfd-overlay {
-        position: absolute; inset: 0; z-index: 40;
-        display: none; align-items: center; justify-content: center;
-        background: rgba(20, 22, 28, 0.55); backdrop-filter: blur(2px);
-        border: 2.5px dashed rgba(255,255,255,0.7); border-radius: 18px;
-        font: 600 15px/1.3 -apple-system, system-ui, sans-serif; color: #fff;
-        text-align: center; pointer-events: none; padding: 24px;
+        position: absolute; z-index: 5; box-sizing: border-box;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(16,18,24,0.42); backdrop-filter: blur(1.5px);
+        border: 2px dashed rgba(255,255,255,0.85);
+        font: 600 13px/1.35 -apple-system, system-ui, sans-serif; color: #fff;
+        text-align: center; pointer-events: none; padding: 14px;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.55);
       }
-      .sfd-host.sfd-dragging .sfd-overlay { display: flex; }
+      .sfd-overlay .sfd-plus {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; margin-bottom: 9px; border-radius: 50%;
+        background: rgba(255,255,255,0.16); font-size: 20px; line-height: 1;
+      }
+      .sfd-overlay .sfd-col { display: flex; flex-direction: column; align-items: center; }
       .sfd-toasts {
-        position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
-        z-index: 41; display: flex; flex-direction: column; gap: 8px;
+        position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+        z-index: 9999; display: flex; flex-direction: column; gap: 8px;
         align-items: center; pointer-events: none;
       }
       .sfd-toast {
         font: 500 13px/1.35 -apple-system, system-ui, sans-serif; color: #fff;
-        background: rgba(28,30,38,0.92); border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 11px; padding: 8px 13px; max-width: 320px;
+        background: rgba(28,30,38,0.94); border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 11px; padding: 8px 13px; max-width: 360px;
         box-shadow: 0 6px 22px rgba(0,0,0,0.35); transition: opacity .3s;
       }
       .sfd-toast.sfd-ok   { border-color: rgba(80,200,120,0.55); }
@@ -48,20 +58,30 @@
     document.head.appendChild(s);
   }
 
-  function attach(el, opts) {
-    if (!el || !opts || !opts.udid) return;
+  function hasFiles(e) {
+    return !!e.dataTransfer &&
+      Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0;
+  }
+
+  function attach(host, opts) {
+    if (!host || !opts || !opts.udid) return;
     const udid = opts.udid;
     ensureStyles();
-    el.classList.add('sfd-host');
 
     const overlay = document.createElement('div');
     overlay.className = 'sfd-overlay';
-    overlay.textContent = 'Drop to add to device — apps install, photos & videos go to Photos';
-    el.appendChild(overlay);
+    overlay.innerHTML =
+      '<span class="sfd-col"><span class="sfd-plus">+</span>Drop to add to device</span>';
 
-    const toasts = document.createElement('div');
-    toasts.className = 'sfd-toasts';
-    el.appendChild(toasts);
+    // Toasts are fixed to the viewport, so a bezel remount (which wipes
+    // the device frame's children) can't strip them.
+    let toasts = document.getElementById('sfdToasts');
+    if (!toasts) {
+      toasts = document.createElement('div');
+      toasts.id = 'sfdToasts';
+      toasts.className = 'sfd-toasts';
+      document.body.appendChild(toasts);
+    }
 
     function toast(msg, kind) {
       const t = document.createElement('div');
@@ -75,28 +95,47 @@
       return t;
     }
 
+    // Mirror the live screen rect (computed fresh each time so it tracks
+    // remounts, orientation, and viewport scaling) and slot the overlay
+    // in as a sibling of the screen, above it.
+    function showOverlay() {
+      const canvas = host.querySelector('#simStreamCanvas');
+      const screenArea = canvas && canvas.parentElement;
+      const wrapper = screenArea && screenArea.parentElement;
+      if (!wrapper || !screenArea) return;
+      overlay.style.left = screenArea.style.left;
+      overlay.style.top = screenArea.style.top;
+      overlay.style.width = screenArea.style.width;
+      overlay.style.height = screenArea.style.height;
+      overlay.style.borderRadius = screenArea.style.borderRadius;
+      wrapper.appendChild(overlay);
+    }
+    function hideOverlay() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+
     // dragenter/over must preventDefault for `drop` to fire. A depth
     // counter avoids flicker as the cursor crosses child elements.
     let depth = 0;
-    el.addEventListener('dragenter', (e) => {
-      if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') < 0) return;
+    host.addEventListener('dragenter', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       depth++;
-      el.classList.add('sfd-dragging');
+      showOverlay();
     });
-    el.addEventListener('dragover', (e) => {
-      if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') < 0) return;
+    host.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
     });
-    el.addEventListener('dragleave', () => {
+    host.addEventListener('dragleave', () => {
       depth = Math.max(0, depth - 1);
-      if (depth === 0) el.classList.remove('sfd-dragging');
+      if (depth === 0) hideOverlay();
     });
-    el.addEventListener('drop', (e) => {
+    host.addEventListener('drop', (e) => {
       e.preventDefault();
       depth = 0;
-      el.classList.remove('sfd-dragging');
+      hideOverlay();
       const files = e.dataTransfer && e.dataTransfer.files;
       if (!files || !files.length) return;
       for (let i = 0; i < files.length; i++) upload(files[i]);
@@ -124,6 +163,9 @@
         toast(file.name + ': ' + (err && err.message ? err.message : 'upload failed'), 'err');
       }
     }
+
+    // Expose for visual verification / tests.
+    return { showOverlay, hideOverlay };
   }
 
   window.SimFileDrop = { attach };

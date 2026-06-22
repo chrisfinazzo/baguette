@@ -90,9 +90,16 @@ drop / CLI ──▶ AppBundle.at / MediaItem.at  (Domain, pure)
 ## Browser
 
 `Resources/Web/sim-file-drop.js` hangs `window.SimFileDrop` on the
-global; `sim-native.js` calls `SimFileDrop.attach(simNativeView, {udid})`
-on the focus page. It's a **dumb sender**: on drop it `POST`s each
-file's bytes to `/files?name=<name>` and shows a toast with the result
+global; `sim-native.js` calls `SimFileDrop.attach(nativeDeviceFrame,
+{udid})` on the focus page. The drop listeners live on the device frame,
+and the highlight **mirrors the bezel's `screenArea` rect** — same
+percentage geometry and `clipRadius` corner radius the `Bezel` part
+computes — so the dashed border traces the phone screen as a clean
+rounded rectangle (no page-wide dim, no boxy bounding box, no side-button
+protrusions). The geometry is re-read on each `dragenter`, so it tracks
+remounts, orientation, and viewport scaling. It's a **dumb sender**: on
+drop it `POST`s each file's bytes to `/files?name=<name>` and shows a
+toast with the result
 (`Installed …` / `Added …` / the server's error). It carries no HID
 codes and no notion of which simctl verb applies — the Swift side owns
 all of that.

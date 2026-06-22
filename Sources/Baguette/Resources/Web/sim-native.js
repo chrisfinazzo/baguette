@@ -309,9 +309,12 @@
 
     // Drag-and-drop: drop an .ipa/.app to install, or an image/video to
     // add to Photos. Dumb sender — POSTs the bytes to `/files`; the
-    // Swift side routes by extension. See docs/features/file-upload.md.
+    // Swift side routes by extension. The drop zone + highlight are
+    // scoped to the device frame so the overlay traces the phone, not
+    // the whole page. See docs/features/file-upload.md.
     if (window.SimFileDrop) {
-      window.SimFileDrop.attach(document.getElementById('simNativeView'), { udid });
+      window.__fileDrop =
+          window.SimFileDrop.attach(document.getElementById('nativeDeviceFrame'), { udid });
     }
 
     // Reset iOS to portrait on page boot. Without this, a page
