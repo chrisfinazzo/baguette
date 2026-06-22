@@ -187,6 +187,43 @@ Same defaults, same bytes — the route and the CLI share `ScreenSnapshot.captur
 **Limits:** JPEG only (no PNG / WebP / AVIF yet); raw framebuffer (no
 bezel composite — that's a browser-side concern via `bezel.png`).
 
+## Add a file to the device — `install` / `add-media`
+
+```bash
+baguette install   --udid <UDID> ./MyApp.ipa     # install an app  → simctl install
+baguette install   --udid <UDID> ./MyApp.app     # a real .app directory works too
+baguette add-media --udid <UDID> ./photo.png     # add to Photos   → simctl addmedia
+baguette add-media --udid <UDID> ./clip.mov
+```
+
+| Command     | Accepts                                              | simctl verb |
+|-------------|-----------------------------------------------------|-------------|
+| `install`   | `.ipa`, `.app`                                      | `install`   |
+| `add-media` | `png jpg jpeg gif heic heif mov mp4 m4v`            | `addmedia`  |
+
+Both take the file path as a positional argument and require `--udid`.
+Classification is by extension; a path the verb can't accept exits
+non-zero with a clear message (`Not an installable app …` / `Not a
+supported image or video …`). Not a HID path — one-shot `xcrun simctl`.
+
+Equivalent HTTP route during `baguette serve` (one endpoint, routed by
+extension — app → install, media → Photos):
+
+```
+POST http://localhost:8421/simulators/<UDID>/files?name=<filename>
+     body = raw file bytes
+  → 200 {"ok":true,"kind":"app"}    (installed)
+  → 200 {"ok":true,"kind":"media"}  (added to Photos)
+  → 415 {"ok":false,"error":"no home for .<ext> on a simulator (apps and media only)"}
+```
+
+The browser focus page (`/simulators/<UDID>`) accepts drag-and-drop onto
+the device, posting to this route. See `docs/features/file-upload.md`.
+
+**Limits:** single files only (zip a folder `.app` to `.ipa` for the
+browser; the CLI takes a real `.app` directly); generic docs (`.pdf`,
+`.json`, …) have no home on a simulator and are refused.
+
 ## Accessibility tree — `describe-ui`
 
 ```bash
