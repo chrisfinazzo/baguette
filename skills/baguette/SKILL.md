@@ -193,6 +193,16 @@ Wired (use freely):
   loaded inside the simulator via `DYLD_INSERT_LIBRARIES`. Apps
   launched *before* arming don't load the dylib — relaunch them.
   Browser UI lives under the Camera card on `/simulators/<UDID>`.
+- `install` / `add-media` — add a file to the device. `baguette install
+  --udid <X> <path>` installs an `.ipa` / `.app`; `baguette add-media
+  --udid <X> <path>` adds an image / video (`png jpg jpeg gif heic heif
+  mov mp4 m4v`) to Photos. Both shell out to `xcrun simctl install` /
+  `addmedia` (not a HID path). `serve` exposes one entry point —
+  `POST /simulators/<X>/files?name=<filename>` with the raw bytes as the
+  body — and routes by extension (app → install, media → Photos); a file
+  with no home on a simulator returns `415`. The browser focus page
+  accepts drag-and-drop onto the device. See
+  [`docs/features/file-upload.md`](../../docs/features/file-upload.md).
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji
