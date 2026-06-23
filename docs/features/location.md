@@ -124,6 +124,32 @@ runtime; that's the one piece that needs network. Offline, the card
 still renders and the readout still works, but tile imagery won't load.
 The pin is a CSS `divIcon`, so no Leaflet marker PNG assets are vendored.
 
+## Search + locate (browser-side conveniences)
+
+The card's top row has two helpers that never touch the backend — they
+just move the map and (in Point mode) drop the pin, after which the
+normal "Set location" POST does the work:
+
+- **Search** — type a place name and the panel geocodes it via OSM
+  **Nominatim** (`nominatim.openstreetmap.org/search`, free, no API key,
+  CORS-enabled) and recentres on the first match. Same network-only
+  posture as the tiles. It's low-volume dev use; respect Nominatim's
+  1 req/sec usage policy.
+- **Locate me** (crosshair button) — centres on the **host Mac's** real
+  position via the browser geolocation API. `localhost` is a secure
+  context, so the prompt works over plain HTTP.
+
+### Why there's no "read the device's current location"
+
+`simctl location` is write-only — `set` / `start` / `clear`, with no
+"get". (`simctl location <udid> list` enumerates named *scenarios*, not
+the active position.) So baguette deliberately exposes **no**
+`GET …/location` and the `Location` protocol has no `read()`: there is
+no supported way to query what the device is currently simulating.
+"Locate me" reports the Mac's GPS, not the device's. This is the one
+asymmetry with the status-bar surface, which *can* read back via
+`simctl status_bar list`.
+
 ## Adding a new location capability
 
 `simctl location` also has `run <scenario>` (named Apple drive scenarios
@@ -144,8 +170,11 @@ from `simctl location <udid> list`). To add it:
 
 - **Set / start / clear only.** Named drive scenarios (`simctl location
   run`) aren't wired yet (see recipe above).
-- **Tile imagery needs network.** The Leaflet library is vendored, but
-  OSM tiles are fetched at runtime.
+- **No device read-back.** `simctl location` can't report the active
+  simulated position, so there's no `GET …/location`; the panel's
+  "locate me" is the Mac's GPS, not the device's.
+- **Tile imagery + search need network.** Leaflet is vendored, but OSM
+  tiles and Nominatim geocoding are fetched at runtime.
 - **`--` for negative-latitude tokens on the CLI.** A waypoint or
   position whose latitude starts with `-` must follow a `--` separator so
   ArgumentParser doesn't treat it as a flag.

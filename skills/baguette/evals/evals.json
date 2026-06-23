@@ -21,6 +21,13 @@
       "prompt": "Write a baguette command that types the text 'hello' into a TextField that's currently focused on the booted iPhone simulator. The UDID is XXXX-YYYY.",
       "expected_output": "Should NOT propose `baguette type` or `baguette key` — those return errors because keyboard isn't on the host-HID path. Correct answer: explain the limitation and fall back to `xcrun simctl io <UDID> text 'hello'` or AXe. A failure mode would be the agent confidently writing `baguette type --text hello` and pretending it works.",
       "files": []
+    },
+    {
+      "id": 4,
+      "name": "set-simulated-location",
+      "prompt": "Using the baguette CLI, set the booted iPhone simulator's location to the Eiffel Tower (48.8584, 2.2945), then simulate driving from San Francisco (37.629538, -122.395733) to New York City (40.628083, -73.768254) at 260 m/s. The UDID is ZZZZ-WWWW. Give me the exact commands.",
+      "expected_output": "Uses `baguette location set --udid ZZZZ-WWWW 48.8584,2.2945` (a single lat,lon TOKEN, not --lat/--lon flags) and `baguette location start --udid ZZZZ-WWWW --speed 260 37.629538,-122.395733 40.628083,-73.768254` (two-plus lat,lon tokens). Should NOT invent a SimulatorHID/gesture path — this is a `simctl location` path. Bonus: notes that a token whose latitude starts with `-` needs a `--` separator, and that `baguette location clear` restores live location.",
+      "files": []
     }
   ]
 }

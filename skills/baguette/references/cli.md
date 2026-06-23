@@ -261,7 +261,10 @@ DELETE http://localhost:8421/simulators/<UDID>/location                     (cle
 ```
 
 The browser focus page has a **Location** card (map-pin toolbar button)
-with a Leaflet map — click to set a pin, or Route mode for waypoints. See
+with a Leaflet map — click to set a pin, or Route mode for waypoints. It
+also has a place-name search (OSM Nominatim) and a "locate me" button
+(the Mac's GPS). Note: `simctl location` has no read-back, so there's no
+`GET …/location` and no way to query the device's current position. See
 `docs/features/location.md`.
 
 ## Accessibility tree — `describe-ui`
