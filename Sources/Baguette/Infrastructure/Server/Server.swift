@@ -191,6 +191,42 @@ struct Server: Sendable {
             }
         }
 
+        // Location — `POST` sets the simulated GPS position (a single
+        // point, or a moving route when the body carries `waypoints`);
+        // `DELETE` clears it back to live. Backed by `simctl location`;
+        // pure parse + dispatch lives in `Server.applyLocation` /
+        // `clearLocation` for unit testing.
+        router.post("/simulators/:udid/location") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let buffer = try? await r.body.collect(upTo: 64 * 1024)
+            let body = buffer.map { String(buffer: $0) } ?? ""
+            switch await Self.applyLocation(
+                udid: Self.udidParam(r), body: body, simulators: simulators
+            ) {
+            case .ok:
+                return jsonOK
+            case .invalidBody:
+                return errorJSON("location body must be a point {latitude,longitude} or a {waypoints:[…]} route", status: .badRequest)
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON("location change failed (simctl error)", status: .internalServerError)
+            }
+        }
+        router.delete("/simulators/:udid/location") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            switch await Self.clearLocation(udid: Self.udidParam(r), simulators: simulators) {
+            case .ok:
+                return jsonOK
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON("location clear failed (simctl error)", status: .internalServerError)
+            case .invalidBody:
+                return jsonOK // unreachable for clear; keep the switch total
+            }
+        }
+
         // File upload — drag-and-drop a file onto the device view. One
         // dumb entry point: the browser POSTs raw bytes with `?name=`,
         // and `Server.addFile` routes by extension to the right device
@@ -348,6 +384,17 @@ struct Server: Sendable {
             let name = String(r.uri.path.split(separator: "/").last ?? "")
                 .removingPercentEncoding ?? ""
             return Self.staticAsset("baguette/gestures/\(name)")
+        }
+
+        // Vendored Leaflet — the location panel's map library + CSS,
+        // served from `Resources/Web/vendor/leaflet/`. Same literal-
+        // subdirectory pattern as the SDK routes above. Map tiles
+        // themselves are fetched by the browser from OpenStreetMap at
+        // runtime; only the library is vendored.
+        router.get("/vendor/leaflet/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("vendor/leaflet/\(name)")
         }
 
         // Live stream — encoded frames downstream as binary; upstream
@@ -573,6 +620,112 @@ struct Server: Sendable {
             return .ok(try await sim.statusBar().read())
         } catch {
             return .failed
+        }
+    }
+
+    // MARK: - Location routes
+
+    /// A parsed location request — either a single point (`set`) or a
+    /// moving route (`start`). The route body is distinguished by a
+    /// `waypoints` array; otherwise a bare `latitude`/`longitude` pair is
+    /// a point.
+    enum LocationRequest: Equatable {
+        case point(Coordinate)
+        case route(LocationRoute)
+    }
+
+    /// Outcome of the location routes — one case per HTTP-status branch.
+    enum LocationOutcome: Equatable {
+        case ok
+        case invalidBody
+        case unknownDevice
+        case dispatchFailed
+    }
+
+    /// Parse a `LocationRequest` from a JSON request body. Returns `nil`
+    /// for malformed JSON, an out-of-range point, or a route with fewer
+    /// than two valid waypoints — fail loud rather than silently dropping
+    /// it. Numbers arrive as JSON numbers; `Coordinate` / `LocationRoute`
+    /// own the validation.
+    static func parseLocationRequest(json: String) -> LocationRequest? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dict = object as? [String: Any] else {
+            return nil
+        }
+        if let raw = dict["waypoints"] as? [Any] {
+            let coords = raw.compactMap { coordinateFromJSON($0) }
+            guard coords.count == raw.count else { return nil }
+            guard let route = LocationRoute(
+                waypoints: coords,
+                speed: doubleField(dict["speed"]),
+                distance: doubleField(dict["distance"]),
+                interval: doubleField(dict["interval"])
+            ) else { return nil }
+            return .route(route)
+        }
+        guard let coordinate = coordinateFromJSON(object) else { return nil }
+        return .point(coordinate)
+    }
+
+    /// Build a `Coordinate` from a `{"latitude":…,"longitude":…}` JSON
+    /// object, validating the range. Returns `nil` for a non-object or an
+    /// out-of-range pair.
+    private static func coordinateFromJSON(_ value: Any) -> Coordinate? {
+        guard let dict = value as? [String: Any],
+              let lat = doubleField(dict["latitude"]),
+              let lon = doubleField(dict["longitude"]) else {
+            return nil
+        }
+        return Coordinate(latitude: lat, longitude: lon)
+    }
+
+    /// JSON numbers arrive as `NSNumber`; accept either a `Double` or an
+    /// `Int` spelling so `1` and `1.0` both work.
+    private static func doubleField(_ value: Any?) -> Double? {
+        if let d = value as? Double { return d }
+        if let i = value as? Int { return Double(i) }
+        return nil
+    }
+
+    /// Pure parse + dispatch for `POST /simulators/:udid/location`. Split
+    /// from the route closure so unit tests can drive every branch with
+    /// `MockSimulators` + `MockLocation`.
+    static func applyLocation(
+        udid: String,
+        body: String,
+        simulators: any Simulators
+    ) async -> LocationOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        guard let request = parseLocationRequest(json: body) else {
+            return .invalidBody
+        }
+        do {
+            switch request {
+            case .point(let coordinate): try await sim.location().set(coordinate)
+            case .route(let route): try await sim.location().start(route)
+            }
+            return .ok
+        } catch {
+            return .dispatchFailed
+        }
+    }
+
+    /// Pure dispatch for `DELETE /simulators/:udid/location`.
+    static func clearLocation(
+        udid: String,
+        simulators: any Simulators
+    ) async -> LocationOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        do {
+            try await sim.location().clear()
+            return .ok
+        } catch {
+            return .dispatchFailed
         }
     }
 

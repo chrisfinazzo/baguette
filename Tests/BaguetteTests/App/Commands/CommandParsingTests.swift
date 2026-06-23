@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
-            "orientation", "status-bar", "install", "add-media",
+            "orientation", "status-bar", "location", "install", "add-media",
             "diag-digitizer-trackpad",
         ])
     }
@@ -173,6 +173,57 @@ struct CommandParsingTests {
         let cmd = try StatusBarCommand.Clear.parse(["--udid", "U"])
         #expect(cmd.options.udid == "U")
         #expect(StatusBarCommand.Clear.configuration.commandName == "clear")
+    }
+
+    // MARK: - location
+
+    @Test func `location lists set start and clear leaves`() {
+        let names = LocationCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["set", "start", "clear"])
+        #expect(LocationCommand.configuration.commandName == "location")
+    }
+
+    @Test func `location set parses a lat,lon token into a coordinate`() throws {
+        let cmd = try LocationCommand.Set.parse(["--udid", "U", "37.3318,-122.0312"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.coordinate == Coordinate(latitude: 37.3318, longitude: -122.0312))
+        #expect(LocationCommand.Set.configuration.commandName == "set")
+    }
+
+    @Test func `location set rejects an out-of-range coordinate`() throws {
+        let cmd = try LocationCommand.Set.parse(["--udid", "U", "120,0"])
+        #expect(cmd.coordinate == nil)
+    }
+
+    @Test func `location set requires --udid`() {
+        #expect(throws: (any Error).self) {
+            try LocationCommand.Set.parse(["1,2"])
+        }
+    }
+
+    @Test func `location start parses waypoints and tuning into a route`() throws {
+        let cmd = try LocationCommand.Start.parse([
+            "--udid", "U", "--speed", "260", "--distance", "1000",
+            "37.6,-122.4", "40.6,-73.8",
+        ])
+        #expect(cmd.route == LocationRoute(
+            waypoints: [
+                Coordinate(latitude: 37.6, longitude: -122.4)!,
+                Coordinate(latitude: 40.6, longitude: -73.8)!,
+            ],
+            speed: 260, distance: 1000
+        ))
+    }
+
+    @Test func `location start with a single waypoint builds no route`() throws {
+        let cmd = try LocationCommand.Start.parse(["--udid", "U", "37.6,-122.4"])
+        #expect(cmd.route == nil)
+    }
+
+    @Test func `location clear parses --udid`() throws {
+        let cmd = try LocationCommand.Clear.parse(["--udid", "U"])
+        #expect(cmd.options.udid == "U")
+        #expect(LocationCommand.Clear.configuration.commandName == "clear")
     }
 
     // MARK: - install / add-media

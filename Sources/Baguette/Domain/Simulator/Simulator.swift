@@ -57,6 +57,12 @@ protocol Simulator: Sendable {
     /// invocation is stateless.
     func statusBar() -> any StatusBar
 
+    /// Drive this simulator's simulated GPS location — pin a single
+    /// point, run a moving route, or clear back to the live value. Each
+    /// call returns a fresh handle; the underlying `simctl location`
+    /// invocation is stateless.
+    func location() -> any Location
+
     /// The apps installed on this simulator — install an `AppBundle`
     /// (`.ipa` / `.app`). Each call returns a fresh handle; the
     /// underlying `simctl install` invocation is stateless.

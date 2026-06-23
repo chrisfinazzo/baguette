@@ -100,6 +100,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         SimctlStatusBar(udid: udid)
     }
 
+    func location() -> any Location {
+        SimctlLocation(udid: udid)
+    }
+
     func apps() -> any Apps {
         SimctlApps(udid: udid)
     }

@@ -37,6 +37,7 @@
   let axInspector = null;
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
+  let locationPanel = null;  // LocationPanel — simctl location map picker
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
 
@@ -520,6 +521,7 @@
     window.__nativeToggleLogs = () => toggleLogs();
     window.__nativeToggleCamera = () => toggleCamera();
     window.__nativeToggleStatusBar = () => toggleStatusBar();
+    window.__nativeToggleLocation = () => toggleLocation();
     window.__nativeToggleAx = () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
@@ -666,6 +668,32 @@
     }
   }
 
+  // Location card — same lazy-mount pattern as the status-bar card.
+  // LocationPanel hangs a Leaflet map that POSTs `simctl location`
+  // set/start/clear. Reopening re-measures the map (it may have been
+  // laid out at zero size while the card was faded out).
+  function toggleLocation() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('nativeLocationHost');
+    const btn  = document.getElementById('nativeLocationToggle');
+    const open = view && view.getAttribute('data-location') === 'open';
+    if (!view || !host) return;
+    if (open) {
+      view.removeAttribute('data-location');
+      if (btn) btn.classList.remove('active');
+    } else {
+      view.setAttribute('data-location', 'open');
+      if (btn) btn.classList.add('active');
+      if (!locationPanel && window.LocationPanel && udid) {
+        host.innerHTML = '';
+        locationPanel = new window.LocationPanel();
+        locationPanel.attach(host, udid);
+      } else if (locationPanel) {
+        locationPanel.refresh();
+      }
+    }
+  }
+
   function wireUnload() {
     window.addEventListener('beforeunload', () => {
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
@@ -673,6 +701,7 @@
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
       try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
       try { if (statusBarPanel) statusBarPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (locationPanel) locationPanel.detach(); } catch (_) { /* ignore */ }
     });
   }
 

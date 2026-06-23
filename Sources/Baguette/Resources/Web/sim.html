@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Simulators — ASC Pro</title>
+<!-- Vendored Leaflet stylesheet for the location map picker. The
+     library + CSS are served locally; only OSM tiles are fetched at
+     runtime. -->
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+
 <style>
   /* Minimal tokens so the injected sim-list / sim-stream markup renders
      with a consistent look standalone (outside the host SPA). Mirrors
@@ -56,6 +61,11 @@
 <script src="/sim-camera.js"></script>
 <script src="/sim-status-bar.js"></script>
 <script src="/sim-file-drop.js"></script>
+<!-- Leaflet (vendored) + the location map picker. Leaflet must load
+     before sim-location.js, which is itself lazy-used by sim-native.js
+     on first open of the location card. -->
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/sim-location.js"></script>
 <!-- Baguette SDK (the new shape — see Resources/Web/baguette/). The
      page-level scripts below (sim-stream / sim-native) consume the
      SDK via `Baguette.use({...}).mount(...)`. Load order matters:
