@@ -203,6 +203,19 @@ Wired (use freely):
   with no home on a simulator returns `415`. The browser focus page
   accepts drag-and-drop onto the device. See
   [`docs/features/file-upload.md`](../../docs/features/file-upload.md).
+- `location` — set the device's simulated GPS position (not a HID path;
+  shells out to `xcrun simctl location`). `baguette location set --udid
+  <X> <lat,lon>` pins a point; `baguette location start --udid <X>
+  [--speed <m/s>] [--distance <m>] [--interval <s>] <lat,lon> <lat,lon>…`
+  runs a moving route; `baguette location clear --udid <X>` restores live
+  location. Position/waypoints are `lat,lon` **tokens** (e.g.
+  `37.3318,-122.0312`); a token whose latitude starts with `-` must
+  follow a `--` separator. `serve`: `POST /simulators/<X>/location` with a
+  `{latitude,longitude}` point or `{waypoints:[…],speed?}` route body, and
+  `DELETE` to clear. Out-of-range or <2-waypoint bodies return `400`.
+  Browser focus page has a **Location** card (map-pin toolbar button) with
+  a Leaflet map. See
+  [`docs/features/location.md`](../../docs/features/location.md).
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji

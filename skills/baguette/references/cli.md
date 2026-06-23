@@ -224,6 +224,46 @@ the device, posting to this route. See `docs/features/file-upload.md`.
 browser; the CLI takes a real `.app` directly); generic docs (`.pdf`,
 `.json`, …) have no home on a simulator and are refused.
 
+## Simulated GPS location — `location`
+
+```bash
+baguette location set   --udid <UDID> 37.3318,-122.0312          # pin a point  → simctl location set
+baguette location set   --udid <UDID> -- -37.8136,144.9631       # negative latitude: precede with --
+baguette location start --udid <UDID> --speed 260 --distance 1000 \
+                        37.629538,-122.395733 40.628083,-73.768254  # moving route → simctl location start
+baguette location clear --udid <UDID>                            # restore live  → simctl location clear
+```
+
+| Subcommand | Args                                                        | simctl verb |
+|------------|-------------------------------------------------------------|-------------|
+| `set`      | one `lat,lon` token                                         | `set`       |
+| `start`    | two or more `lat,lon` tokens + `--speed`/`--distance`/`--interval` | `start` |
+| `clear`    | (none)                                                      | `clear`     |
+
+Position and waypoints are `lat,lon` **tokens** (not `--lat` / `--lon`
+flags) so a leading `-` in a western/southern coordinate isn't read as an
+option. A token whose **latitude** starts with `-` must follow a `--`
+separator. Latitude is validated to ±90, longitude to ±180; out-of-range
+or <2-waypoint input exits non-zero with a clear message. Not a HID path —
+one-shot `xcrun simctl location`.
+
+Equivalent HTTP routes during `baguette serve`:
+
+```
+POST http://localhost:8421/simulators/<UDID>/location
+     body = {"latitude":37.3318,"longitude":-122.0312}                      (a point)
+       or = {"waypoints":[{"latitude":…,"longitude":…},…],"speed":260}      (a route; ≥2 waypoints)
+  → 200 {"ok":true}
+  → 400 {"ok":false,"error":"location body must be a point … or a … route"}
+
+DELETE http://localhost:8421/simulators/<UDID>/location                     (clear)
+  → 200 {"ok":true}
+```
+
+The browser focus page has a **Location** card (map-pin toolbar button)
+with a Leaflet map — click to set a pin, or Route mode for waypoints. See
+`docs/features/location.md`.
+
 ## Accessibility tree — `describe-ui`
 
 ```bash
