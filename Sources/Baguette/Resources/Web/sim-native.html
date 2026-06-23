@@ -556,6 +556,21 @@
   #simNativeView .location-host-title svg { color: var(--nv-text-muted); }
   #simNativeView .location-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
   #simNativeView #nativeLocationHost { padding: 10px 14px 12px; }
+  #simNativeView .location-host .loc-search {
+    display: flex; gap: 6px; margin-bottom: 10px;
+  }
+  #simNativeView .location-host .loc-search-input {
+    flex: 1; min-width: 0; padding: 6px 9px; border-radius: 8px;
+    border: 1px solid var(--nv-divider); background: var(--nv-btn-hover);
+    color: var(--nv-text); font: 500 12px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .location-host .loc-search-input:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .location-host .loc-icon-btn {
+    flex: 0 0 auto; width: 30px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--nv-divider); border-radius: 8px;
+    background: var(--nv-btn-hover); color: var(--nv-text); cursor: pointer;
+  }
+  #simNativeView .location-host .loc-icon-btn:hover { color: var(--nv-accent); border-color: var(--nv-accent); }
   #simNativeView .location-host .loc-modes {
     display: inline-flex; gap: 2px; padding: 2px;
     background: var(--nv-btn-hover); border-radius: 8px; margin-bottom: 10px;
