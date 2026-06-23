@@ -230,7 +230,38 @@
   #simNativeView .tb-controls {
     display: inline-flex; align-items: center; gap: 8px;
     padding-right: 4px;
+    min-width: 0;            /* let the scroll strip shrink + scroll */
   }
+
+  /* Horizontally-scrollable icon strip. Trackpads scroll it directly;
+     mouse users get the flanking chevron buttons. It's the only flexible
+     child of .tb-controls, so it shrinks (and scrolls) when the window is
+     too narrow while the label / fps / format stay put. Scrollbar hidden
+     for the clean pill look. */
+  #simNativeView .tb-scroll {
+    display: inline-flex; align-items: center; gap: 2px;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-width: none;                 /* Firefox */
+  }
+  #simNativeView .tb-scroll::-webkit-scrollbar { display: none; }  /* WebKit */
+
+  /* Chevron scroll buttons — hidden unless the strip overflows. */
+  #simNativeView .tb-arrow {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 26px; padding: 0;
+    background: transparent; border: 0; border-radius: 7px;
+    color: var(--nv-text-muted); cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+  }
+  #simNativeView .tb-arrow:hover { background: var(--nv-btn-hover); color: var(--nv-text); }
+  #simNativeView .tb-arrow:disabled { opacity: 0.28; cursor: default; background: transparent; }
+  #simNativeView .tb-arrow[hidden] { display: none; }
+  #simNativeView .tb-arrow svg { display: block; }
 
   /* fps — small monospace label. Hidden until the stream reports a
      value so the bar isn't carrying dead text on startup. */
@@ -801,6 +832,19 @@
                 onclick="window.__nativeSetFormat && window.__nativeSetFormat('mjpeg')">MJPEG</button>
       </div>
 
+      <!-- Scroll-left chevron — shown only when the icon strip overflows
+           (mouse users; trackpads scroll the strip directly). Disabled at
+           the left end. Wired in sim-native.js `wireToolbarScroll`. -->
+      <button class="tb-arrow" id="nativeScrollLeft" type="button"
+              title="Scroll controls left" aria-label="Scroll controls left" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+
+      <!-- Horizontally-scrollable icon strip. The device label, fps, and
+           format picker above stay fixed; only these controls scroll. -->
+      <div class="tb-scroll" id="nativeToolScroll">
+
 <!-- Orientation cycle button — one click advances the device
            90° clockwise (portrait → landscape-right →
            portrait-upside-down → landscape-left → portrait). All
@@ -931,6 +975,14 @@
           </svg>
         </button>
       </div>
+      </div><!-- /.tb-scroll -->
+
+      <!-- Scroll-right chevron — mirror of the left one. -->
+      <button class="tb-arrow" id="nativeScrollRight" type="button"
+              title="Scroll controls right" aria-label="Scroll controls right" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
     </div>
   </div>
 

@@ -305,6 +305,7 @@
     startSession(pickFormat());
 
     wireActions();
+    wireToolbarScroll();
     wireUnload();
     applyStoredTheme();
 
@@ -488,6 +489,40 @@
     if (stored === 'avcc' || stored === 'mjpeg') return stored;
     return window.FrameDecoder && window.FrameDecoder.isHardwareAvailable()
         ? 'avcc' : 'mjpeg';
+  }
+
+  // Toolbar icon strip scrolls horizontally when the window is too narrow
+  // to fit every control. Trackpads scroll it natively; the two chevron
+  // buttons are for mouse users (a vertical wheel can't pan a horizontal
+  // overflow). The arrows hide entirely when nothing overflows and each
+  // dims at its end, so the bar stays clean at full width.
+  function wireToolbarScroll() {
+    const strip = document.getElementById('nativeToolScroll');
+    const left  = document.getElementById('nativeScrollLeft');
+    const right = document.getElementById('nativeScrollRight');
+    if (!strip || !left || !right) return;
+
+    const update = () => {
+      const max = strip.scrollWidth - strip.clientWidth;
+      const overflowing = max > 1;
+      left.hidden = right.hidden = !overflowing;
+      if (!overflowing) return;
+      left.disabled = strip.scrollLeft <= 0;
+      right.disabled = strip.scrollLeft >= max - 1;
+    };
+    const nudge = (dir) => {
+      // Page by ~70% of the visible strip so a click moves a clear chunk
+      // but keeps a little overlap for orientation.
+      strip.scrollLeft += dir * Math.max(80, strip.clientWidth * 0.7);
+    };
+
+    left.addEventListener('click', () => nudge(-1));
+    right.addEventListener('click', () => nudge(1));
+    strip.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    // Re-measure once layout settles (fonts, device frame, format pills).
+    requestAnimationFrame(update);
+    setTimeout(update, 400);
   }
 
   function wireActions() {
