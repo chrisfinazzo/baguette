@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.77] - 2026-06-24
+
 ### Added
 - **Custom location — set the simulator's simulated GPS position.** Pin the booted simulator to a latitude/longitude, run a moving route between waypoints, or clear back to the device's live location. Three entry points share one path: `baguette location set --udid <UDID> <lat,lon>` / `baguette location start --udid <UDID> [--speed …] [--distance …] [--interval …] <lat,lon> <lat,lon>…` / `baguette location clear`, `POST` / `DELETE /simulators/:udid/location` on `baguette serve` (the `POST` body is a `{latitude,longitude}` point or a `{waypoints:[…],speed?}` route — a `waypoints` array selects the route path), and a focus-mode **Location** glass card with a Leaflet map: click to drop a pin and "Set location", or switch to Route mode and drop two or more waypoints to "Start route". The card also has a place-name **search** (OSM Nominatim geocoding) and a **locate-me** button (the host Mac's GPS via the browser geolocation API). Note `simctl location` is write-only — there's no read-back of the device's current simulated position, so the surface is intentionally `set` / `start` / `clear` with no `GET`. Like the status bar this is a `simctl` path, not SimulatorHID — `xcrun simctl location … set | start | clear` (the mechanism behind Xcode's **Features ▸ Location** menu) runs through the existing `Subprocess` collaborator and is fully unit-covered via `MockSubprocess`. The position is a single `lat,lon` **token** rather than `--lat` / `--lon` flags so a western/southern coordinate's leading `-` isn't mistaken for an option (pass `--` first for a negative *latitude*). One gotcha locked into the value type with a test: simctl mandates `.` decimal / `,` field separators, so `Coordinate.argument` is built from Swift's locale-independent `Double` formatting — never a locale-aware formatter that would emit a decimal comma. The map uses **Leaflet 1.9.4** vendored under `Resources/Web/vendor/leaflet/` (no bundler, no CDN); only the OSM map tiles are fetched at runtime. Known limits: named drive scenarios (`simctl location run`) aren't wired yet, and tile imagery needs network. See [`docs/features/location.md`](docs/features/location.md).
 
@@ -200,7 +204,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.76...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.77...HEAD
+[0.1.77]: https://github.com/tddworks/baguette/compare/v0.1.76...v0.1.77
 [0.1.76]: https://github.com/tddworks/baguette/compare/v0.1.75...v0.1.76
 [0.1.75]: https://github.com/tddworks/baguette/compare/v0.1.74...v0.1.75
 [0.1.74]: https://github.com/tddworks/baguette/compare/v0.1.73...v0.1.74
