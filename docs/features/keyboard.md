@@ -24,6 +24,7 @@ looking for the side buttons (volume / power / action), that's
 |---------------------|-----------------------------------------------|
 | Letters             | `KeyA` … `KeyZ`                                |
 | Digits              | `Digit0` … `Digit9`                            |
+| Numpad              | `Numpad0` … `Numpad9`, `NumpadDecimal`, `NumpadAdd`, `NumpadSubtract`, `NumpadMultiply`, `NumpadDivide`, `NumpadEnter`, `NumpadEqual` |
 | Named specials      | `Enter`, `Escape`, `Backspace`, `Tab`, `Space` |
 | Arrows              | `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight` |
 | Punctuation (US)    | `Minus`, `Equal`, `BracketLeft`, `BracketRight`, `Backslash`, `Semicolon`, `Quote`, `Backquote`, `Comma`, `Period`, `Slash` |
@@ -101,6 +102,13 @@ hardcoded in `KeyboardKey.from(wireCode:)` and
 
 - Letters: `KeyA` … `KeyZ` → `0x04` … `0x1D`
 - Digits: HID quirk — `Digit1` … `Digit9` = `0x1E` … `0x26`, `Digit0` = `0x27` (last)
+- Keypad: same last-place quirk — `Numpad1` … `Numpad9` = `0x59` … `0x61`,
+  `Numpad0` = `0x62`, `NumpadDecimal` = `0x63`; `NumpadDivide` = `0x54`,
+  `NumpadMultiply` = `0x55`, `NumpadSubtract` = `0x56`, `NumpadAdd` = `0x57`,
+  `NumpadEnter` = `0x58`, `NumpadEqual` = `0x67`. These are the keypad
+  section of page 7 — distinct usages from the top-row digits, so iOS
+  can tell a numpad `5` from a main-row `5`. `NumLock` is omitted (iOS
+  has no num-lock concept).
 - Specials: `Enter` = `0x28`, `Escape` = `0x29`, `Backspace` = `0x2A`,
   `Tab` = `0x2B`, `Space` = `0x2C`
 - Arrows: `ArrowRight` = `0x4F`, `ArrowLeft` = `0x50`,
