@@ -199,9 +199,12 @@ Wired (use freely):
   mov mp4 m4v`) to Photos. Both shell out to `xcrun simctl install` /
   `addmedia` (not a HID path). `serve` exposes one entry point —
   `POST /simulators/<X>/files?name=<filename>` with the raw bytes as the
-  body — and routes by extension (app → install, media → Photos); a file
-  with no home on a simulator returns `415`. The browser focus page
-  accepts drag-and-drop onto the device. See
+  body — and routes by extension (app → install, `.zip` carrying one
+  top-level `.app` → extract via `ditto -x -k` + install, media →
+  Photos); a file with no home on a simulator returns `415`. The
+  browser focus page accepts drag-and-drop onto the device, including
+  a bare `.app` **directory** — it's packed into a stored zip in-page
+  and posted as `<Name>.app.zip`. See
   [`docs/features/file-upload.md`](../../docs/features/file-upload.md).
 - `location` — set the device's simulated GPS position (not a HID path;
   shells out to `xcrun simctl location`). `baguette location set --udid

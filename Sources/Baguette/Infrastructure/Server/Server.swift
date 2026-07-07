@@ -243,9 +243,10 @@ struct Server: Sendable {
 
             // Cheap reject before reading the body: if the extension has
             // no home on a simulator, don't bother uploading megabytes.
-            guard AppBundle.at(nameURL) != nil || MediaItem.at(nameURL) != nil else {
+            guard AppBundle.at(nameURL) != nil || AppArchive.at(nameURL) != nil
+                || MediaItem.at(nameURL) != nil else {
                 return errorJSON(
-                    "no home for .\(nameURL.pathExtension) on a simulator (apps and media only)",
+                    "no home for .\(nameURL.pathExtension) on a simulator (apps, zipped apps, and media only)",
                     status: .unsupportedMediaType
                 )
             }
@@ -275,7 +276,9 @@ struct Server: Sendable {
                 return Response(status: .ok, headers: [.contentType: "application/json"],
                                 body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"media\"}")))
             case .unsupported(let ext):
-                return errorJSON("no home for .\(ext) on a simulator (apps and media only)", status: .unsupportedMediaType)
+                return errorJSON("no home for .\(ext) on a simulator (apps, zipped apps, and media only)", status: .unsupportedMediaType)
+            case .badArchive(let reason):
+                return errorJSON(reason, status: .unsupportedMediaType)
             case .unknownDevice:
                 return errorJSON("unknown udid: \(udid)", status: .notFound)
             case .dispatchFailed:
@@ -740,6 +743,7 @@ struct Server: Sendable {
         case installed              // an app → simctl install
         case added                  // media → simctl addmedia
         case unsupported(ext: String)
+        case badArchive(reason: String)   // a zip that isn't a packed .app
         case unknownDevice
         case dispatchFailed
     }
@@ -764,11 +768,24 @@ struct Server: Sendable {
                 try await sim.apps().install(app)
                 return .installed
             }
+            if let archive = AppArchive.at(path) {
+                try await sim.apps().install(archive: archive)
+                return .installed
+            }
             if let media = MediaItem.at(path) {
                 try await sim.photos().add(media)
                 return .added
             }
             return .unsupported(ext: path.pathExtension.lowercased())
+        } catch let error as AppsError {
+            // Extraction / locating failures are the upload's fault —
+            // surface the reason instead of a generic simctl 500.
+            switch error {
+            case .extractFailed, .noAppInArchive:
+                return .badArchive(reason: error.description)
+            case .installFailed:
+                return .dispatchFailed
+            }
         } catch {
             return .dispatchFailed
         }

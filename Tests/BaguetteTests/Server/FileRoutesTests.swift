@@ -66,6 +66,63 @@ struct FileRoutesTests {
         #expect(outcome == .unknownDevice)
     }
 
+    @Test func `a zipped .app is installed through the apps collection as an archive`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let apps = MockApps()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).apps().willReturn(apps)
+        given(apps).install(archive: .any).willReturn(())
+
+        let outcome = await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/MyApp.app.zip"), simulators: host
+        )
+        #expect(outcome == .installed)
+        verify(apps).install(archive: .value(AppArchive(path: URL(fileURLWithPath: "/tmp/up/MyApp.app.zip")))).called(1)
+    }
+
+    @Test func `a zip with no app inside is refused with the reason`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let apps = MockApps()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).apps().willReturn(apps)
+        given(apps).install(archive: .any).willThrow(AppsError.noAppInArchive)
+
+        let outcome = await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/docs.zip"), simulators: host
+        )
+        #expect(outcome == .badArchive(reason: "no single .app bundle at the top level of the zip"))
+    }
+
+    @Test func `a corrupt zip is refused with the extract failure`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let apps = MockApps()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).apps().willReturn(apps)
+        given(apps).install(archive: .any).willThrow(AppsError.extractFailed(status: 2))
+
+        let outcome = await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/broken.zip"), simulators: host
+        )
+        #expect(outcome == .badArchive(reason: "ditto -x -k exited 2 (corrupt zip?)"))
+    }
+
+    @Test func `a simctl failure on the archive path surfaces as dispatchFailed`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let apps = MockApps()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).apps().willReturn(apps)
+        given(apps).install(archive: .any).willThrow(AppsError.installFailed(status: 1))
+
+        let outcome = await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/MyApp.app.zip"), simulators: host
+        )
+        #expect(outcome == .dispatchFailed)
+    }
+
     @Test func `a simctl failure surfaces as dispatchFailed`() async {
         let host = MockSimulators()
         let sim = MockSimulator()

@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- **Drag-and-drop a folder-form `.app` bundle onto the device.** The focus page's drop target now takes all three app shapes: an `.ipa` (unchanged), a pre-zipped `.app`, and — new — the bare `.app` **directory** straight from Finder or a build products folder. A browser can't upload a directory as one file, so `sim-file-drop.js` walks the dropped bundle via `webkitGetAsEntry` and packs it into a **stored (uncompressed) zip built in-page** (local headers + CRC-32 + central directory, ~90 lines, no library), posting it as `<Name>.app.zip` to the same `POST /simulators/:udid/files` route. The Swift side gains the matching domain value: `AppArchive` (a `.zip` carrying one app) with pure classification, `ditto` argv projection, and an `installableApp(amongExtracted:)` locator (exactly one top-level `.app`; `__MACOSX` / dotfiles ignored; two apps refused as ambiguous), plus `apps().install(archive:)` on the `Apps` collection — extract, locate, then reuse the normal `AppBundle` install; both spawns run through the existing `Subprocess` collaborator, fully unit-covered via `MockSubprocess`. Two gotchas worth preserving: extraction uses `ditto -x -k` (not `unzip`) because it restores unix modes from the zip's external attributes, and the browser packer stamps every entry `0755` since the file-system entry API can't read permission bits — otherwise the installed app's binary comes out non-executable and won't launch. A zip that isn't a packed app fails as the upload's fault (`415` with the reason: "corrupt zip?" / "no single `.app` bundle at the top level"), never a misleading simctl `500`. Known limits: the `.app` must sit at the zip's top level, and symlinks / empty dirs don't survive the browser packer (iOS-style shallow bundles carry neither). See [`docs/features/file-upload.md`](docs/features/file-upload.md).
+
 ---
 
 ## [0.1.77] - 2026-06-24

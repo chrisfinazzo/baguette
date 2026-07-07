@@ -8,7 +8,10 @@ points, one rule: **the device decides where the file goes by its type.**
 - `baguette add-media --udid <UDID> <path>` — add an image / video to Photos.
 - `POST /simulators/:udid/files?name=<filename>` (raw body) — served by
   `baguette serve`; the browser's drag-and-drop target on the focus
-  page posts here.
+  page posts here. Accepts `.ipa` / `.app` / media files as raw bytes,
+  and a **`.zip` carrying one `.app`** — which is how a dropped
+  folder-form `.app` bundle travels: the browser packs the directory
+  into a stored zip client-side and posts `<Name>.app.zip`.
 
 Like the status bar, this is **not** a SimulatorHID path. It shells out
 to `xcrun simctl install` / `xcrun simctl addmedia` — the same mechanism
@@ -35,6 +38,7 @@ things that live on a phone, each a small collection you add to:
 | Collection (`@Mockable`) | Value added | simctl verb | Lands on |
 |---|---|---|---|
 | `Apps`         | `AppBundle` (`.ipa`, `.app`)                              | `install`  | Home screen |
+| `Apps`         | `AppArchive` (`.zip` carrying one `.app`)                 | `ditto -x -k` + `install` | Home screen |
 | `PhotoLibrary` | `MediaItem` (`png jpg jpeg gif heic heif mov mp4 m4v`)    | `addmedia` | Photos |
 
 Both hang off `Simulator` next to `statusBar()` / `orientation()`:
@@ -49,6 +53,19 @@ each thing knows what it is. `installArguments(udid:)` /
 Infrastructure adapters (`SimctlApps`, `SimctlPhotoLibrary`) just prepend
 `xcrun` and run it.
 
+`AppArchive` is how a **folder-form `.app` bundle** travels over HTTP —
+a browser can't upload a directory as one file, so the drop target packs
+the bundle into a stored zip and posts that (a user-zipped `.app` arrives
+the same way). simctl can't take a zip directly, so unlike `AppBundle`
+the archive isn't installable as-is: `apps().install(archive:)` extracts
+it (`/usr/bin/ditto -x -k`, chosen over `unzip` because it restores the
+unix modes in the zip's external attributes — the app binary must come
+out executable), locates the app with the pure
+`AppArchive.installableApp(amongExtracted:)` (exactly one top-level
+`.app`, `__MACOSX` / dotfiles ignored, two apps refused as ambiguous),
+and installs it through the normal `AppBundle` path. `.ipa` stays an
+`AppBundle` — it installs directly, no extraction step.
+
 ## Wire / route
 
 ```
@@ -61,10 +78,16 @@ the two collections meet:
 
 ```
 classify the staged file by extension:
-  AppBundle.at(path)?   → apps().install(app)    → {"ok":true,"kind":"app"}    (200)
-  MediaItem.at(path)?   → photos().add(media)     → {"ok":true,"kind":"media"}  (200)
-  else                  → refuse                  → 415 "no home for .<ext> …"
+  AppBundle.at(path)?   → apps().install(app)              → {"ok":true,"kind":"app"}    (200)
+  AppArchive.at(path)?  → apps().install(archive:)          → {"ok":true,"kind":"app"}    (200)
+  MediaItem.at(path)?   → photos().add(media)               → {"ok":true,"kind":"media"}  (200)
+  else                  → refuse                            → 415 "no home for .<ext> …"
 ```
+
+A zip that turns out not to carry an app fails **as the upload's
+fault**, not the device's: extraction failure ("corrupt zip?") and
+no-single-`.app`-inside both come back `415` with the reason in
+`error`, while a simctl failure after a good extraction stays a `500`.
 
 The route closure materialises the upload into a unique temp directory
 (preserving the filename so the extension — and simctl's bundle
@@ -81,11 +104,19 @@ bundle).
 ## Dispatch path
 
 ```
-drop / CLI ──▶ AppBundle.at / MediaItem.at  (Domain, pure)
-            ──▶ Apps.install / PhotoLibrary.add        (@Mockable)
+drop / CLI ──▶ AppBundle.at / AppArchive.at / MediaItem.at  (Domain, pure)
+            ──▶ Apps.install / Apps.install(archive:) / PhotoLibrary.add   (@Mockable)
             ──▶ SimctlApps / SimctlPhotoLibrary         (orchestrator: argv + Subprocess)
-            ──▶ HostSubprocess → xcrun simctl install | addmedia  (integration-only)
+            ──▶ HostSubprocess → ditto -x -k | xcrun simctl install | addmedia  (integration-only)
 ```
+
+The archive path runs two one-shot children through the same
+`Subprocess` collaborator — `ditto -x -k <zip> <tempdir>` then
+`xcrun simctl install <udid> <tempdir>/<Name>.app` — with the
+extraction temp dir deleted regardless of outcome. Both spawns, the
+locator, and every failure mapping are unit-covered via
+`MockSubprocess` (the ditto stub materialises fake entries in the
+destination dir).
 
 ## Browser
 
@@ -104,6 +135,22 @@ toast with the result
 codes and no notion of which simctl verb applies — the Swift side owns
 all of that.
 
+The one thing the browser *does* build is the transport for a dropped
+**`.app` directory**: the drop handler reads `webkitGetAsEntry()` for
+every item synchronously (the dataTransfer store empties once the
+handler yields), walks a `*.app` directory recursively (draining
+`readEntries`, which returns ~100 entries per call), and packs the tree
+into a **stored (uncompressed) zip** built right in `sim-file-drop.js`
+— local headers + CRC-32 + central directory, no library, no bundler.
+Every entry is stamped unix mode `0755` in its external attributes
+(the file-system API can't say which files had the exec bit, and a
+spare exec bit on a plist is harmless) so `ditto -x -k` restores an
+executable binary. The zip is posted as `?name=<Name>.app.zip`. A
+dropped directory that isn't a `.app` gets an error toast without an
+upload; zipping is transport encoding, not domain logic — which zip
+carries an installable app is still decided on the Swift side. The
+packer is exposed as `SimFileDrop.pack` for round-trip verification.
+
 ## Adding a new added-to-device thing (recipe)
 
 1. **Domain value** — a `struct` in a new `Domain/<Thing>/` context with
@@ -121,10 +168,18 @@ all of that.
 
 ## Known limits
 
-- **Single files only.** A folder-form `.app` bundle is a directory;
-  browser folder drag-and-drop (recursive `webkitGetAsEntry` + client
-  re-zip) is deferred — drop a `.ipa`, or zip the `.app`. The CLI's
-  `install` accepts a real `.app` directory path directly (simctl does).
+- **The `.app` must sit at the zip's top level.** The locator looks at
+  the extracted top-level entries only — `Payload/MyApp.app` (ipa
+  layout) or `SomeFolder/MyApp.app` is refused with "no single `.app`
+  bundle at the top level". Drop the `.ipa` itself for the former.
+- **Symlinks and empty directories don't survive the browser packer.**
+  The file-system entry API resolves links and skips empty dirs.
+  iOS-style shallow `.app` bundles carry neither; a macOS-shape bundle
+  (`Contents/`, versioned frameworks) wouldn't install on a simulator
+  anyway.
+- **Every packed file comes out `0755`.** The browser can't read
+  permission bits, so the packer stamps all entries executable rather
+  than risk a non-executable app binary. Harmless on a simulator.
 - **Generic documents have no home.** `.pdf`, `.json`, etc. are refused
   with `415` rather than silently dropped — `simctl` offers no clean path
   to drop an arbitrary doc into the Files app.
@@ -132,4 +187,5 @@ all of that.
   drop target yet; the `/files` route and both CLI verbs work for any
   device regardless.
 - **Uploads are buffered in memory** (≤ 1 GiB) before staging to a temp
-  file. Fine for a localhost dev tool; not a public upload endpoint.
+  file — and a dropped `.app` is additionally buffered client-side while
+  packing. Fine for a localhost dev tool; not a public upload endpoint.
