@@ -85,9 +85,13 @@ classify the staged file by extension:
 ```
 
 A zip that turns out not to carry an app fails **as the upload's
-fault**, not the device's: extraction failure ("corrupt zip?") and
-no-single-`.app`-inside both come back `415` with the reason in
-`error`, while a simctl failure after a good extraction stays a `500`.
+fault**, not the device's: extraction failure ("corrupt zip?"),
+contents over the 4 GiB decompression cap ("zip bomb?" — checked
+against the central directory's declared sizes *before* extraction,
+with the extracted bytes re-measured afterwards as the backstop
+against forged headers), and no-single-`.app`-inside all come back
+`415` with the reason in `error`, while a simctl failure after a good
+extraction stays a `500`.
 
 The route closure materialises the upload into a unique temp directory
 (preserving the filename so the extension — and simctl's bundle

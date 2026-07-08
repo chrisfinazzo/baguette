@@ -77,4 +77,43 @@ struct AppArchiveTests {
             amongExtracted: ["One.app", "Two.app"]
         ) == nil)
     }
+
+    // MARK: declared uncompressed size (pre-flight zip-bomb check)
+
+    @Test func `declared uncompressed bytes sum across the central directory`() {
+        let zip = ZipFixture.archive(declaring: [
+            ("MyApp.app/Info.plist", 100), ("MyApp.app/MyApp", 200),
+        ])
+        #expect(AppArchive.declaredUncompressedBytes(in: zip) == 300)
+    }
+
+    @Test func `the end record is found behind a trailing archive comment`() {
+        let zip = ZipFixture.archive(
+            declaring: [("MyApp.app/MyApp", 64)],
+            comment: Data("signed by tooling".utf8)
+        )
+        #expect(AppArchive.declaredUncompressedBytes(in: zip) == 64)
+    }
+
+    @Test func `an empty archive declares zero bytes`() {
+        #expect(AppArchive.declaredUncompressedBytes(in: ZipFixture.archive(declaring: [])) == 0)
+    }
+
+    @Test func `bytes without an end-of-central-directory record are not a zip`() {
+        #expect(AppArchive.declaredUncompressedBytes(in: Data("not a zip at all".utf8)) == nil)
+    }
+
+    @Test func `a central directory pointing outside the bytes is unreadable`() {
+        var zip = ZipFixture.archive(declaring: [("MyApp.app/MyApp", 64)])
+        let eocd = zip.count - 22
+        zip.replaceSubrange((eocd + 16)..<(eocd + 20), with: [0xFF, 0xFF, 0xFF, 0x7F])
+        #expect(AppArchive.declaredUncompressedBytes(in: zip) == nil)
+    }
+
+    @Test func `an entry count past the central directory's end is unreadable`() {
+        var zip = ZipFixture.archive(declaring: [("MyApp.app/MyApp", 64)])
+        let eocd = zip.count - 22
+        zip[eocd + 10] = 2   // claims two entries; only one exists
+        #expect(AppArchive.declaredUncompressedBytes(in: zip) == nil)
+    }
 }

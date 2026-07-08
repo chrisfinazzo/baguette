@@ -63,7 +63,9 @@ struct SimctlAppsTests {
     private func makeArchiveApps(
         dittoExit: Int32 = 0,
         installExit: Int32 = 0,
-        extractedEntries: [String] = ["MyApp.app"]
+        extractedEntries: [String] = ["MyApp.app"],
+        payloadBytes: Int = 0,
+        maxExtractedBytes: Int64 = 4 << 30
     ) -> (SimctlApps, ArchiveCaptures) {
         let sub = MockSubprocess()
         let captures = ArchiveCaptures()
@@ -77,6 +79,12 @@ struct SimctlAppsTests {
                     try? FileManager.default.createDirectory(
                         atPath: dest + "/" + entry, withIntermediateDirectories: true
                     )
+                    if payloadBytes > 0 {
+                        FileManager.default.createFile(
+                            atPath: dest + "/" + entry + "/payload",
+                            contents: Data(count: payloadBytes)
+                        )
+                    }
                 }
                 onExit(dittoExit)
             } else {
@@ -85,7 +93,10 @@ struct SimctlAppsTests {
             }
         }
         given(sub).terminate().willReturn()
-        return (SimctlApps(udid: "U", subprocess: sub), captures)
+        return (
+            SimctlApps(udid: "U", subprocess: sub, maxExtractedBytes: maxExtractedBytes),
+            captures
+        )
     }
 
     @Test func `an archive is extracted with ditto and the inner app installed`() async throws {
@@ -126,6 +137,57 @@ struct SimctlAppsTests {
         }
         #expect(caught == .noAppInArchive)
         #expect(captures.installArguments == nil)
+    }
+
+    @Test func `an archive declaring more than the cap is refused before extraction`() async throws {
+        let (apps, captures) = makeArchiveApps(maxExtractedBytes: 16)
+        let zipURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bomb-\(UUID().uuidString).app.zip")
+        try ZipFixture.archive(declaring: [("MyApp.app/MyApp", 64)]).write(to: zipURL)
+        defer { try? FileManager.default.removeItem(at: zipURL) }
+
+        var caught: AppsError?
+        do {
+            try await apps.install(archive: AppArchive(path: zipURL))
+        } catch {
+            caught = error as? AppsError
+        }
+        #expect(caught == .archiveTooLarge(bytes: 64, limit: 16))
+        #expect(captures.extractionDir == nil)   // ditto never spawned
+        #expect(captures.installArguments == nil)
+    }
+
+    @Test func `an archive declaring less than the cap proceeds to extraction`() async throws {
+        let (apps, captures) = makeArchiveApps(maxExtractedBytes: 1024)
+        let zipURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ok-\(UUID().uuidString).app.zip")
+        try ZipFixture.archive(declaring: [("MyApp.app/MyApp", 64)]).write(to: zipURL)
+        defer { try? FileManager.default.removeItem(at: zipURL) }
+
+        try await apps.install(archive: AppArchive(path: zipURL))
+        #expect(captures.extractionDir != nil)
+        #expect(captures.installArguments != nil)
+    }
+
+    @Test func `an archive that inflates past the extraction cap is refused before install`() async {
+        let (apps, captures) = makeArchiveApps(payloadBytes: 64, maxExtractedBytes: 16)
+        var caught: AppsError?
+        do {
+            try await apps.install(archive: AppArchive(path: URL(fileURLWithPath: "/tmp/up/bomb.zip")))
+        } catch {
+            caught = error as? AppsError
+        }
+        #expect(caught == .archiveTooLarge(bytes: 64, limit: 16))
+        #expect(captures.installArguments == nil)
+        if let dir = captures.extractionDir {
+            #expect(!FileManager.default.fileExists(atPath: dir))
+        }
+    }
+
+    @Test func `an archive within the extraction cap still installs`() async throws {
+        let (apps, captures) = makeArchiveApps(payloadBytes: 8, maxExtractedBytes: 16)
+        try await apps.install(archive: AppArchive(path: URL(fileURLWithPath: "/tmp/up/MyApp.app.zip")))
+        #expect(captures.installArguments != nil)
     }
 
     @Test func `a simctl failure after extraction propagates as an install failure`() async {

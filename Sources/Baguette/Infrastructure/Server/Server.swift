@@ -781,7 +781,7 @@ struct Server: Sendable {
             // Extraction / locating failures are the upload's fault —
             // surface the reason instead of a generic simctl 500.
             switch error {
-            case .extractFailed, .noAppInArchive:
+            case .extractFailed, .archiveTooLarge, .noAppInArchive:
                 return .badArchive(reason: error.description)
             case .installFailed:
                 return .dispatchFailed

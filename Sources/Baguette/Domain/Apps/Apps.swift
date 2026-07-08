@@ -21,8 +21,10 @@ protocol Apps: Sendable {
     /// directly). Extracts the archive, locates the single `.app`
     /// inside, and installs it through the normal `AppBundle` path.
     /// Throws `AppsError.extractFailed` when extraction dies,
-    /// `.noAppInArchive` when nothing installable is inside, and
-    /// `.installFailed` when simctl rejects the located app.
+    /// `.archiveTooLarge` when the extracted contents blow past the
+    /// decompression cap (zip bomb), `.noAppInArchive` when nothing
+    /// installable is inside, and `.installFailed` when simctl rejects
+    /// the located app.
     func install(archive: AppArchive) async throws
 }
 
@@ -32,6 +34,7 @@ protocol Apps: Sendable {
 enum AppsError: Error, Equatable, CustomStringConvertible {
     case installFailed(status: Int32)
     case extractFailed(status: Int32)
+    case archiveTooLarge(bytes: Int64, limit: Int64)
     case noAppInArchive
 
     var description: String {
@@ -40,6 +43,8 @@ enum AppsError: Error, Equatable, CustomStringConvertible {
             return "xcrun simctl install exited \(status)"
         case .extractFailed(let status):
             return "ditto -x -k exited \(status) (corrupt zip?)"
+        case .archiveTooLarge(let bytes, let limit):
+            return "archive inflates to \(bytes) bytes, over the \(limit)-byte cap (zip bomb?)"
         case .noAppInArchive:
             return "no single .app bundle at the top level of the zip"
         }
