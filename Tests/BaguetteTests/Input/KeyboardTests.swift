@@ -21,9 +21,10 @@ struct KeyboardKeyTests {
 
     @Test func `parses numpad wire codes onto HID keypad usages`() {
         // Keypad block on HID page 7: 1-9 = 0x59..0x61, 0 = 0x62 (last,
-        // like the top-row digit quirk), decimal = 0x63; the operators,
-        // Enter and Equal sit just below the digits. NumLock is out of
-        // scope — iOS has no num-lock concept.
+        // like the top-row digit quirk), decimal = 0x63; the operators
+        // and Enter (0x54..0x58) sit just below the digits, Equal (0x67)
+        // above the decimal. NumLock is out of scope — iOS has no
+        // num-lock concept.
         let pairs: [(String, UInt32)] = [
             ("Numpad1", 0x59), ("Numpad2", 0x5A), ("Numpad3", 0x5B),
             ("Numpad4", 0x5C), ("Numpad5", 0x5D), ("Numpad6", 0x5E),

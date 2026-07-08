@@ -85,9 +85,10 @@ struct KeyboardKey: Equatable, Hashable, Sendable {
         m["Digit0"] = 0x27
         // Numpad / keypad block (HID page 7, keypad section). Same
         // last-place quirk as the top row: Numpad1..Numpad9 = 0x59..0x61,
-        // Numpad0 = 0x62, then decimal = 0x63. Operators / Enter / Equal
-        // sit just above the digits. NumLock is deliberately omitted —
-        // iOS has no num-lock concept, so it would be a device no-op.
+        // Numpad0 = 0x62, then decimal = 0x63. Divide..Enter (0x54..0x58)
+        // sit just below the digit block; Equal (0x67) sits above the
+        // digits / decimal. NumLock is deliberately omitted — iOS has
+        // no num-lock concept, so it would be a device no-op.
         for i in 1...9 {
             m["Numpad\(i)"] = UInt32(0x59 + i - 1)
         }
