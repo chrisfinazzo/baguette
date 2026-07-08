@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- **Numpad forwarding.** The browser keyboard capture now recognises the Mac's physical numeric keypad — `Numpad0`–`Numpad9`, `NumpadDecimal`, `NumpadAdd` / `NumpadSubtract` / `NumpadMultiply` / `NumpadDivide`, keypad `NumpadEnter`, and `NumpadEqual` — and forwards each keystroke into the focused simulator with its **own** HID keypad usage (page 7, `0x54`–`0x63` plus `0x67`), distinct from the top-row digits. No wire or CLI change: numpad keys ride the existing `key` envelope (`{ "type": "key", "code": "Numpad5" }`) down the same `IndigoHIDMessageForHIDArbitrary(target, page:7, usage, op)` path already used for letters and digits, so `baguette key --code Numpad5` works from the CLI too. `Numpad0` takes `0x62` (last in the keypad block, the same last-place quirk as the top-row `Digit0`). `NumLock`/Clear is deliberately left out — iOS has no num-lock concept, so forwarding it would be a device no-op that needlessly swallowed the host key. See [`docs/features/keyboard.md`](docs/features/keyboard.md).
+
 ---
 
 ## [0.1.77] - 2026-06-24
