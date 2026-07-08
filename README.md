@@ -211,6 +211,11 @@ baguette <command> [options]
                        [--modifiers shift,control,option,command] [--duration 0.2]
   type --udid … --text "<US-ASCII string>"
 
+  # Paste & clipboard (any unicode — rides the sim's pasteboard, not keystrokes)
+  paste --udid … --text "héllo 🥖" [--no-press]   # set pasteboard, then Cmd+V
+  clipboard get  --udid …                          # print sim pasteboard (like pbpaste)
+  clipboard sync --udid …                          # host Mac pasteboard → sim (images too)
+
   # Hardware + virtual buttons. Phone: home / lock / power / volume-up /
   # volume-down / action / app-switcher / swipe-to-app-switcher /
   # swipe-to-home / pull-down-to-lock-screen / pull-down-to-notification-center.
@@ -362,6 +367,11 @@ on stdout, one ack per line.
 // for the keystroke. Or send a typed string in one envelope.
 {"type":"key", "code":"KeyA", "modifiers":["shift"], "duration":0.2}
 {"type":"type", "text":"hello"}
+
+// Paste — any unicode via the sim's pasteboard + Cmd+V (the path
+// around `type`'s US-ASCII limit). `press:false` = set-only.
+{"type":"paste", "text":"héllo 🥖"}
+{"type":"paste", "text":"clipboard only", "press":false}
 
 // Scroll
 {"type":"scroll", "deltaX":0, "deltaY":-50}

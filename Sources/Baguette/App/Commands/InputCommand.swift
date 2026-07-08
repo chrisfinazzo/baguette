@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-struct InputCommand: ParsableCommand {
+struct InputCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "input",
         abstract: "Read newline-delimited JSON gestures from stdin, ack each on stdout"
@@ -9,16 +9,25 @@ struct InputCommand: ParsableCommand {
 
     @OptionGroup var options: DeviceOption
 
-    func run() {
+    func run() async {
         let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
         guard let simulator = simulators.find(udid: options.udid) else {
             log("Device \(options.udid) not found")
             Foundation.exit(1)
         }
-        let dispatcher = GestureDispatcher(input: simulator.input())
+        let input = simulator.input()
+        let pasteboard = simulator.pasteboard()
+        let dispatcher = GestureDispatcher(input: input)
         log("Input session started, reading from stdin")
         while let line = readLine() {
-            print(dispatcher.dispatch(line: line))
+            // `paste` needs the async pasteboard surface, so it is
+            // intercepted ahead of the sync gesture pipeline —
+            // same shape as `describe_ui` on the WS path. Awaiting
+            // in-line preserves the one-line-in/one-ack-out order.
+            let outcome = await PasteDispatch.dispatch(
+                line: line, pasteboard: pasteboard, input: input
+            )
+            print(outcome.ackJSON ?? dispatcher.dispatch(line: line))
             fflush(stdout)
         }
         log("stdin closed, input session ending")

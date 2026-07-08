@@ -166,6 +166,16 @@ Wired (use freely):
   `baguette key --code KeyA --modifiers shift,command --duration 0.2`
   and `baguette type --text "hello"`. `code` is a W3C
   `KeyboardEvent.code`; modifiers are `shift | control | option | command`.
+- `paste` — arbitrary unicode into the focused field via the sim's
+  pasteboard + Cmd+V (the path around `type`'s US-ASCII limit; not a
+  HID-only path — shells out to `xcrun simctl pbcopy`). Wire:
+  `{"type":"paste","text":"…","press":false?}` on the stream WS
+  (replies `paste_result`) and `input` stdin. CLI: `baguette paste
+  --udid <X> --text "…" [--no-press]`; plus `baguette clipboard get`
+  (print the sim's pasteboard raw) and `baguette clipboard sync`
+  (host Mac pasteboard → sim, full-fidelity — images included).
+  Needs a booted device. See
+  [`docs/features/paste.md`](../../docs/features/paste.md).
 - `describe-ui` — dump the on-screen accessibility tree as JSON
   (per-node `role`, `label`, `value`, `identifier`, `frame` in
   device points, recursive `children`). CLI:
@@ -219,9 +229,9 @@ Wired (use freely):
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji
-  isn't on the host-HID path yet. Fall back to
-  `xcrun simctl io <UDID> text "…"` for those strings, or split the
-  task so only ASCII goes through `baguette type`.
+  isn't on the host-HID keystroke path. Use `baguette paste --udid
+  <X> --text "…"` (or the `paste` wire verb) for those strings — it
+  rides the pasteboard instead of keystrokes.
 - **F-keys, Page Up/Down, Home/End** through `key` — outside the
   phase-1 supported code set. Most iOS apps don't use them anyway.
 - `button: "siri"` — crashes `backboardd` via every known path.

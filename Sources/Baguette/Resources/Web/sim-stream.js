@@ -160,11 +160,16 @@
     log(`Stream: ${format.toUpperCase()}${format === 'avcc' ? ' (hw-decoded)' : ''}`);
 
     // Text-frame router. The stream WS carries binary video frames
-    // and JSON envelopes (describe_ui_result, server pushes). The
-    // accessibility inspector consumes describe_ui_result; anything
-    // it doesn't claim falls through to the decoder's error logger.
+    // and JSON envelopes (describe_ui_result, paste_result, server
+    // pushes). The accessibility inspector consumes
+    // describe_ui_result; anything nobody claims falls through to
+    // the decoder's error logger.
     const onStreamText = (env) => {
       if (axInspector && axInspector.handleEnvelope(env)) return true;
+      if (env && env.type === 'paste_result') {
+        if (!env.ok) log('Paste failed: ' + (env.error || 'unknown'), true);
+        return true;
+      }
       return false;
     };
 

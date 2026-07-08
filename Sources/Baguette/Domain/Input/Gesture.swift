@@ -49,6 +49,10 @@ enum Field {
         return fallback
     }
 
+    static func optionalBool(_ dict: [String: Any], _ key: String, default fallback: Bool) -> Bool {
+        (dict[key] as? Bool) ?? fallback
+    }
+
     static func requiredString(_ dict: [String: Any], _ key: String) throws -> String {
         guard let raw = dict[key] else { throw GestureError.missingField(key) }
         guard let v = raw as? String else { throw GestureError.invalidValue(key, expected: "string") }

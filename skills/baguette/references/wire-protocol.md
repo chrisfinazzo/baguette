@@ -213,7 +213,30 @@ than silently dropping mid-string.
 
 **Phase-1 limits:** no IME / Pinyin / dead keys / emoji / non-Latin
 scripts — those need `IndigoHIDMessageForKeyboardNSEvent` (phase 2).
-For non-ASCII text, fall back to `xcrun simctl io <UDID> text "…"`.
+For non-ASCII text, use `paste` below.
+
+### Paste (arbitrary unicode via the pasteboard)
+
+```json
+{"type":"paste","text":"héllo 🥖 — any unicode"}
+{"type":"paste","text":"clipboard only","press":false}
+```
+
+Sets the simulator's pasteboard (`simctl pbcopy`, text over stdin),
+then presses Cmd+V — the path around `type`'s US-ASCII limit.
+`press` (optional, default `true`) — `false` stops after the
+pasteboard set, for apps that read `UIPasteboard` directly. Works on
+both the stream WS and `baguette input` stdin. On the WS the reply
+is a typed text frame:
+
+```json
+{ "type": "paste_result", "ok": true }
+{ "type": "paste_result", "ok": false, "error": "xcrun simctl pasteboard command exited 1" }
+```
+
+On stdin it's the usual one-line `{"ok":…}` ack. Needs a booted
+device — a shutdown sim surfaces as a non-zero simctl exit in the
+ack.
 
 ## WebSocket-only verbs (during `baguette serve`)
 
