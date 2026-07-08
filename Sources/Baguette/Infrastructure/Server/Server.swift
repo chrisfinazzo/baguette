@@ -1017,6 +1017,7 @@ struct Server: Sendable {
         // One Input for the whole session — the paste keystroke must
         // reuse the same warmed HID services the gestures ride.
         let input = sim.input()
+        let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
 
         do {
@@ -1042,7 +1043,7 @@ struct Server: Sendable {
                     continue
                 }
                 if let frame = await PasteDispatch.dispatch(
-                    line: line, pasteboard: sim.pasteboard(), input: input
+                    line: line, pasteboard: pasteboard, input: input
                 ).resultFrame {
                     try? await outbound.write(.text(frame))
                     continue

@@ -23,11 +23,11 @@ struct PasteCommand: AsyncParsableCommand {
     @Flag(inversion: .prefixedNo, help: "Press Cmd+V after setting the pasteboard.")
     var press: Bool = true
 
-    func run() async {
+    func run() async throws {
         let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
         guard let simulator = simulators.find(udid: options.udid) else {
             log("Device \(options.udid) not found")
-            Foundation.exit(1)
+            throw ExitCode.failure
         }
         let ok: Bool
         do {
@@ -35,9 +35,11 @@ struct PasteCommand: AsyncParsableCommand {
                 .execute(pasteboard: simulator.pasteboard(), input: simulator.input())
         } catch {
             log("paste failed: \(error)")
-            Foundation.exit(1)
+            throw ExitCode.failure
         }
         print("{\"ok\":\(ok),\"action\":\"paste\"}")
-        Foundation.exit(ok ? 0 : 1)
+        if !ok {
+            throw ExitCode.failure
+        }
     }
 }
