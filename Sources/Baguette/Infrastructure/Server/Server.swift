@@ -1007,9 +1007,12 @@ struct Server: Sendable {
     /// One WebSocket = one streaming session. Opens Screen + Stream
     /// + WS sink, runs until the client disconnects. Every inbound
     /// text frame is one JSON line dispatched in this order:
-    ///   1. ReconfigParser   — set_bitrate / set_fps / set_scale
-    ///   2. stream verbs     — force_idr / snapshot
-    ///   3. GestureDispatcher — tap / swipe / touch1-* / touch2-* /
+    ///   1. describe_ui      — needs the AX port + outbound writer
+    ///   2. paste            — needs the async Pasteboard + outbound
+    ///      writer (replies with a `paste_result` frame)
+    ///   3. ReconfigParser   — set_bitrate / set_fps / set_scale
+    ///   4. stream verbs     — force_idr / snapshot
+    ///   5. GestureDispatcher — tap / swipe / touch1-* / touch2-* /
     ///      button / scroll / pinch / pan / key / type
     /// Lines not matched by any of the above are ignored — same
     /// graceful behaviour the stdin control channel has.
@@ -1028,7 +1031,11 @@ struct Server: Sendable {
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
         let screen = sim.screen()
-        let dispatcher = GestureDispatcher(input: sim.input())
+        // One Input for the whole session — the paste keystroke must
+        // reuse the same warmed HID services the gestures ride.
+        let input = sim.input()
+        let pasteboard = sim.pasteboard()
+        let dispatcher = GestureDispatcher(input: input)
 
         do {
             try stream.start(on: screen)
@@ -1050,6 +1057,12 @@ struct Server: Sendable {
                 if await handleDescribeUI(
                     line: line, sim: sim, outbound: outbound
                 ) {
+                    continue
+                }
+                if let frame = await PasteDispatch.dispatch(
+                    line: line, pasteboard: pasteboard, input: input
+                ).resultFrame {
+                    try? await outbound.write(.text(frame))
                     continue
                 }
                 handleInbound(

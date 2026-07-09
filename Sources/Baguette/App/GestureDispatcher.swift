@@ -37,7 +37,7 @@ final class GestureDispatcher {
         return "{\"ok\":\(ok)}"
     }
 
-    private static func jsonEscape(_ s: String) -> String {
+    static func jsonEscape(_ s: String) -> String {
         var out = ""
         out.reserveCapacity(s.count + 8)
         for ch in s.unicodeScalars {

@@ -63,6 +63,12 @@ protocol Simulator: Sendable {
     /// invocation is stateless.
     func location() -> any Location
 
+    /// This simulator's shared pasteboard — set plain text, read it
+    /// back, or sync the host Mac's full pasteboard across (images
+    /// included). Each call returns a fresh handle; the underlying
+    /// `simctl pbcopy | pbpaste | pbsync` invocation is stateless.
+    func pasteboard() -> any Pasteboard
+
     /// The apps installed on this simulator — install an `AppBundle`
     /// (`.ipa` / `.app`). Each call returns a fresh handle; the
     /// underlying `simctl install` invocation is stateless.

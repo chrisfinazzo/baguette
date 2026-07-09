@@ -133,7 +133,10 @@ cap.stop();    // unbind on teardown
 The capture is **focus-gated**: while `document.activeElement` is the
 device screen, every supported keystroke is forwarded as a `key`
 envelope and `event.preventDefault`'d so host shortcuts (Cmd+R reload,
-Cmd+T new tab, …) go to iOS instead of the browser. When focus moves
+Cmd+T new tab, …) go to iOS instead of the browser. One carve-out:
+the paste chord (Cmd+V / Ctrl+V) is left to the browser so its native
+`paste` event fires — the clipboard text then rides a `paste`
+envelope through the sim's pasteboard ([`paste.md`](paste.md)). When focus moves
 elsewhere, host shortcuts work normally. Mounted from both
 `sim-native.js` (focus mode) and `farm-tile.js` (focused farm tile);
 `mousedown` on the screen takes focus, so the gate opens automatically
@@ -162,7 +165,9 @@ address bar, etc.
   through the HID path. Phase 2 needs `KeyboardNSEvent` (MainActor +
   9-arg, like the mouse) to read `NSEvent.thread-local` state.
 - **No emoji or accented characters.** US layout only; `é` / `中` /
-  `🦄` are rejected by `decompose`.
+  `🦄` are rejected by `decompose`. For arbitrary unicode use
+  `paste` — it rides the sim's pasteboard instead of keystrokes
+  ([`paste.md`](paste.md)).
 - **No key repeat from CLI.** `baguette key` emits one keystroke; for
   held-key behaviour use `--duration`. Browser key repeat works via
   the OS firing repeated `keydown` events — each becomes its own

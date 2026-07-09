@@ -76,6 +76,9 @@ baguette press --udid X --button pull-down-to-lock-screen            # slow drag
 baguette press --udid X --button pull-down-to-notification-center    # slow drag from top-right → Notification Center
 baguette key   --udid X --code KeyA --modifiers shift,command [--duration 0.2]
 baguette type  --udid X --text "hello world"
+baguette paste --udid X --text "héllo 🥖 any unicode" [--no-press]   # via sim pasteboard + Cmd+V
+baguette clipboard get  --udid X        # print the sim's pasteboard text (raw, like pbpaste)
+baguette clipboard sync --udid X        # host Mac pasteboard → sim, full-fidelity (images too)
 ```
 
 `x` / `y` etc. are device points (see `wire-protocol.md` for the

@@ -372,10 +372,14 @@
   function startSession(format) {
     if (session) { try { session.stop(); } catch (_) {} session = null; }
     // Same text-frame router as sim-stream.js: hand JSON envelopes
-    // to the inspector first; anything it doesn't claim falls
-    // through to the decoder's error logger.
+    // to the inspector first, then claim paste_result; anything
+    // nobody claims falls through to the decoder's error logger.
     const onStreamText = (env) => {
       if (axInspector && axInspector.handleEnvelope(env)) return true;
+      if (env && env.type === 'paste_result') {
+        if (!env.ok) console.warn('[native] paste failed:', env.error || 'unknown');
+        return true;
+      }
       return false;
     };
     session = new window.StreamSession({

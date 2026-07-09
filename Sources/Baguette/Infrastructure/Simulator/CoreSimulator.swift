@@ -104,6 +104,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         SimctlLocation(udid: udid)
     }
 
+    func pasteboard() -> any Pasteboard {
+        SimctlPasteboard(udid: udid)
+    }
+
     func apps() -> any Apps {
         SimctlApps(udid: udid)
     }

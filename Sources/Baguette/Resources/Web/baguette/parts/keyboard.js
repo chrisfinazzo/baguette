@@ -13,6 +13,13 @@
 // in `Sources/Baguette/Domain/Input/Keyboard.swift`; keep the two
 // in sync. Anything outside the set falls through to the host
 // browser (so Cmd+R / DevTools shortcuts still work).
+//
+// Paste is the one carve-out: Cmd+V / Ctrl+V is NOT forwarded as a
+// raw chord — the sim's pasteboard wouldn't hold the host's text, so
+// the keystroke alone pastes nothing. Instead the chord is left to
+// the browser so its native `paste` event fires; the document-level
+// listener below reads the clipboard text off the event and sends a
+// `{type:"paste"}` envelope (server: pbcopy, then Cmd+V sim-side).
 (function (root) {
   'use strict';
 
@@ -44,6 +51,7 @@
       this.transport = transport;
       this._el = null;
       this._onKeyDown = (ev) => this._handle(ev);
+      this._onPaste = (ev) => this._handlePaste(ev);
     }
 
     /** Bind keydown to the screen element. Focus-gated. */
@@ -55,11 +63,17 @@
       if (el.tabIndex < 0) el.tabIndex = 0;
       el.addEventListener('mousedown', () => el.focus());
       el.addEventListener('keydown', this._onKeyDown);
+      // Document-level: Chrome/Firefox target the focused element,
+      // Safari may target <body> when focus is a non-editable div —
+      // document catches both. The focus gate in the handler keeps
+      // sidebar pastes with the browser.
+      document.addEventListener('paste', this._onPaste);
     }
 
     detach() {
       if (!this._el) return;
       this._el.removeEventListener('keydown', this._onKeyDown);
+      document.removeEventListener('paste', this._onPaste);
       this._el = null;
     }
 
@@ -78,12 +92,21 @@
       this.transport._dispatch({ type: 'type', text });
     }
 
+    /** Paste text via the sim's pasteboard (server: pbcopy + Cmd+V).
+     *  Any unicode — the path around `type`'s US-ASCII limit. */
+    paste(text) {
+      this.transport._dispatch({ type: 'paste', text });
+    }
+
     // --- internals ---
 
     _handle(ev) {
       // Focus gate — only forward when the screen owns focus.
       if (document.activeElement !== this._el) return;
       if (!FORWARDED.has(ev.code)) return;
+      // Paste carve-out: don't preventDefault the paste chord, or
+      // the browser never fires the `paste` event _handlePaste needs.
+      if ((ev.metaKey || ev.ctrlKey) && ev.code === 'KeyV') return;
       ev.preventDefault();
       const modifiers = [];
       if (ev.shiftKey)   modifiers.push('shift');
@@ -91,6 +114,16 @@
       if (ev.altKey)     modifiers.push('option');
       if (ev.metaKey)    modifiers.push('command');
       this.key(ev.code, modifiers);
+    }
+
+    _handlePaste(ev) {
+      // Same focus gate as keydown — a paste while the sidebar owns
+      // focus belongs to the browser, not the sim.
+      if (document.activeElement !== this._el) return;
+      const text = ev.clipboardData && ev.clipboardData.getData('text/plain');
+      if (!text) return;
+      ev.preventDefault();
+      this.paste(text);
     }
   }
 

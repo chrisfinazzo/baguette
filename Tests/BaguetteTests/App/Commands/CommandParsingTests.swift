@@ -18,7 +18,7 @@ struct CommandParsingTests {
         #expect(Set(names) == [
             "list", "boot", "shutdown", "input", "stream",
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
-            "key", "type",
+            "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
             "orientation", "status-bar", "location", "install", "add-media",
             "diag-digitizer-trackpad",
@@ -224,6 +224,53 @@ struct CommandParsingTests {
         let cmd = try LocationCommand.Clear.parse(["--udid", "U"])
         #expect(cmd.options.udid == "U")
         #expect(LocationCommand.Clear.configuration.commandName == "clear")
+    }
+
+    // MARK: - paste
+
+    @Test func `paste parses --text and defaults to pressing`() throws {
+        let cmd = try PasteCommand.parse(["--udid", "U", "--text", "héllo 🥖"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.text == "héllo 🥖")
+        #expect(cmd.press == true)
+        #expect(PasteCommand.configuration.commandName == "paste")
+    }
+
+    @Test func `paste parses --no-press`() throws {
+        let cmd = try PasteCommand.parse(["--udid", "U", "--text", "x", "--no-press"])
+        #expect(cmd.press == false)
+    }
+
+    @Test func `paste requires --text`() {
+        #expect(throws: (any Error).self) {
+            try PasteCommand.parse(["--udid", "U"])
+        }
+    }
+
+    @Test func `paste requires --udid`() {
+        #expect(throws: (any Error).self) {
+            try PasteCommand.parse(["--text", "x"])
+        }
+    }
+
+    // MARK: - clipboard
+
+    @Test func `clipboard lists get and sync leaves`() {
+        let names = ClipboardCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["get", "sync"])
+        #expect(ClipboardCommand.configuration.commandName == "clipboard")
+    }
+
+    @Test func `clipboard get parses --udid`() throws {
+        let cmd = try ClipboardCommand.Get.parse(["--udid", "U"])
+        #expect(cmd.options.udid == "U")
+        #expect(ClipboardCommand.Get.configuration.commandName == "get")
+    }
+
+    @Test func `clipboard sync parses --udid`() throws {
+        let cmd = try ClipboardCommand.Sync.parse(["--udid", "U"])
+        #expect(cmd.options.udid == "U")
+        #expect(ClipboardCommand.Sync.configuration.commandName == "sync")
     }
 
     // MARK: - install / add-media
