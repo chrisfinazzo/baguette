@@ -15,17 +15,38 @@ protocol Apps: Sendable {
     /// Install an app onto the device. Throws `AppsError.installFailed`
     /// when simctl exits non-zero (device not booted, bad bundle, …).
     func install(_ app: AppBundle) async throws
+
+    /// Install an app that arrived zipped — a browser-packed or
+    /// user-zipped folder-form `.app` (simctl can't take a zip
+    /// directly). Extracts the archive, locates the single `.app`
+    /// inside, and installs it through the normal `AppBundle` path.
+    /// Throws `AppsError.extractFailed` when extraction dies,
+    /// `.archiveTooLarge` when the extracted contents blow past the
+    /// decompression cap (zip bomb), `.noAppInArchive` when nothing
+    /// installable is inside, and `.installFailed` when simctl rejects
+    /// the located app.
+    func install(archive: AppArchive) async throws
 }
 
 /// Failure modes surfaced when installing an app. Maps to a CLI exit
-/// message and an HTTP 5xx on the serve route.
+/// message and an HTTP status on the serve route (bad archives are the
+/// client's fault → 4xx; simctl failures are the device's → 5xx).
 enum AppsError: Error, Equatable, CustomStringConvertible {
     case installFailed(status: Int32)
+    case extractFailed(status: Int32)
+    case archiveTooLarge(bytes: Int64, limit: Int64)
+    case noAppInArchive
 
     var description: String {
         switch self {
         case .installFailed(let status):
             return "xcrun simctl install exited \(status)"
+        case .extractFailed(let status):
+            return "ditto -x -k exited \(status) (corrupt zip?)"
+        case .archiveTooLarge(let bytes, let limit):
+            return "archive inflates to \(bytes) bytes, over the \(limit)-byte cap (zip bomb?)"
+        case .noAppInArchive:
+            return "no single .app bundle at the top level of the zip"
         }
     }
 }

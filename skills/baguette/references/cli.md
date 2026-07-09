@@ -210,22 +210,28 @@ non-zero with a clear message (`Not an installable app …` / `Not a
 supported image or video …`). Not a HID path — one-shot `xcrun simctl`.
 
 Equivalent HTTP route during `baguette serve` (one endpoint, routed by
-extension — app → install, media → Photos):
+extension — app → install, `.zip` carrying one top-level `.app` →
+extract + install, media → Photos):
 
 ```
 POST http://localhost:8421/simulators/<UDID>/files?name=<filename>
-     body = raw file bytes
+     body = raw file bytes (.ipa / .app / .zip / media)
   → 200 {"ok":true,"kind":"app"}    (installed)
   → 200 {"ok":true,"kind":"media"}  (added to Photos)
-  → 415 {"ok":false,"error":"no home for .<ext> on a simulator (apps and media only)"}
+  → 415 {"ok":false,"error":"no home for .<ext> on a simulator (apps, zipped apps, and media only)"}
+  → 415 {"ok":false,"error":"no single .app bundle at the top level of the zip"}
+  → 415 {"ok":false,"error":"ditto -x -k exited <N> (corrupt zip?)"}
 ```
 
 The browser focus page (`/simulators/<UDID>`) accepts drag-and-drop onto
-the device, posting to this route. See `docs/features/file-upload.md`.
+the device, posting to this route — a dropped folder-form `.app` is
+packed into a stored zip in-page and posted as `<Name>.app.zip`. See
+`docs/features/file-upload.md`.
 
-**Limits:** single files only (zip a folder `.app` to `.ipa` for the
-browser; the CLI takes a real `.app` directly); generic docs (`.pdf`,
-`.json`, …) have no home on a simulator and are refused.
+**Limits:** in a `.zip` the `.app` must sit at the top level (for ipa
+`Payload/` layout, drop the `.ipa` itself); the CLI takes a real `.app`
+directory directly but not a `.zip`; generic docs (`.pdf`, `.json`, …)
+have no home on a simulator and are refused.
 
 ## Simulated GPS location — `location`
 

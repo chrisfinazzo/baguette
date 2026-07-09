@@ -30,6 +30,10 @@
     'KeyU','KeyV','KeyW','KeyX','KeyY','KeyZ',
     // Digits
     'Digit0','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9',
+    // Numpad (physical numeric keypad — distinct HID keypad usages;
+    // NumLock is omitted, iOS has no num-lock concept)
+    'Numpad0','Numpad1','Numpad2','Numpad3','Numpad4','Numpad5','Numpad6','Numpad7','Numpad8','Numpad9',
+    'NumpadDecimal','NumpadDivide','NumpadMultiply','NumpadSubtract','NumpadAdd','NumpadEnter','NumpadEqual',
     // Named specials
     'Enter','Escape','Backspace','Tab','Space',
     'ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
