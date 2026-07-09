@@ -4,7 +4,7 @@
 class ArmBrewRequirement < Requirement
   fatal true
 
-  satisfy { Hardware::CPU.arm? }
+  satisfy(build_env: false) { Hardware::CPU.arm? }
 
   def message
     if Hardware::CPU.in_rosetta2?
