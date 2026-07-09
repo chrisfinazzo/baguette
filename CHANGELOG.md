@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- **`serve --allowed-hosts` for reverse-proxy deployments.** The browser-security check only trusts loopback `Host` / `Origin` values, so requests reaching `baguette serve` through a reverse proxy got `403 forbidden origin` on every control route and stream WebSocket. `--allowed-hosts sim.example.com` (repeatable; `*.example.com` matches subdomains) trusts additional hostnames, ignoring ports since the public port belongs to the proxy. An allowed host is trusted both as a request `Host` and as a browser `Origin`, and allowed Origins get CORS headers and preflight responses so a web app on one trusted host can call the API on another. All other cross-site `Origin`s are still rejected and behaviour without the flag is unchanged.
+
 ---
 
 ## [0.1.78] - 2026-07-09

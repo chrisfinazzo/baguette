@@ -37,17 +37,20 @@ struct Server: Sendable {
     let chromes: any Chromes
     let host: String
     let port: Int
+    let allowedHosts: Set<String>
 
     init(
         simulators: any Simulators,
         chromes: any Chromes,
         host: String = "127.0.0.1",
-        port: Int = 8421
+        port: Int = 8421,
+        allowedHosts: [String] = []
     ) {
         self.simulators = simulators
         self.chromes = chromes
         self.host = host
         self.port = port
+        self.allowedHosts = Set(allowedHosts.map { $0.lowercased() })
     }
 
     func run() async throws {
@@ -74,16 +77,20 @@ struct Server: Sendable {
     private func registerRoutes(on router: Router<BasicWebSocketRequestContext>) {
         let bindHost = self.host
         let bindPort = self.port
+        let allowedHosts = self.allowedHosts
+        if !allowedHosts.isEmpty {
+            router.add(middleware: AllowedHostsCORSMiddleware(allowedHosts: allowedHosts))
+        }
         let rejectUntrustedBrowser: @Sendable (Request) -> Response? = { request in
             Self.rejectUntrustedBrowserRequest(
-                request, bindHost: bindHost, bindPort: bindPort
+                request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
             )
         }
         let trustedWebSocketUpgrade:
             @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
                 request, _ in
                 Self.isTrustedBrowserRequest(
-                    request, bindHost: bindHost, bindPort: bindPort
+                    request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
                 ) ? .upgrade([:]) : .dontUpgrade
             }
 
@@ -1128,11 +1135,12 @@ struct Server: Sendable {
         let simulators = self.simulators
         let bindHost = self.host
         let bindPort = self.port
+        let allowedHosts = self.allowedHosts
         let trustedWebSocketUpgrade:
             @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
                 request, _ in
                 Self.isTrustedBrowserRequest(
-                    request, bindHost: bindHost, bindPort: bindPort
+                    request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
                 ) ? .upgrade([:]) : .dontUpgrade
             }
         router.ws(
@@ -1297,11 +1305,12 @@ struct Server: Sendable {
         let simulators = self.simulators
         let bindHost = self.host
         let bindPort = self.port
+        let allowedHosts = self.allowedHosts
         let trustedWebSocketUpgrade:
             @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
                 request, _ in
                 Self.isTrustedBrowserRequest(
-                    request, bindHost: bindHost, bindPort: bindPort
+                    request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
                 ) ? .upgrade([:]) : .dontUpgrade
             }
         router.ws(
@@ -1528,9 +1537,12 @@ struct Server: Sendable {
     private static func rejectUntrustedBrowserRequest(
         _ request: Request,
         bindHost: String,
-        bindPort: Int
+        bindPort: Int,
+        allowedHosts: Set<String> = []
     ) -> Response? {
-        guard !isTrustedBrowserRequest(request, bindHost: bindHost, bindPort: bindPort) else {
+        guard !isTrustedBrowserRequest(
+            request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
+        ) else {
             return nil
         }
         return errorJSON("forbidden origin", status: .forbidden)
@@ -1539,16 +1551,30 @@ struct Server: Sendable {
     /// Browsers can drive localhost services from another site unless the
     /// service checks `Origin`. For a loopback bind, also reject DNS-rebind
     /// style `Host` values that are not loopback names.
+    ///
+    /// Hosts in `allowedHosts` (exact or `*.suffix`) are trusted as
+    /// request Hosts and as browser Origins regardless of port, for
+    /// serving behind a reverse proxy.
     static func isTrustedBrowserRequest(
         _ request: Request,
         bindHost: String,
-        bindPort: Int
+        bindPort: Int,
+        allowedHosts: Set<String> = []
     ) -> Bool {
         if isLoopbackBind(bindHost),
            let authority = request.head.authority,
            let requestHost = parseAuthority(authority)?.host,
-           !isLoopbackHost(requestHost) {
+           !isLoopbackHost(requestHost),
+           !isAllowedHost(requestHost, allowedHosts) {
             return false
+        }
+
+        // An operator-trusted Origin is accepted outright, including from
+        // another site (a web app driving the API cross-origin).
+        if let origin = request.headers[.origin],
+           let originHost = URLComponents(string: origin)?.host,
+           isAllowedHost(originHost, allowedHosts) {
+            return true
         }
 
         if let fetchSite = request.headers[.secFetchSite]?.lowercased(),
@@ -1564,6 +1590,7 @@ struct Server: Sendable {
 
         let authority = request.head.authority ?? "\(bindHost):\(bindPort)"
         guard let requestAuthority = parseAuthority(authority) else { return false }
+
         let requestPort = requestAuthority.port ?? bindPort
         let originPort = originURL.port ?? defaultPort(for: originURL.scheme)
 
@@ -1575,6 +1602,66 @@ struct Server: Sendable {
 
         return originHost.caseInsensitiveCompare(requestAuthority.host) == .orderedSame
             && (originPort ?? requestPort) == requestPort
+    }
+
+    /// The Origin to reflect in CORS headers, or nil when it isn't an
+    /// allowed host. Lets a trusted cross-origin web app read API
+    /// responses with credentialed fetches.
+    static func corsAllowedOrigin(_ origin: String?, allowedHosts: Set<String>) -> String? {
+        guard let origin,
+              let host = URLComponents(string: origin)?.host,
+              isAllowedHost(host, allowedHosts) else { return nil }
+        return origin
+    }
+
+    /// The response for a CORS preflight from an allowed-host Origin,
+    /// or nil when the request is not such a preflight.
+    static func corsPreflightResponse(_ request: Request, allowedHosts: Set<String>) -> Response? {
+        guard request.method == .options,
+              let origin = corsAllowedOrigin(request.headers[.origin], allowedHosts: allowedHosts),
+              let method = request.headers[.accessControlRequestMethod] else { return nil }
+        var headers: HTTPFields = [
+            .accessControlAllowOrigin: origin,
+            .accessControlAllowCredentials: "true",
+            .accessControlAllowMethods: method,
+            .vary: "Origin",
+        ]
+        if let requested = request.headers[.accessControlRequestHeaders] {
+            headers[.accessControlAllowHeaders] = requested
+        }
+        return Response(status: .noContent, headers: headers)
+    }
+
+    private static func isAllowedHost(_ host: String, _ allowedHosts: Set<String>) -> Bool {
+        let lower = host.lowercased()
+        if allowedHosts.contains(lower) { return true }
+        return allowedHosts.contains {
+            $0.hasPrefix("*.") && lower.hasSuffix($0.dropFirst())
+        }
+    }
+
+    /// Reflects allowed-host Origins in CORS response headers, and answers
+    /// their preflights, so a trusted web app on another origin can call
+    /// the API with credentialed fetches.
+    struct AllowedHostsCORSMiddleware<Context: RequestContext>: RouterMiddleware {
+        let allowedHosts: Set<String>
+
+        func handle(
+            _ request: Request,
+            context: Context,
+            next: (Request, Context) async throws -> Response
+        ) async throws -> Response {
+            if let preflight = Server.corsPreflightResponse(request, allowedHosts: allowedHosts) {
+                return preflight
+            }
+            var response = try await next(request, context)
+            if let origin = Server.corsAllowedOrigin(request.headers[.origin], allowedHosts: allowedHosts) {
+                response.headers[.accessControlAllowOrigin] = origin
+                response.headers[.accessControlAllowCredentials] = "true"
+                response.headers[.vary] = "Origin"
+            }
+            return response
+        }
     }
 
     private static func parseAuthority(_ raw: String) -> (host: String, port: Int?)? {

@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …]`
+/// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …] [--allowed-hosts …]`
 ///
 /// Boots the standalone simulator UI. Open `http://<host>:<port>/`
 /// in a browser and the simulator picker loads — no SPA dependency,
@@ -21,6 +21,9 @@ struct ServeCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Custom CoreSimulator device-set path")
     var deviceSet: String?
 
+    @Option(name: .long, help: "Additional Host/Origin value to trust (repeatable; \"*.example.com\" matches subdomains)")
+    var allowedHosts: [String] = []
+
     func run() async throws {
         let server = Server(
             simulators: CoreSimulators(deviceSetPath: deviceSet),
@@ -29,7 +32,8 @@ struct ServeCommand: AsyncParsableCommand {
                 rasterizer: CoreGraphicsPDFRasterizer()
             ),
             host: host,
-            port: port
+            port: port,
+            allowedHosts: allowedHosts
         )
         try await server.run()
     }
