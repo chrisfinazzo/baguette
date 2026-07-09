@@ -19,6 +19,26 @@ struct KeyboardKeyTests {
         #expect(KeyboardKey.from(wireCode: "Digit0")?.hidUsage == HIDUsage(page: 7, usage: 0x27))
     }
 
+    @Test func `parses numpad wire codes onto HID keypad usages`() {
+        // Keypad block on HID page 7: 1-9 = 0x59..0x61, 0 = 0x62 (last,
+        // like the top-row digit quirk), decimal = 0x63; the operators
+        // and Enter (0x54..0x58) sit just below the digits, Equal (0x67)
+        // above the decimal. NumLock is out of scope — iOS has no
+        // num-lock concept.
+        let pairs: [(String, UInt32)] = [
+            ("Numpad1", 0x59), ("Numpad2", 0x5A), ("Numpad3", 0x5B),
+            ("Numpad4", 0x5C), ("Numpad5", 0x5D), ("Numpad6", 0x5E),
+            ("Numpad7", 0x5F), ("Numpad8", 0x60), ("Numpad9", 0x61),
+            ("Numpad0", 0x62), ("NumpadDecimal", 0x63),
+            ("NumpadDivide", 0x54), ("NumpadMultiply", 0x55),
+            ("NumpadSubtract", 0x56), ("NumpadAdd", 0x57),
+            ("NumpadEnter", 0x58), ("NumpadEqual", 0x67),
+        ]
+        for (code, expected) in pairs {
+            #expect(KeyboardKey.from(wireCode: code)?.hidUsage == HIDUsage(page: 7, usage: expected))
+        }
+    }
+
     @Test func `parses named special keys`() {
         let pairs: [(String, UInt32)] = [
             ("Enter", 0x28), ("Escape", 0x29), ("Backspace", 0x2A),
