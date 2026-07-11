@@ -105,6 +105,34 @@ brew install baguette
 Apple Silicon only. Requires Xcode 26 — `baguette` links against private
 SimulatorKit / CoreSimulator frameworks shipped with Xcode.
 
+### Troubleshooting
+
+If `brew install baguette` reports this on an Apple Silicon Mac:
+
+```text
+baguette requires Apple Silicon Homebrew running natively as arm64.
+
+Your brew process is running under Rosetta 2, usually from Intel
+Homebrew in /usr/local. Intel Homebrew cannot install baguette.
+
+Install with native Homebrew instead:
+
+  /opt/homebrew/bin/brew install baguette
+
+If /opt/homebrew/bin/brew does not exist, install native Homebrew
+from https://brew.sh, then run the command above.
+```
+
+Your `brew` is likely Intel Homebrew running under Rosetta 2 from
+`/usr/local`. Install with native Homebrew instead:
+
+```bash
+/opt/homebrew/bin/brew install baguette
+```
+
+If that path does not exist, install native Apple Silicon Homebrew from
+https://brew.sh first, then run the command above.
+
 ## Quickstart
 
 ```bash
