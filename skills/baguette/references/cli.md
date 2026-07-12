@@ -79,6 +79,7 @@ baguette type  --udid X --text "hello world"
 baguette paste --udid X --text "héllo 🥖 any unicode" [--no-press]   # via sim pasteboard + Cmd+V
 baguette clipboard get  --udid X        # print the sim's pasteboard text (raw, like pbpaste)
 baguette clipboard sync --udid X        # host Mac pasteboard → sim, full-fidelity (images too)
+baguette clipboard copy --udid X        # sim pasteboard → host Mac, full-fidelity (images too)
 ```
 
 `x` / `y` etc. are device points (see `wire-protocol.md` for the

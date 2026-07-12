@@ -54,6 +54,10 @@ final class SimctlPasteboard: Pasteboard, @unchecked Sendable {
         _ = try await capture(["simctl", "pbsync", "host", udid])
     }
 
+    func syncToHost() async throws {
+        _ = try await capture(["simctl", "pbsync", udid, "host"])
+    }
+
     /// Run `xcrun` collecting stdout; resolve with the collected
     /// output on exit 0, throw `simctlFailed` otherwise.
     private func capture(_ arguments: [String]) async throws -> String {

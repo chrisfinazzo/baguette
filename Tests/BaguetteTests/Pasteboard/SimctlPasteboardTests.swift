@@ -73,6 +73,13 @@ struct SimctlPasteboardTests {
         #expect(captures.stdin == nil)
     }
 
+    @Test func `syncToHost spawns simctl pbsync from the device to host`() async throws {
+        let (pasteboard, captures) = makePasteboard()
+        try await pasteboard.syncToHost()
+        #expect(captures.arguments == ["simctl", "pbsync", "U", "host"])
+        #expect(captures.stdin == nil)
+    }
+
     @Test func `a non-zero simctl exit propagates as a pasteboard failure`() async {
         let (pasteboard, _) = makePasteboard(exitCode: 3)
         var caught: PasteboardError?

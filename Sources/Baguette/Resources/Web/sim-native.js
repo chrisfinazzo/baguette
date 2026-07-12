@@ -380,6 +380,12 @@
         if (!env.ok) console.warn('[native] paste failed:', env.error || 'unknown');
         return true;
       }
+      if (env && env.type === 'copy_result') {
+        console.log(env.ok
+          ? '[native] copied sim pasteboard to host clipboard'
+          : '[native] copy failed: ' + (env.error || 'unknown'));
+        return true;
+      }
       return false;
     };
     session = new window.StreamSession({

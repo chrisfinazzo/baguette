@@ -176,6 +176,17 @@ Wired (use freely):
   (host Mac pasteboard → sim, full-fidelity — images included).
   Needs a booted device. See
   [`docs/features/paste.md`](../../docs/features/paste.md).
+- `copy` — the sim→host interactive mirror of `paste`: press Cmd+C
+  sim-side (focused field copies its selection), then ferry the
+  pasteboard onto the host Mac's clipboard, full-fidelity — images
+  included (`xcrun simctl pbsync <udid> host`). Wire:
+  `{"type":"copy","press":false?}` on the stream WS (replies
+  `copy_result`) and `input` stdin — `press:false` skips the
+  keystroke for a pure ferry. Browser **Cmd+C / Ctrl+C** while the
+  screen has focus sends it. CLI: `baguette clipboard copy --udid <X>`
+  is a pure ferry (no keystroke). Browser copy targets the machine
+  running baguette (local-dev happy path). Needs a booted device.
+  See [`docs/features/paste.md`](../../docs/features/paste.md).
 - `describe-ui` — dump the on-screen accessibility tree as JSON
   (per-node `role`, `label`, `value`, `identifier`, `frame` in
   device points, recursive `children`). CLI:

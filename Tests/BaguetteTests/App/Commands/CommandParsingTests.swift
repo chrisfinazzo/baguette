@@ -255,10 +255,16 @@ struct CommandParsingTests {
 
     // MARK: - clipboard
 
-    @Test func `clipboard lists get and sync leaves`() {
+    @Test func `clipboard lists get, sync and copy leaves`() {
         let names = ClipboardCommand.configuration.subcommands.map { $0.configuration.commandName }
-        #expect(Set(names) == ["get", "sync"])
+        #expect(Set(names) == ["get", "sync", "copy"])
         #expect(ClipboardCommand.configuration.commandName == "clipboard")
+    }
+
+    @Test func `clipboard copy parses --udid`() throws {
+        let cmd = try ClipboardCommand.Copy.parse(["--udid", "U"])
+        #expect(cmd.options.udid == "U")
+        #expect(ClipboardCommand.Copy.configuration.commandName == "copy")
     }
 
     @Test func `clipboard get parses --udid`() throws {

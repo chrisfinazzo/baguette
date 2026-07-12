@@ -238,6 +238,32 @@ On stdin it's the usual one-line `{"ok":…}` ack. Needs a booted
 device — a shutdown sim surfaces as a non-zero simctl exit in the
 ack.
 
+### Copy (sim selection → host Mac clipboard)
+
+```json
+{"type":"copy"}
+{"type":"copy","press":false}
+```
+
+The interactive mirror of `paste`: presses Cmd+C sim-side (so the
+focused field copies its selection into the pasteboard), then ferries
+that pasteboard onto the host Mac's clipboard, full-fidelity — images
+included (`simctl pbsync <udid> host`). `press` (optional, default
+`true`) — `false` skips the keystroke for a pure ferry of whatever the
+sim already holds. Works on both the stream WS and `baguette input`
+stdin. On the WS the reply is a typed text frame:
+
+```json
+{ "type": "copy_result", "ok": true }
+{ "type": "copy_result", "ok": false, "error": "xcrun simctl pasteboard command exited 1" }
+```
+
+On stdin it's the usual one-line `{"ok":…}` ack. Browser Cmd+C sends
+this verb; it targets the clipboard of the machine running baguette
+(local-dev happy path — a remote browser lands it on the server's
+Mac). A fixed ~200 ms settle sits between the Cmd+C and the pasteboard
+read. Needs a booted device.
+
 ## WebSocket-only verbs (during `baguette serve`)
 
 When connected to `WS /simulators/<UDID>/stream?format=…`, the same

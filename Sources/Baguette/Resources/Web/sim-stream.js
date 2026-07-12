@@ -170,6 +170,11 @@
         if (!env.ok) log('Paste failed: ' + (env.error || 'unknown'), true);
         return true;
       }
+      if (env && env.type === 'copy_result') {
+        log(env.ok ? 'Copied sim pasteboard to host clipboard'
+                   : 'Copy failed: ' + (env.error || 'unknown'), !env.ok);
+        return true;
+      }
       return false;
     };
 
