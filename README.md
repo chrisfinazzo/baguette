@@ -244,6 +244,7 @@ baguette <command> [options]
   paste --udid … --text "héllo 🥖" [--no-press]   # set pasteboard, then Cmd+V
   clipboard get  --udid …                          # print sim pasteboard (like pbpaste)
   clipboard sync --udid …                          # host Mac pasteboard → sim (images too)
+  clipboard copy --udid …                          # sim pasteboard → host Mac (images too)
 
   # Hardware + virtual buttons. Phone: home / lock / power / volume-up /
   # volume-down / action / app-switcher / swipe-to-app-switcher /
@@ -416,6 +417,11 @@ on stdout, one ack per line.
 // around `type`'s US-ASCII limit). `press:false` = set-only.
 {"type":"paste", "text":"héllo 🥖"}
 {"type":"paste", "text":"clipboard only", "press":false}
+
+// Copy — press Cmd+C sim-side (focused field copies its selection),
+// then ferry the pasteboard onto the host Mac (images included).
+// Browser Cmd+C sends this; `press:false` = pure ferry, no keystroke.
+{"type":"copy"}
 
 // Scroll
 {"type":"scroll", "deltaX":0, "deltaY":-50}

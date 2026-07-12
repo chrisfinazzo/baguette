@@ -1017,9 +1017,11 @@ struct Server: Sendable {
     ///   1. describe_ui      — needs the AX port + outbound writer
     ///   2. paste            — needs the async Pasteboard + outbound
     ///      writer (replies with a `paste_result` frame)
-    ///   3. ReconfigParser   — set_bitrate / set_fps / set_scale
-    ///   4. stream verbs     — force_idr / snapshot
-    ///   5. GestureDispatcher — tap / swipe / touch1-* / touch2-* /
+    ///   3. copy             — ferries the sim pasteboard onto the
+    ///      host Mac (replies with a `copy_result` frame)
+    ///   4. ReconfigParser   — set_bitrate / set_fps / set_scale
+    ///   5. stream verbs     — force_idr / snapshot
+    ///   6. GestureDispatcher — tap / swipe / touch1-* / touch2-* /
     ///      button / scroll / pinch / pan / key / type
     /// Lines not matched by any of the above are ignored — same
     /// graceful behaviour the stdin control channel has.
@@ -1067,6 +1069,12 @@ struct Server: Sendable {
                     continue
                 }
                 if let frame = await PasteDispatch.dispatch(
+                    line: line, pasteboard: pasteboard, input: input
+                ).resultFrame {
+                    try? await outbound.write(.text(frame))
+                    continue
+                }
+                if let frame = await CopyDispatch.dispatch(
                     line: line, pasteboard: pasteboard, input: input
                 ).resultFrame {
                     try? await outbound.write(.text(frame))

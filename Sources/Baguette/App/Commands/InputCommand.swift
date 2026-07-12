@@ -20,14 +20,21 @@ struct InputCommand: AsyncParsableCommand {
         let dispatcher = GestureDispatcher(input: input)
         log("Input session started, reading from stdin")
         while let line = readLine() {
-            // `paste` needs the async pasteboard surface, so it is
-            // intercepted ahead of the sync gesture pipeline —
-            // same shape as `describe_ui` on the WS path. Awaiting
+            // `paste` / `copy` need the async pasteboard surface, so
+            // they are intercepted ahead of the sync gesture pipeline
+            // — same shape as `describe_ui` on the WS path. Awaiting
             // in-line preserves the one-line-in/one-ack-out order.
-            let outcome = await PasteDispatch.dispatch(
+            if let ack = await PasteDispatch.dispatch(
                 line: line, pasteboard: pasteboard, input: input
-            )
-            print(outcome.ackJSON ?? dispatcher.dispatch(line: line))
+            ).ackJSON {
+                print(ack)
+            } else if let ack = await CopyDispatch.dispatch(
+                line: line, pasteboard: pasteboard, input: input
+            ).ackJSON {
+                print(ack)
+            } else {
+                print(dispatcher.dispatch(line: line))
+            }
             fflush(stdout)
         }
         log("stdin closed, input session ending")

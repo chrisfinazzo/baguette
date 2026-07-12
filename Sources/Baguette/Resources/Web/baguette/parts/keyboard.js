@@ -20,6 +20,14 @@
 // the browser so its native `paste` event fires; the document-level
 // listener below reads the clipboard text off the event and sends a
 // `{type:"paste"}` envelope (server: pbcopy, then Cmd+V sim-side).
+//
+// Copy is the mirror carve-out: Cmd+C / Ctrl+C is NOT forwarded as a
+// raw chord either — instead it sends a `{type:"copy"}` envelope. The
+// server presses Cmd+C sim-side (so the focused field copies its
+// selection), then ferries the sim's pasteboard onto the host Mac's
+// clipboard (pbsync <udid> host, images included). Perfect when the
+// browser shares the Mac that runs baguette; for a remote browser it
+// lands on the server's Mac.
 (function (root) {
   'use strict';
 
@@ -98,6 +106,14 @@
       this.transport._dispatch({ type: 'paste', text });
     }
 
+    /** Copy the focused field's selection out of the sim onto the
+     *  host Mac's clipboard (server: Cmd+C sim-side, then pbsync
+     *  <udid> host — images included). Mirror of `paste`; the server
+     *  replies with a `copy_result` frame. */
+    copy() {
+      this.transport._dispatch({ type: 'copy' });
+    }
+
     // --- internals ---
 
     _handle(ev) {
@@ -107,6 +123,14 @@
       // Paste carve-out: don't preventDefault the paste chord, or
       // the browser never fires the `paste` event _handlePaste needs.
       if ((ev.metaKey || ev.ctrlKey) && ev.code === 'KeyV') return;
+      // Copy carve-out: Cmd+C / Ctrl+C copies the sim's selection
+      // and ferries it to the host (server: Cmd+C + pbsync) rather
+      // than forwarding as a raw chord.
+      if ((ev.metaKey || ev.ctrlKey) && ev.code === 'KeyC') {
+        ev.preventDefault();
+        this.copy();
+        return;
+      }
       ev.preventDefault();
       const modifiers = [];
       if (ev.shiftKey)   modifiers.push('shift');

@@ -17,6 +17,12 @@ protocol Pasteboard: Sendable {
     /// Sync the host Mac's pasteboard onto the simulator,
     /// full-fidelity (all representations, images included).
     func syncFromHost() async throws
+
+    /// Sync the simulator's pasteboard onto the host Mac,
+    /// full-fidelity (all representations, images included) — the
+    /// mirror of `syncFromHost` and the path for pulling non-text
+    /// content the simulator copied back onto the Mac clipboard.
+    func syncToHost() async throws
 }
 
 /// Failure modes the pasteboard surface reports. The dispatch layer
