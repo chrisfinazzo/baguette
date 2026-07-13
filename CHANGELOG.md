@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.80] - 2026-07-13
+
 ### Added
 - **Copy out of the simulator onto the host Mac's clipboard — the sim→host direction, with Cmd+C.** Closes the gap the paste feature left open ("there's no sim→host reverse sync yet"): the interactive mirror of `paste`. Browser **Cmd+C / Ctrl+C** while the device screen has focus presses Cmd+C sim-side (so the focused field copies its selection into the simulator's pasteboard), then ferries that pasteboard onto the host Mac's clipboard **full-fidelity, images included** (`xcrun simctl pbsync <udid> host`) — the mirror of the Cmd+V paste carve-out. Three entry points share the path: the browser chord, wire JSON `{"type":"copy","press":true?}` on both `baguette serve`'s stream WS and `baguette input`'s stdin (acked WS-side with a typed `copy_result` frame), and `baguette clipboard copy --udid <UDID>` — a **pure ferry** (no keystroke, equivalent to `press:false`) that mirrors `clipboard sync` as the scripting primitive. Like `paste`, `copy` is deliberately **not** a `Gesture` (the pasteboard sync is an async host call out of reach of the sync, `Input`-only `Gesture.execute`), so both wire entry points intercept it ahead of the gesture pipeline via its own `Domain/Pasteboard/Copy` value + `App/CopyDispatch`. Built on one small addition — `Pasteboard.syncToHost()` (`pbsync <udid> host`, the exact mirror of `syncFromHost`'s `pbsync host <udid>`), fully unit-covered via `MockSubprocess`. One gotcha worth preserving: copy **reverses paste's order** — paste sets the pasteboard *before* the keystroke, copy reads it *after* — so a fixed ~200 ms settle covers the guest's key-event → `UIPasteboard` round-trip before the sync reads it back (a timing guess, not a handshake; `press:false` sidesteps it). Two more notes: copy only pulls a *selection* from views that honor hardware Cmd+C (editable fields) — elsewhere it's a no-op that just ferries the current pasteboard; and **browser Cmd+C targets the machine running baguette** (`pbsync … host` is the server's clipboard), which is exactly the local-dev case where the browser shares that Mac — a remote browser's Cmd+C lands on the server, not the viewer. No `navigator.clipboard` / Clipboard-API permission dance: the sync happens host-side. See [`docs/features/paste.md`](docs/features/paste.md).
 
@@ -223,7 +227,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.79...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.80...HEAD
+[0.1.80]: https://github.com/tddworks/baguette/compare/v0.1.79...v0.1.80
 [0.1.79]: https://github.com/tddworks/baguette/compare/v0.1.78...v0.1.79
 [0.1.78]: https://github.com/tddworks/baguette/compare/v0.1.77...v0.1.78
 [0.1.77]: https://github.com/tddworks/baguette/compare/v0.1.76...v0.1.77
