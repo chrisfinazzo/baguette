@@ -56,7 +56,7 @@
           const config = {
             codec: 'avc1.' + hex2(payload[1]) + hex2(payload[2]) + hex2(payload[3]),
             description: payload.buffer,
-            optimizeFor: 'latency',
+            optimizeForLatency: true,
             hardwareAcceleration: 'prefer-hardware',
           };
           // Diagnostic only: `prefer-hardware` silently falls back to a
