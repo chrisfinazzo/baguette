@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+- **Lower-latency H.264 (AVCC) streaming.** The single-sim tab (`/simulators/:udid`) defaults to H.264/AVCC while the device-farm grid uses MJPEG, and the AVCC path's felt "input latency" was dominated by frames sitting in the browser's WebCodecs `VideoDecoder` queue — the same decoder-hold the `AVCCStream` idle-pump already exists to work around. The `VTCompressionSession` now runs VideoToolbox's low-latency rate-control path (`kVTVideoEncoderSpecification_EnableLowLatencyRateControl`) with `MaxFrameDelayCount = 0`, which shrinks the encode pipeline and signals a minimal decoded-picture buffer so the decoder emits each frame immediately instead of buffering — noticeably tighter interaction with no change to bitrate, fps, or scale. The encoder's tuning knobs are lifted into a pure, unit-tested `H264Tuning` value (`.lowLatency` preset) so the "what config do we want" decision is covered apart from the irreducible VideoToolbox calls that apply it. The AVCC decoder also gained a **non-blocking diagnostic**: on configure it logs whether the negotiated profile/level decodes in hardware (`mediaCapabilities.decodingInfo().powerEfficient`), so a silent software-decode fallback — brutal at full-res 60 fps — surfaces in the console instead of masquerading as input lag. MJPEG is unaffected.
+
 ---
 
 ## [0.1.80] - 2026-07-13
