@@ -241,6 +241,8 @@ baguette location set   --udid <UDID> 37.3318,-122.0312          # pin a point  
 baguette location set   --udid <UDID> -- -37.8136,144.9631       # negative latitude: precede with --
 baguette location start --udid <UDID> --speed 260 --distance 1000 \
                         37.629538,-122.395733 40.628083,-73.768254  # moving route → simctl location start
+baguette location walk  --udid <UDID> --bearing 90 --speed 5 \
+                        37.3349,-122.0090                        # head east    → simctl location start
 baguette location clear --udid <UDID>                            # restore live  → simctl location clear
 ```
 
@@ -248,7 +250,22 @@ baguette location clear --udid <UDID>                            # restore live 
 |------------|-------------------------------------------------------------|-------------|
 | `set`      | one `lat,lon` token                                         | `set`       |
 | `start`    | two or more `lat,lon` tokens + `--speed`/`--distance`/`--interval` | `start` |
+| `walk`     | one `lat,lon` token + `--bearing` (deg from N) + `--speed` (m/s) | `start` (projected) |
 | `clear`    | (none)                                                      | `clear`     |
+
+`walk` is the shell spelling of the browser's joystick: it heads off from
+a position on a compass bearing and keeps going, which — unlike `set`'s
+stationary pin (`course = -1`) — makes locationd derive
+`CLLocation.course` from the travel. It projects a waypoint 600 s of
+travel ahead and hands it to `start`. Stop it with `location set` (pins
+it) or `location clear`. `--bearing` is normalised, so `-90` == `270`.
+
+Two iOS-26 limits worth knowing before relying on this: `CLHeading` (the
+magnetometer compass) is **unavailable in the simulator at all**, and
+`course` is derived on a flat lat/lon grid so **diagonal** bearings come
+back skewed by `1/cos(latitude)` (~6.5° at lat 37, ~18° at lat 60);
+cardinal bearings are exact everywhere. See
+[`docs/features/location.md`](../../docs/features/location.md).
 
 Position and waypoints are `lat,lon` **tokens** (not `--lat` / `--lon`
 flags) so a leading `-` in a western/southern coordinate isn't read as an

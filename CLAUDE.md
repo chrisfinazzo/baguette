@@ -111,6 +111,8 @@ Chicago-school state-based throughout. Every external boundary is an `@Mockable`
 - `key` / `type` keyboard input — not yet on the host-HID path; routed through external tooling.
 - `siri` button — crashes `backboardd` via every known Indigo path; explicitly rejected.
 - Single-finger streaming (`touch1-*`) routes correctly but `UIPinchGestureRecognizer` treats it as an interactive pan; prefer `touch2-*` for pinch / multi-finger.
+- `CLHeading` (the magnetometer compass) — unavailable in the simulator entirely: `CLLocationManager.headingAvailable()` returns `false`, and no simctl verb or private API changes it. Only `CLLocation.course` (direction of travel) is drivable, via a travelled `location start` route — see `docs/features/location.md`.
+- `CLLocation.course` skews on diagonal bearings — locationd derives it as `atan2(Δlon, Δlat)` on **raw degrees**, omitting the `cos(latitude)` convergence of meridians. A geodesically-correct due-NE route reports `Course,51.52` instead of 45° at lat 37 (0° at the equator, ~18° at lat 60); cardinal bearings are exact. Movement *is* on a true globe, so correct positions force a wrong course — the two can't both be right. baguette keeps positions truthful and documents the skew; don't "fix" it by projecting the device off-course.
 
 ## Further reading
 
