@@ -53,13 +53,43 @@
 
         if (type === 0x01) {
           // avcC description — configure the decoder.
+          const config = {
+            codec: 'avc1.' + hex2(payload[1]) + hex2(payload[2]) + hex2(payload[3]),
+            description: payload.buffer,
+            optimizeForLatency: true,
+            hardwareAcceleration: 'prefer-hardware',
+          };
+          // Diagnostic only: `prefer-hardware` silently falls back to a
+          // software decoder — brutal at full-res 60fps — with no error.
+          // `decodingInfo().powerEfficient` flags the hardware path so a
+          // fallback shows up in the log instead of as mystery lag.
+          const mc = navigator.mediaCapabilities;
+          if (mc && typeof mc.decodingInfo === 'function') {
+            mc.decodingInfo({
+              type: 'file',
+              video: {
+                contentType: 'video/mp4; codecs="' + config.codec + '"',
+                width: 1170, height: 2532, bitrate: 8000000, framerate: 60,
+              },
+            })
+              .then((info) => {
+                onLog && onLog(
+                  'decode: ' + (info.powerEfficient ? 'hardware' : 'SOFTWARE fallback')
+                  + ' (' + config.codec + ' — supported=' + info.supported
+                  + ' smooth=' + info.smooth + ' powerEfficient=' + info.powerEfficient + ')'
+                  + (info.powerEfficient ? '' : ' — H.264 latency will be poor'),
+                  !info.powerEfficient);
+              })
+              .catch((err) => {
+                onLog && onLog('decode: HW probe failed for ' + config.codec
+                  + ' — ' + ((err && err.message) || err), true);
+              });
+          } else {
+            onLog && onLog('decode: mediaCapabilities unavailable ('
+              + config.codec + ')', true);
+          }
           try {
-            decoder.configure({
-              codec: 'avc1.' + hex2(payload[1]) + hex2(payload[2]) + hex2(payload[3]),
-              description: payload.buffer,
-              optimizeFor: 'latency',
-              hardwareAcceleration: 'prefer-hardware',
-            });
+            decoder.configure(config);
           } catch (ex) { onLog && onLog('config: ' + ex.message, true); }
         } else if ((type === 0x02 || type === 0x03) && decoder.state === 'configured') {
           // 0x02 = key (IDR), 0x03 = delta.
