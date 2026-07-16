@@ -320,32 +320,50 @@ filtering, use `predicate=messageType == "error"`.
 ## Camera WebSocket — `WS /simulators/<UDID>/camera`
 
 Dedicated socket that drives the virtual-camera feature: baguette
-captures BGRA frames off a Mac webcam and pumps them into
-`/tmp/SimCam.bgra`, where `VirtualCamera.dylib` (loaded inside the
-simulator via `DYLD_INSERT_LIBRARIES`) picks them up and substitutes
-them for the iOS app's `AVCaptureVideoPreviewLayer` /
-`AVCapturePhotoOutput` / `UIImagePickerController` contents.
+pumps BGRA frames into `/tmp/SimCam.bgra`, where `VirtualCamera.dylib`
+(loaded inside the simulator via `DYLD_INSERT_LIBRARIES`) picks them up
+and substitutes them for the iOS app's `AVCaptureVideoPreviewLayer` /
+`AVCapturePhotoOutput` / `UIImagePickerController` contents. The frame
+source is a live Mac webcam, an uploaded still image, or a looping
+uploaded video.
 
 Client → server text frames:
 
 ```json
 {"type":"camera_list"}
-{"type":"camera_start","deviceUID":"0x14600000046d0825","fit":"fit","mirror":false}
+{"type":"camera_start","source":"webcam","deviceUID":"0x14600000046d0825","fit":"fit","mirror":false}
+{"type":"camera_start","source":"image","fit":"fit","mirror":false}
+{"type":"camera_start","source":"video","fit":"fill","mirror":false}
 {"type":"camera_stop"}
 {"type":"camera_set_flags","fit":"fill","mirror":true}
 ```
+
+`source` is `"webcam"` (default if omitted) | `"image"` | `"video"`.
+`deviceUID` is required for `webcam` and ignored otherwise. For
+`image` / `video` there is **no path on the wire** — upload the file
+first:
+
+```
+POST /simulators/<UDID>/camera-source?name=<filename>   (raw bytes)
+  → {"ok":true,"kind":"image"}     # or "video"
+```
+
+Accepts `png jpg jpeg gif heic heif` (image) and `mov mp4 m4v`
+(video). The upload is staged per-udid and replaces any previous one;
+`camera_start` then resolves it by `source` kind.
 
 Server → client text frames:
 
 ```json
 {"type":"camera_devices","devices":[{"uid":"…","name":"FaceTime HD Camera","isDefault":true}]}
-{"type":"camera_state","ok":true,"phase":"streaming","fps":29.97,"device":"0x14600000046d0825"}
+{"type":"camera_state","ok":true,"phase":"streaming","fps":29.97,"source":"webcam","device":"0x14600000046d0825"}
 {"type":"camera_state","ok":false,"phase":"idle","fps":0,"error":"…"}
 ```
 
 `camera_devices` lands once on connect, again after every
-`camera_list`. `camera_state` lands after every start/stop/set_flags.
-`fit` is one of `"fit"` (letterbox) | `"fill"` (cover with
+`camera_list`. `camera_state` lands after every start/stop/set_flags;
+`source` names the active producer and `device` is present only for a
+webcam. `fit` is one of `"fit"` (letterbox) | `"fill"` (cover with
 center-crop). The browser exposes this as the "Camera" card under
 `/simulators/<UDID>`'s sidebar. iOS apps launched *before* arming
 won't see frames — relaunch them. See

@@ -293,6 +293,41 @@ struct Server: Sendable {
             }
         }
 
+        // Camera source upload: an image / video the simulator's camera
+        // streams from. Unlike /files (consumed synchronously by simctl
+        // inside the request), these bytes must OUTLIVE the POST — the
+        // camera WebSocket streams them later — so they're staged into a
+        // persistent per-udid slot and remembered by CameraSourceStaging.
+        router.post("/simulators/:udid/camera-source") { r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let udid = Self.udidParam(r)
+            let rawName = String(r.uri.queryParameters.get("name") ?? "source")
+            let filename = (rawName as NSString).lastPathComponent
+            let nameURL = URL(fileURLWithPath: filename)
+
+            // Cheap reject before reading the body: only images/videos
+            // can drive the camera.
+            guard let kind = CameraMediaKind.at(nameURL) else {
+                return errorJSON(
+                    "no camera source for .\(nameURL.pathExtension) (images and videos only)",
+                    status: .unsupportedMediaType
+                )
+            }
+            guard let buffer = try? await r.body.collect(upTo: Self.maxUploadBytes) else {
+                return errorJSON("upload too large (max \(Self.maxUploadBytes / (1 << 20)) MiB) or unreadable", status: .badRequest)
+            }
+            do {
+                try await CameraSourceStaging.shared.stage(
+                    udid: udid, filename: filename, data: Data(buffer: buffer)
+                )
+            } catch {
+                return errorJSON("could not stage camera source: \(error)", status: .internalServerError)
+            }
+            let json = "{\"ok\":true,\"kind\":\"\(kind == .image ? "image" : "video")\"}"
+            return Response(status: .ok, headers: [.contentType: "application/json"],
+                            body: .init(byteBuffer: ByteBuffer(string: json)))
+        }
+
         // Chrome / bezel — DeviceKit-sourced layout + rasterized PNG.
         router.get("/simulators/:udid/chrome.json") { [simulators, chromes] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -1365,7 +1400,9 @@ struct Server: Sendable {
             return
         }
         let session = CameraSession(
-            capture: AVCameraCapture(),
+            webcam: AVCameraCapture(),
+            image: ImageFileCapture(),
+            video: VideoFileCapture(),
             sink: sink,
             injection: SimctlSimulatorInjection()
         )
@@ -1375,6 +1412,9 @@ struct Server: Sendable {
         await sendDeviceList(cameras: cameras, outbound: outbound)
 
         defer { Task { await session.stop() } }
+        // Drop any uploaded image/video source when the socket closes so
+        // a stale file can't leak into the next session.
+        defer { CameraSourceStaging.shared.clear(udid: udid) }
 
         // 1-Hz heartbeat: sample FPS off the frame counter and push
         // `camera_state` so the browser's "streaming · X fps" readout
@@ -1432,14 +1472,37 @@ struct Server: Sendable {
         switch msg {
         case .list:
             await sendDeviceList(cameras: cameras, outbound: outbound)
-        case .start(let uid, let flags):
+        case .start(let startSource, let flags):
             session.setFlags(flags)
-            let devices = await cameras.available()
-            guard let device = devices.first(where: { $0.uid == uid }) else {
-                try? await outbound.write(.text(
-                    #"{"type":"camera_state","ok":false,"error":"unknown camera deviceUID"}"#
-                ))
-                return
+            let source: CameraSource
+            switch startSource {
+            case .webcam(let uid):
+                let devices = await cameras.available()
+                guard devices.contains(where: { $0.uid == uid }) else {
+                    try? await outbound.write(.text(
+                        #"{"type":"camera_state","ok":false,"error":"unknown camera deviceUID"}"#
+                    ))
+                    return
+                }
+                source = .device(uid: uid)
+            case .image, .video:
+                guard let path = CameraSourceStaging.shared.path(udid: sim.udid) else {
+                    try? await outbound.write(.text(
+                        #"{"type":"camera_state","ok":false,"error":"no file uploaded — drop an image or video on the camera card first"}"#
+                    ))
+                    return
+                }
+                // Guard against a start that names a different kind than
+                // the staged file (e.g. an image staged, "video" started).
+                let stagedKind = CameraMediaKind.at(URL(fileURLWithPath: path))
+                let wantImage = (startSource == .image)
+                guard stagedKind == (wantImage ? .image : .video) else {
+                    try? await outbound.write(.text(
+                        #"{"type":"camera_state","ok":false,"error":"the uploaded file doesn't match the selected source kind"}"#
+                    ))
+                    return
+                }
+                source = wantImage ? .image(path: path) : .video(path: path)
             }
             guard let dylibPath = VirtualCameraInstaller.installIfNeeded() else {
                 try? await outbound.write(.text(
@@ -1447,7 +1510,7 @@ struct Server: Sendable {
                 ))
                 return
             }
-            await session.start(device: device, on: sim, dylibPath: dylibPath)
+            await session.start(source: source, on: sim, dylibPath: dylibPath)
             await sendCameraState(session: session, outbound: outbound)
         case .stop:
             await session.stop()
@@ -1478,10 +1541,12 @@ struct Server: Sendable {
         outbound: WebSocketOutboundWriter
     ) async {
         let phase: String
+        var sourceKind: String? = nil
         var deviceUID: String? = nil
-        if case .streaming(let uid) = session.phase {
+        if case .streaming(let source) = session.phase {
             phase = "streaming"
-            deviceUID = uid
+            sourceKind = source.wireKind
+            if case .device(let uid) = source { deviceUID = uid }
         } else {
             phase = "idle"
         }
@@ -1491,6 +1556,7 @@ struct Server: Sendable {
             "phase": phase,
             "fps": session.fps,
         ]
+        if let kind = sourceKind { payload["source"] = kind }
         if let uid = deviceUID { payload["device"] = uid }
         if let err = session.lastError { payload["error"] = err }
         if let bytes = try? JSONSerialization.data(withJSONObject: payload),

@@ -28,6 +28,7 @@
 #import "SimCamPreviewLayerDriver.h"
 #import "SimCamSharedFrameReader.h"
 #import "SimCamFakePhoto.h"
+#import "SimCamVirtualCamera.h"
 
 @interface SimCamInjectMarker : NSObject
 @end
@@ -253,6 +254,29 @@ static void simcam_capturePhoto(id self,
             delegate, cgImage ? @"ok" : @"nil");
 }
 
+#pragma mark - AVCaptureSession
+
+/// In the simulator there is no capture device, so `initializeCaptureSessionInput`
+/// adds no inputs. The real `-[AVCaptureSession startRunning]` on such a session
+/// can block the caller's (usually serial) session queue waiting for hardware
+/// that never arrives — which stalls any app that fires its "camera ready"
+/// signal only *after* startRunning returns (expo-camera's `onCameraReady`,
+/// dispatched right after `updateCameraIsActive()`, is the canonical case).
+/// The app then keeps a loading cover over the preview forever.
+///
+/// baguette paints the preview from the shared buffer regardless of whether the
+/// session is "running", so when there is no video device we skip the blocking
+/// original and let the queue proceed — the ready callback fires and the app
+/// reveals the preview. With a real device (including Mac-camera passthrough)
+/// we call through untouched.
+static void simcam_startRunning(id self, SEL _cmd) {
+    if ([AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo] == nil) {
+        NSLog(@"[SimCamInject] startRunning: no capture device — skipping blocking start so onCameraReady can fire");
+        return;
+    }
+    ((void (*)(id, SEL))gOriginalStartRunning)(self, _cmd);
+}
+
 #pragma mark - UIImagePickerController
 
 /// Class-method swizzle: report `.camera` (= 1) as available so apps that
@@ -411,6 +435,19 @@ static void simcam_install(void) {
             }
         }
 
+        // Keep a device-less session's -startRunning from blocking the
+        // session queue, so apps that gate "camera ready" on it proceed.
+        Class sessionClass = NSClassFromString(@"AVCaptureSession");
+        if (sessionClass) {
+            Method startRunning = class_getInstanceMethod(
+                    sessionClass, NSSelectorFromString(@"startRunning"));
+            if (startRunning) {
+                gOriginalStartRunning =
+                        method_setImplementation(startRunning, (IMP)simcam_startRunning);
+                NSLog(@"[SimCamInject] AVCaptureSession startRunning: hooked");
+            }
+        }
+
         // UIImagePickerController hooks: make `.camera` source type usable
         // in the simulator and install our own viewfinder UI on appear.
         Class pickerClass = NSClassFromString(@"UIImagePickerController");
@@ -450,5 +487,10 @@ static void simcam_install(void) {
         }
 
         NSLog(@"[SimCamInject] AVCaptureVideoPreviewLayer setSession: hooked");
+
+        // Full virtual-camera graph: fabricated device + dummy input + session
+        // interception + CMSampleBuffer delivery, so unmodified capture apps
+        // see a working camera on a device-less simulator.
+        SimCamInstallVirtualCamera();
     }
 }

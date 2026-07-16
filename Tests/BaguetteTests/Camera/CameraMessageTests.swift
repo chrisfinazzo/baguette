@@ -10,7 +10,7 @@ struct CameraMessageTests {
         #expect(msg == .list)
     }
 
-    @Test func `parses camera_start with device + flags`() throws {
+    @Test func `parses camera_start with a webcam device + flags`() throws {
         let msg = try CameraMessage.parse([
             "type": "camera_start",
             "deviceUID": "U-1",
@@ -18,16 +18,46 @@ struct CameraMessageTests {
             "mirror": true,
         ])
         #expect(msg == .start(
-            deviceUID: "U-1",
+            source: .webcam(deviceUID: "U-1"),
             flags: CameraFlags(fillGravity: true, mirror: true)
         ))
+    }
+
+    @Test func `an explicit webcam source parses like the default`() throws {
+        let msg = try CameraMessage.parse([
+            "type": "camera_start", "source": "webcam", "deviceUID": "U-1",
+        ])
+        #expect(msg == .start(source: .webcam(deviceUID: "U-1"), flags: CameraFlags()))
+    }
+
+    @Test func `an image source needs no deviceUID`() throws {
+        let msg = try CameraMessage.parse([
+            "type": "camera_start", "source": "image", "fit": "fill",
+        ])
+        #expect(msg == .start(
+            source: .image,
+            flags: CameraFlags(fillGravity: true, mirror: false)
+        ))
+    }
+
+    @Test func `a video source needs no deviceUID`() throws {
+        let msg = try CameraMessage.parse([
+            "type": "camera_start", "source": "video",
+        ])
+        #expect(msg == .start(source: .video, flags: CameraFlags()))
+    }
+
+    @Test func `an unknown source kind fails parse`() {
+        #expect(throws: (any Error).self) {
+            try CameraMessage.parse(["type": "camera_start", "source": "hologram"])
+        }
     }
 
     @Test func `camera_start defaults missing flags to fit + no mirror`() throws {
         let msg = try CameraMessage.parse([
             "type": "camera_start", "deviceUID": "U",
         ])
-        #expect(msg == .start(deviceUID: "U", flags: CameraFlags()))
+        #expect(msg == .start(source: .webcam(deviceUID: "U"), flags: CameraFlags()))
     }
 
     @Test func `parses camera_stop`() throws {
@@ -50,7 +80,7 @@ struct CameraMessageTests {
         }
     }
 
-    @Test func `missing deviceUID on camera_start fails parse`() {
+    @Test func `missing deviceUID on a webcam camera_start fails parse`() {
         #expect(throws: (any Error).self) {
             try CameraMessage.parse(["type": "camera_start"])
         }

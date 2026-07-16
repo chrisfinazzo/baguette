@@ -11,6 +11,11 @@
 // pumps the chosen camera's BGRA frames into `/tmp/SimCam.bgra` — a
 // shared-memory ring buffer the VirtualCamera dylib reads inside the
 // simulator. See `docs/features/camera.md`.
+//
+// The source can also be an uploaded still image or a looping video
+// instead of a live webcam: pick image/video, choose a file (POSTed to
+// `/simulators/<udid>/camera-source`), then Start. The Mac side decodes
+// and fits it into the same shared buffer, so the dylib is unchanged.
 
 (function () {
   'use strict';
@@ -37,6 +42,9 @@
       this.ws = null;
       this.devices = [];
       this.selectedUID = null;
+      this.source = 'webcam';      // 'webcam' | 'image' | 'video'
+      this.uploaded = null;        // { kind, name } after a successful upload
+      this._resumeOnReady = false; // resume streaming once a switched-to file uploads
       this.phase = 'idle';
       this.fps = 0;
       this.fit = 'fit';
@@ -121,7 +129,24 @@
       this.host.innerHTML = '';
       this.host.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
 
-      // Device row.
+      // Source row: webcam / image / video.
+      const row0 = document.createElement('div');
+      row0.setAttribute('style', ROW_STYLE);
+      row0.appendChild(document.createTextNode('Source:'));
+      const sourceSel = document.createElement('select');
+      sourceSel.setAttribute('style', SELECT_STYLE);
+      sourceSel.dataset.cameraSource = '1';
+      [['webcam', 'Webcam'], ['image', 'Image file'], ['video', 'Video file']].forEach(([v, label]) => {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = label;
+        sourceSel.appendChild(o);
+      });
+      sourceSel.value = this.source;
+      sourceSel.onchange = (ev) => this._onSourceChange(ev.target.value);
+      row0.appendChild(sourceSel);
+      this.host.appendChild(row0);
+
+      // Device row (webcam only).
       const row1 = document.createElement('div');
       row1.setAttribute('style', ROW_STYLE);
       const select = document.createElement('select');
@@ -137,6 +162,35 @@
       refresh.onclick = () => this._send({ type: 'camera_list' });
       row1.appendChild(refresh);
       this.host.appendChild(row1);
+      this._deviceRow = row1;
+
+      // File row (image/video only): choose a file, upload it.
+      const rowFile = document.createElement('div');
+      rowFile.setAttribute('style', 'display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:4px 0');
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.style.display = 'none';
+      fileInput.onchange = (ev) => {
+        const f = ev.target.files && ev.target.files[0];
+        if (f) this._uploadFile(f);
+      };
+      const chooseBtn = document.createElement('button');
+      chooseBtn.type = 'button';
+      chooseBtn.textContent = 'Choose file…';
+      chooseBtn.setAttribute('style', BTN_STYLE + 'align-self:flex-start');
+      chooseBtn.onclick = () => fileInput.click();
+      const fileName = document.createElement('span');
+      fileName.dataset.cameraFilename = '1';
+      fileName.style.cssText = 'display:block;max-width:100%;font-size:11px;color:var(--text-muted,#94a3b8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      fileName.textContent = 'no file chosen';
+      rowFile.appendChild(chooseBtn);
+      rowFile.appendChild(fileName);
+      rowFile.appendChild(fileInput);
+      rowFile.style.display = 'none';
+      this.host.appendChild(rowFile);
+      this._fileRow = rowFile;
+      this._fileInput = fileInput;
 
       // Start/Stop + status.
       const row2 = document.createElement('div');
@@ -234,17 +288,100 @@
       }
     }
 
-    _onToggle() {
-      if (this.phase === 'streaming') {
+    _onSourceChange(value) {
+      const wasStreaming = this.phase === 'streaming';
+      this._resumeOnReady = false;
+      this.source = value;
+      if (this._deviceRow) this._deviceRow.style.display = value === 'webcam' ? '' : 'none';
+      if (this._fileRow) this._fileRow.style.display = value === 'webcam' ? 'none' : '';
+      if (this._fileInput) this._fileInput.accept = value === 'video' ? 'video/*' : 'image/*';
+      // A file staged for one kind doesn't carry over to the other.
+      if (this.uploaded && this.uploaded.kind !== value) this.uploaded = null;
+      this._renderFileName();
+
+      // Switch live: stop the old stream and start the new source without a
+      // manual Stop/Start. If the new source isn't ready (no file chosen yet),
+      // resume automatically once one is uploaded.
+      if (wasStreaming) {
         this._send({ type: 'camera_stop' });
-      } else if (this.selectedUID) {
+        if (this._sourceReady()) this._startCurrent();
+        else this._resumeOnReady = true;
+      }
+    }
+
+    /** True when the current source has everything it needs to start. */
+    _sourceReady() {
+      if (this.source === 'webcam') return !!this.selectedUID;
+      return !!(this.uploaded && this.uploaded.kind === this.source);
+    }
+
+    /** Send `camera_start` for the current source if it's ready. */
+    _startCurrent() {
+      if (!this._sourceReady()) return;
+      if (this.source === 'webcam') {
         this._send({
           type: 'camera_start',
+          source: 'webcam',
           deviceUID: this.selectedUID,
           fit: this.fit,
           mirror: this.mirror,
         });
+      } else {
+        this._send({
+          type: 'camera_start',
+          source: this.source,
+          fit: this.fit,
+          mirror: this.mirror,
+        });
       }
+    }
+
+    _renderFileName() {
+      if (!this.host) return;
+      const el = this.host.querySelector('[data-camera-filename]');
+      if (!el) return;
+      el.textContent = this.uploaded ? this.uploaded.name : 'no file chosen';
+    }
+
+    async _uploadFile(file) {
+      const status = this.host && this.host.querySelector('[data-camera-status]');
+      const setStatus = (color, text) => {
+        if (status) { status.style.color = color; status.textContent = text; }
+      };
+      setStatus('var(--text-muted,#94a3b8)', 'uploading ' + file.name + '…');
+      try {
+        const url = `/simulators/${encodeURIComponent(this.udid)}/camera-source?name=${encodeURIComponent(file.name)}`;
+        const res = await fetch(url, { method: 'POST', body: file });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          this.uploaded = null;
+          setStatus('var(--danger,#b91c1c)', (data && data.error) || ('upload failed (' + res.status + ')'));
+        } else {
+          this.uploaded = { kind: data.kind, name: file.name };
+          // If a live source-switch is waiting on this file, resume now;
+          // otherwise just enable Start.
+          if (this._resumeOnReady) {
+            this._resumeOnReady = false;
+            setStatus('var(--text-muted,#94a3b8)', 'starting…');
+            this._startCurrent();
+          } else {
+            setStatus('var(--text-muted,#94a3b8)', 'ready — press Start');
+          }
+        }
+      } catch (e) {
+        this.uploaded = null;
+        setStatus('var(--danger,#b91c1c)', 'upload error');
+      }
+      this._renderFileName();
+    }
+
+    _onToggle() {
+      if (this.phase === 'streaming') {
+        this._resumeOnReady = false;
+        this._send({ type: 'camera_stop' });
+        return;
+      }
+      this._startCurrent();
     }
   }
 

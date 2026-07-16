@@ -4,9 +4,19 @@ import Foundation
 /// — parses straight off the decoded JSON dict, ignoring transport
 /// concerns. The Server route closure switches on this and drives
 /// the `CameraSession`.
+/// Which producer a `camera_start` selects. The webcam carries its
+/// `deviceUID`; the file kinds carry nothing — the server resolves the
+/// staged host file from its own per-udid registry, so the browser
+/// never hands a filesystem path across the wire.
+enum CameraStartSource: Equatable, Sendable {
+    case webcam(deviceUID: String)
+    case image
+    case video
+}
+
 enum CameraMessage: Equatable {
     case list
-    case start(deviceUID: String, flags: CameraFlags)
+    case start(source: CameraStartSource, flags: CameraFlags)
     case stop
     case setFlags(CameraFlags)
 
@@ -18,16 +28,31 @@ enum CameraMessage: Equatable {
         case "camera_list":
             return .list
         case "camera_start":
-            guard let uid = json["deviceUID"] as? String else {
-                throw CameraMessageError.missingField("deviceUID")
-            }
-            return .start(deviceUID: uid, flags: parseFlags(json))
+            return .start(source: try parseStartSource(json), flags: parseFlags(json))
         case "camera_stop":
             return .stop
         case "camera_set_flags":
             return .setFlags(parseFlags(json))
         default:
             throw CameraMessageError.unknownType(type)
+        }
+    }
+
+    /// A missing `source` defaults to `"webcam"` for backward
+    /// compatibility with clients that only send `deviceUID`.
+    private static func parseStartSource(_ json: [String: Any]) throws -> CameraStartSource {
+        switch json["source"] as? String ?? "webcam" {
+        case "webcam":
+            guard let uid = json["deviceUID"] as? String else {
+                throw CameraMessageError.missingField("deviceUID")
+            }
+            return .webcam(deviceUID: uid)
+        case "image":
+            return .image
+        case "video":
+            return .video
+        case let other:
+            throw CameraMessageError.unknownType(other)
         }
     }
 

@@ -562,12 +562,14 @@ feature lives in one place across both layers.
 │   │   ├── Logs/                     LogFilter + LogStream + Subprocess
 │   │   │                             collaborator
 │   │   └── Camera/                   CameraDevice / CameraFrame / CameraFlags /
+│   │                                 CameraSource / CameraMediaKind / ScaleToFit /
 │   │                                 SharedFrameLayout / BGRAConverter /
+│   │                                 DecodedVideoFrame /
 │   │                                 CameraSession (orchestrator, @MainActor) /
 │   │                                 CameraMessage (WS parser) /
 │   │                                 VirtualCameraInstallPlan + @Mockable
 │   │                                 Cameras / CameraCapture / CameraFrameSink /
-│   │                                 SimulatorInjection / VideoCapture
+│   │                                 SimulatorInjection / VideoCapture / VideoDecoder
 │   │
 │   ├── Infrastructure/               concrete @Mockable port impls (private-API
 │   │                                 code lives ONLY here)
@@ -590,6 +592,9 @@ feature lives in one place across both layers.
 │   │   ├── Camera/                   AVCameras + AVCameraCapture (orchestrator) +
 │   │   │                             HostVideoCapture (integration-only
 │   │   │                             AVCaptureSession plumbing) +
+│   │   │                             ImageFileCapture + StillImage (decode) +
+│   │   │                             VideoFileCapture + AVVideoDecoder (loop) +
+│   │   │                             CameraSourceStaging (per-udid upload slot) +
 │   │   │                             SharedMemoryFrameSink (mmap'd ring buffer)
 │   │   │                             + SimctlSimulatorInjection (Subprocess)
 │   │   │                             + VirtualCameraInstaller (bundle →

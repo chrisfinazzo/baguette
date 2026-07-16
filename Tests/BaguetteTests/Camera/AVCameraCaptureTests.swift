@@ -24,18 +24,25 @@ struct AVCameraCaptureTests {
         return (capture, video, cap)
     }
 
-    private static let device = CameraDevice(uid: "U", name: "FaceTime", isDefault: true)
+    private static let webcam = CameraSource.device(uid: "U")
 
     @Test func `start forwards the device UID into the video collaborator`() async throws {
         let (capture, _, cap) = makeCapture()
-        try await capture.start(device: Self.device) { _ in }
+        try await capture.start(source: Self.webcam) { _ in }
         #expect(cap.startedDeviceUID == "U")
+    }
+
+    @Test func `start rejects a file source it can't produce`() async {
+        let (capture, _, _) = makeCapture()
+        await #expect(throws: (any Error).self) {
+            try await capture.start(source: .image(path: "/tmp/pic.png")) { _ in }
+        }
     }
 
     @Test func `incoming raw frames are converted via BGRAConverter and forwarded`() async throws {
         let (capture, _, cap) = makeCapture()
         let received = Recorder<CameraFrame>()
-        try await capture.start(device: Self.device) { frame in
+        try await capture.start(source: Self.webcam) { frame in
             received.record(frame)
         }
 
@@ -61,7 +68,7 @@ struct AVCameraCaptureTests {
     @Test func `frame sequence monotonically increments across deliveries`() async throws {
         let (capture, _, cap) = makeCapture()
         let received = Recorder<CameraFrame>()
-        try await capture.start(device: Self.device) { received.record($0) }
+        try await capture.start(source: Self.webcam) { received.record($0) }
         let pixels = Data(repeating: 0, count: 16)
         pixels.withUnsafeBytes { ptr in
             let raw = RawBGRAFrame(
@@ -75,7 +82,7 @@ struct AVCameraCaptureTests {
 
     @Test func `stop tears down the video collaborator`() async throws {
         let (capture, _, cap) = makeCapture()
-        try await capture.start(device: Self.device) { _ in }
+        try await capture.start(source: Self.webcam) { _ in }
         await capture.stop()
         #expect(cap.stopCount == 1)
     }

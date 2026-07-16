@@ -203,13 +203,17 @@ Wired (use freely):
   emits `{"type":"log","line":"..."}` text frames per entry.
   Levels: only `default | info | debug` (iOS-runtime narrow — host
   `notice / error / fault` are rejected at the wire).
-- `camera` — pipe a Mac webcam (FaceTime HD, USB, Continuity Camera)
-  into the iOS app's `AVCaptureVideoPreviewLayer` /
-  `AVCapturePhotoOutput` / `UIImagePickerController`. No CLI in v1;
-  use the WS at `WS /simulators/<UDID>/camera` — `camera_list` /
-  `camera_start` / `camera_stop` / `camera_set_flags` upstream,
-  `camera_devices` / `camera_state` downstream (phase = `idle |
-  streaming`, plus live `fps`). Frames flow through `/tmp/SimCam.bgra`
+- `camera` — pipe a camera source (a live Mac webcam, an uploaded
+  still image, or a looping uploaded video) into the iOS app's
+  `AVCaptureVideoPreviewLayer` / `AVCapturePhotoOutput` /
+  `UIImagePickerController`. No CLI; use the WS at
+  `WS /simulators/<UDID>/camera` — `camera_list` / `camera_start`
+  (with `source: webcam | image | video`) / `camera_stop` /
+  `camera_set_flags` upstream, `camera_devices` / `camera_state`
+  downstream (phase = `idle | streaming`, plus live `fps` and active
+  `source`). Image/video files upload first via
+  `POST /simulators/<UDID>/camera-source?name=<file>`. Frames flow
+  through `/tmp/SimCam.bgra`
   (24-byte LE header + BGRA pixels) into `VirtualCamera.dylib`
   loaded inside the simulator via `DYLD_INSERT_LIBRARIES`. Apps
   launched *before* arming don't load the dylib — relaunch them.
