@@ -1,7 +1,5 @@
 import Testing
 import Foundation
-import AVFoundation
-import CoreVideo
 @testable import Baguette
 
 /// `AVVideoDecoder` is the AVFoundation half of video-file playback.
@@ -11,69 +9,40 @@ import CoreVideo
 /// down — the BGRA request, the fit, the row-padding strip, rewinding,
 /// the not-started/no-track errors — only exist against `AVAssetReader`.
 ///
-/// The asset is synthesized into a temp file (the same way
-/// `ImageFileCaptureTests` writes a PNG), so this needs no fixture, no
-/// booted simulator and no camera.
+/// The assets are pre-encoded fixtures rather than clips synthesised per
+/// run: encoding H.264 needs a working VideoToolbox encoder, which a CI
+/// runner may not have, and an encoder that can't start stalls the write
+/// rather than failing it. Decoding needs no encoder, so reading a
+/// committed clip keeps the suite honest everywhere.
+///
+/// Both fixtures hold 4 frames at 30 fps of solid grey ramping 40, 60,
+/// 80, 100 — consecutive frames decode to distinct pixels, which is what
+/// lets the rewind test prove it landed back on frame 0 specifically.
+/// Regenerate with `Tests/BaguetteTests/Fixtures/README.md`.
 @Suite("AVVideoDecoder")
 struct AVVideoDecoderTests {
 
-    /// Write a short H.264 clip of solid-colour frames at 30 fps.
-    /// 2000×1000 forces a downscale against the 1280 canvas cap; the
-    /// odd aspect also proves the fit isn't square.
-    private func writeTempVideo(
-        width: Int = 2000, height: Int = 1000, frames: Int = 6
-    ) async throws -> String {
-        let url = FileManager.default.temporaryDirectory
+    /// Copy a fixture out of the test bundle into a temp file. The
+    /// decoder takes a path, and a caller staging an upload hands it one
+    /// in a temp dir — so read it the same way rather than off the
+    /// bundle's read-only resource path.
+    private func fixture(_ name: String) throws -> String {
+        let url = try #require(
+            Bundle.module.url(forResource: name, withExtension: "mp4", subdirectory: "Fixtures"),
+            "missing fixture \(name).mp4 — see Fixtures/README.md"
+        )
+        let copy = FileManager.default.temporaryDirectory
             .appendingPathComponent("baguette-vidtest-\(UUID().uuidString).mp4")
-
-        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
-        let input = AVAssetWriterInput(
-            mediaType: .video,
-            outputSettings: [
-                AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: width,
-                AVVideoHeightKey: height,
-            ]
-        )
-        input.expectsMediaDataInRealTime = false
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: input,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: width,
-                kCVPixelBufferHeightKey as String: height,
-            ]
-        )
-        writer.add(input)
-        writer.startWriting()
-        writer.startSession(atSourceTime: .zero)
-
-        for i in 0..<frames {
-            var pb: CVPixelBuffer?
-            CVPixelBufferCreate(
-                kCFAllocatorDefault, width, height,
-                kCVPixelFormatType_32BGRA, nil, &pb
-            )
-            let buffer = try #require(pb)
-            CVPixelBufferLockBaseAddress(buffer, [])
-            if let base = CVPixelBufferGetBaseAddress(buffer) {
-                // Ramp the grey level per frame so frames are distinct.
-                memset(base, Int32(40 + i * 20), CVPixelBufferGetBytesPerRow(buffer) * height)
-            }
-            CVPixelBufferUnlockBaseAddress(buffer, [])
-
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(nanoseconds: 1_000_000)
-            }
-            adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: 30))
-        }
-        input.markAsFinished()
-        await writer.finishWriting()
-        guard writer.status == .completed else {
-            throw VideoDecoderError.cannotRead("writer: \(String(describing: writer.error))")
-        }
-        return url.path
+        try FileManager.default.copyItem(at: url, to: copy)
+        return copy.path
     }
+
+    /// 2000×1000 — forces a downscale against the 1280 canvas cap; the
+    /// odd aspect also proves the fit isn't square.
+    private func wideVideo() throws -> String { try fixture("ramp-2000x1000") }
+
+    /// 320×240 — comfortably under the canvas cap, so nothing is scaled.
+    private func smallVideo() throws -> String { try fixture("ramp-320x240") }
 
     @Test func `nextFrame before start reports the decoder isn't started`() {
         let decoder = AVVideoDecoder()
@@ -103,7 +72,7 @@ struct AVVideoDecoderTests {
     }
 
     @Test func `decoded frames arrive fitted to the canvas as tightly-packed BGRA`() async throws {
-        let path = try await writeTempVideo()
+        let path = try wideVideo()
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         let decoder = AVVideoDecoder()
@@ -121,7 +90,7 @@ struct AVVideoDecoderTests {
     }
 
     @Test func `a smaller-than-canvas asset is not upscaled`() async throws {
-        let path = try await writeTempVideo(width: 320, height: 240)
+        let path = try smallVideo()
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         let decoder = AVVideoDecoder()
@@ -134,7 +103,7 @@ struct AVVideoDecoderTests {
     }
 
     @Test func `frames arrive in presentation order and run out at the end of the asset`() async throws {
-        let path = try await writeTempVideo(width: 320, height: 240, frames: 4)
+        let path = try smallVideo()
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         let decoder = AVVideoDecoder()
@@ -154,7 +123,7 @@ struct AVVideoDecoderTests {
     }
 
     @Test func `rewind replays the asset from its first frame`() async throws {
-        let path = try await writeTempVideo(width: 320, height: 240, frames: 3)
+        let path = try smallVideo()
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         let decoder = AVVideoDecoder()
@@ -171,7 +140,7 @@ struct AVVideoDecoderTests {
     }
 
     @Test func `stop ends the stream and leaves the decoder restartable`() async throws {
-        let path = try await writeTempVideo(width: 320, height: 240, frames: 3)
+        let path = try smallVideo()
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         let decoder = AVVideoDecoder()
@@ -192,7 +161,7 @@ struct AVVideoDecoderTests {
     /// `start` on a live decoder must cancel the reader it replaces
     /// rather than orphan it — so a restart reads from the top.
     @Test func `starting again while streaming restarts from the first frame`() async throws {
-        let path = try await writeTempVideo(width: 320, height: 240, frames: 4)
+        let path = try smallVideo()
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         let decoder = AVVideoDecoder()

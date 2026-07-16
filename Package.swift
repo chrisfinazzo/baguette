@@ -64,6 +64,14 @@ let package = Package(
                 .product(name: "Mockable", package: "Mockable"),
             ],
             path: "Tests/BaguetteTests",
+            resources: [
+                // Pre-encoded H.264 clips for `AVVideoDecoderTests`. The
+                // decoder needs a real asset, but synthesising one at test
+                // time means encoding H.264 on whatever runs the suite —
+                // and a CI runner with no usable VideoToolbox encoder
+                // stalls the write instead of failing it.
+                .copy("Fixtures"),
+            ],
             swiftSettings: [
                 .define("MOCKING"),
             ]
