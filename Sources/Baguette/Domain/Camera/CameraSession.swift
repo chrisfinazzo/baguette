@@ -105,18 +105,28 @@ final class CameraSession {
         lastError = nil
     }
 
+    /// Tear the stream down and disarm the dylib.
+    ///
+    /// Every state change is claimed *before* the first `await`. Being
+    /// `@MainActor` serialises the steps but doesn't make them atomic:
+    /// a second `stop` interleaving at a suspension point would still
+    /// read `.streaming`, and go on to stop the same capture and disarm
+    /// the same simulator twice.
     func stop() async {
         guard case .streaming = phase else { return }
-        await activeCapture?.stop()
-        activeCapture = nil
-        if let sim = armedSimulator {
-            try? await injection.disarm(on: sim)
-            armedSimulator = nil
-        }
+        let capture = activeCapture
+        let sim = armedSimulator
         phase = .idle
+        activeCapture = nil
+        armedSimulator = nil
         startedAt = nil
         fps = 0
         fpsLastSample = nil
+
+        await capture?.stop()
+        if let sim {
+            try? await injection.disarm(on: sim)
+        }
     }
 
     /// Tick called by the WS heartbeat (once per second). Computes

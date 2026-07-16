@@ -189,6 +189,28 @@ struct CameraSessionTests {
         verify(w.injection).disarm(on: .any).called(1)
     }
 
+    /// `stop` suspends twice (tearing down capture, then disarming the
+    /// dylib). Being `@MainActor` serialises those steps but doesn't stop
+    /// a second `stop` from interleaving at a suspension point — and if
+    /// the phase is still `.streaming` when it looks, it tears the same
+    /// session down a second time.
+    @Test func `a stop that lands mid-teardown doesn't tear down twice`() async {
+        let w = makeWiring()
+        given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())
+        given(w.injection).disarm(on: .any).willReturn(())
+        given(w.webcam).stop().willReturn(())
+        stubHappyCapture(w)
+
+        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        async let first: Void = w.session.stop()
+        async let second: Void = w.session.stop()
+        _ = await (first, second)
+
+        verify(w.webcam).stop().called(1)
+        verify(w.injection).disarm(on: .any).called(1)
+        #expect(w.session.phase == .idle)
+    }
+
     @Test func `sampleFPS divides frame delta by elapsed seconds`() async throws {
         let w = makeWiring()
         given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())

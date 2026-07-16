@@ -68,6 +68,54 @@ struct VideoFileCaptureTests {
         #expect(rewinds.value >= 1)
     }
 
+    /// `stop` cancels the pump mid-pace. The cancellation surfaces as a
+    /// throw from the pacing sleep, which is swallowed — so without an
+    /// explicit check the loop runs on to emit one more frame into a
+    /// buffer nobody is streaming any more.
+    @Test func `no frame is emitted after stop`() async throws {
+        let decoder = MockVideoDecoder()
+        // 500 ms apart, so the pump is parked in the pacing sleep when
+        // stop lands.
+        let feed = Feed([decoded(pts: 0), decoded(pts: 500), decoded(pts: 1000)])
+        given(decoder).start(path: .any, maxDimension: .any).willReturn(())
+        given(decoder).nextFrame().willProduce { feed.next() }
+        given(decoder).rewind().willReturn(())
+        given(decoder).stop().willReturn(())
+
+        let rec = Recorder()
+        let cap = VideoFileCapture(decoder: decoder)
+        try await cap.start(source: .video(path: "/tmp/clip.mp4")) { rec.record($0) }
+        await waitUntil { rec.count >= 1 }
+
+        let settled = rec.count
+        await cap.stop()
+        // Comfortably longer than a zombie frame would need to land,
+        // comfortably shorter than the 500 ms pace it was sleeping off.
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(rec.count == settled)
+    }
+
+    /// A corrupt asset can report a timestamp far past its neighbour.
+    /// Paced literally that becomes a sleep of days and the feed simply
+    /// dies, so the gap is capped — the sim's reader calls the buffer
+    /// stale after ~1 s anyway, so pacing longer can't buy anything.
+    @Test func `an absurd presentation gap is capped so the feed keeps moving`() async throws {
+        let decoder = MockVideoDecoder()
+        let feed = Feed([decoded(pts: 0), decoded(pts: 10_000_000), nil])  // ~2.8 hours apart
+        given(decoder).start(path: .any, maxDimension: .any).willReturn(())
+        given(decoder).nextFrame().willProduce { feed.next() }
+        given(decoder).rewind().willReturn(())
+        given(decoder).stop().willReturn(())
+
+        let rec = Recorder()
+        let cap = VideoFileCapture(decoder: decoder, maxPacingGapMs: 20)
+        try await cap.start(source: .video(path: "/tmp/clip.mp4")) { rec.record($0) }
+
+        await waitUntil { rec.count >= 2 }
+        await cap.stop()
+        #expect(rec.count >= 2, "the second frame must not wait out its real gap")
+    }
+
     @Test func `stop tears down the decoder`() async throws {
         let decoder = MockVideoDecoder()
         let feed = Feed([decoded(pts: 0)])

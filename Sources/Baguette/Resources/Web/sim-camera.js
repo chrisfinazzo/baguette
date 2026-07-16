@@ -45,6 +45,15 @@
       this.source = 'webcam';      // 'webcam' | 'image' | 'video'
       this.uploaded = null;        // { kind, name } after a successful upload
       this._resumeOnReady = false; // resume streaming once a switched-to file uploads
+      // Whether the user has asked for a stream and not yet asked to
+      // stop. `phase` only says what the server has acknowledged, which
+      // lags a Start by a round-trip — anything reacting to "are we
+      // streaming?" in that window has to read the intent instead.
+      this._wantsStreaming = false;
+      // Bumped per upload (and whenever the selection moves out from
+      // under one) so a slow earlier response can't overwrite a newer
+      // pick — staging keeps a single replaceable slot per udid.
+      this._uploadSeq = 0;
       this.phase = 'idle';
       this.fps = 0;
       this.fit = 'fit';
@@ -75,6 +84,9 @@
         this.ws = null;
       }
       if (this.host) { this.host.innerHTML = ''; this.host = null; }
+      this._wantsStreaming = false;
+      this._resumeOnReady = false;
+      this._uploadSeq++;  // strand any upload still in flight
       const prevPhase = this.phase;
       this.phase = 'idle';
       if (prevPhase !== 'idle' && typeof this.onPhaseChange === 'function') {
@@ -92,6 +104,7 @@
       ws.onmessage = (ev) => this._onMessage(ev);
       ws.onclose = () => {
         this.phase = 'idle';
+        this._wantsStreaming = false;
         this._renderStatus();
       };
     }
@@ -116,6 +129,8 @@
         this.phase = msg.phase || 'idle';
         this.fps = typeof msg.fps === 'number' ? msg.fps : 0;
         this.lastError = msg.ok === false ? (msg.error || 'unknown error') : null;
+        // A refused start means the stream we asked for isn't coming.
+        if (this.lastError) this._wantsStreaming = false;
         this._renderStatus();
         if (prevPhase !== this.phase && typeof this.onPhaseChange === 'function') {
           try { this.onPhaseChange(this.phase); } catch (_) { /* ignore */ }
@@ -136,6 +151,10 @@
       const sourceSel = document.createElement('select');
       sourceSel.setAttribute('style', SELECT_STYLE);
       sourceSel.dataset.cameraSource = '1';
+      // The adjacent "Source:" text isn't associated with the control,
+      // so name it directly rather than with a `for`/`id` pair — a page
+      // can host more than one panel, and ids would collide.
+      sourceSel.setAttribute('aria-label', 'Camera source');
       [['webcam', 'Webcam'], ['image', 'Image file'], ['video', 'Video file']].forEach(([v, label]) => {
         const o = document.createElement('option');
         o.value = v; o.textContent = label;
@@ -152,6 +171,7 @@
       const select = document.createElement('select');
       select.setAttribute('style', SELECT_STYLE);
       select.dataset.cameraSelect = '1';
+      select.setAttribute('aria-label', 'Webcam device');
       select.onchange = (ev) => { this.selectedUID = ev.target.value; };
       row1.appendChild(select);
       const refresh = document.createElement('button');
@@ -289,8 +309,13 @@
     }
 
     _onSourceChange(value) {
-      const wasStreaming = this.phase === 'streaming';
+      // Read the intent, not the acknowledged phase: a source changed
+      // between Start and the server's `camera_state` would otherwise
+      // look idle, so the old source would be left streaming and the
+      // new one never started.
+      const wasStreaming = this._wantsStreaming;
       this._resumeOnReady = false;
+      this._uploadSeq++;  // a file uploading for the old source is now stale
       this.source = value;
       if (this._deviceRow) this._deviceRow.style.display = value === 'webcam' ? '' : 'none';
       if (this._fileRow) this._fileRow.style.display = value === 'webcam' ? 'none' : '';
@@ -304,8 +329,13 @@
       // resume automatically once one is uploaded.
       if (wasStreaming) {
         this._send({ type: 'camera_stop' });
-        if (this._sourceReady()) this._startCurrent();
-        else this._resumeOnReady = true;
+        if (this._sourceReady()) {
+          this._startCurrent();
+        } else {
+          // Still want a stream — just waiting on the file for it.
+          this._resumeOnReady = true;
+          this._wantsStreaming = true;
+        }
       }
     }
 
@@ -318,6 +348,7 @@
     /** Send `camera_start` for the current source if it's ready. */
     _startCurrent() {
       if (!this._sourceReady()) return;
+      this._wantsStreaming = true;
       if (this.source === 'webcam') {
         this._send({
           type: 'camera_start',
@@ -348,11 +379,22 @@
       const setStatus = (color, text) => {
         if (status) { status.style.color = color; status.textContent = text; }
       };
+      // Uploads can overlap, and staging keeps one replaceable slot per
+      // udid — so a slower earlier response must not land as the current
+      // selection. Everything the response touches is gated on this
+      // upload still being the one the panel is waiting for.
+      const token = ++this._uploadSeq;
+      const source = this.source;
+      const udid = this.udid;
+      const isStale = () =>
+        token !== this._uploadSeq || source !== this.source || udid !== this.udid;
+
       setStatus('var(--text-muted,#94a3b8)', 'uploading ' + file.name + '…');
       try {
-        const url = `/simulators/${encodeURIComponent(this.udid)}/camera-source?name=${encodeURIComponent(file.name)}`;
+        const url = `/simulators/${encodeURIComponent(udid)}/camera-source?name=${encodeURIComponent(file.name)}`;
         const res = await fetch(url, { method: 'POST', body: file });
         const data = await res.json().catch(() => ({}));
+        if (isStale()) return;
         if (!res.ok || !data.ok) {
           this.uploaded = null;
           setStatus('var(--danger,#b91c1c)', (data && data.error) || ('upload failed (' + res.status + ')'));
@@ -369,6 +411,7 @@
           }
         }
       } catch (e) {
+        if (isStale()) return;
         this.uploaded = null;
         setStatus('var(--danger,#b91c1c)', 'upload error');
       }
@@ -378,6 +421,7 @@
     _onToggle() {
       if (this.phase === 'streaming') {
         this._resumeOnReady = false;
+        this._wantsStreaming = false;
         this._send({ type: 'camera_stop' });
         return;
       }

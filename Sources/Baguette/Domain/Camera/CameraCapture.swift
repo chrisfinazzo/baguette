@@ -26,7 +26,9 @@ protocol CameraCapture: AnyObject, Sendable {
     func stop() async
 }
 
-enum CameraCaptureError: Error, Equatable, CustomStringConvertible {
+/// `LocalizedError` as well as `CustomStringConvertible` — see
+/// `StillImageError` for why both spellings are needed.
+enum CameraCaptureError: LocalizedError, Equatable, CustomStringConvertible {
     case unsupportedSource(String)
 
     var description: String {
@@ -35,4 +37,6 @@ enum CameraCaptureError: Error, Equatable, CustomStringConvertible {
             return "camera capture: this producer cannot source from '\(kind)'"
         }
     }
+
+    var errorDescription: String? { description }
 }

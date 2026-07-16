@@ -29,6 +29,8 @@ static AVCaptureDevice *gFakeDevice = nil;
 static AVCaptureDeviceFormat *gFakeFormat = nil;
 static AVCaptureDeviceInput *gDummyInput = nil;
 
+static void SimCamBuildObjectsOnce(void);
+
 // Fake format. `figCaptureSourceVideoFormat` is a private accessor that
 // several AVFoundation entry points (AVCaptureDeviceInput, AVCapturePhotoOutput)
 // call and which dereferences a real FigCaptureSource ivar we don't have —
@@ -61,8 +63,20 @@ static void fdev_setZoom(id s, SEL c, CGFloat z) {}
 static AVCaptureDevice *dinput_device(id s, SEL c) { return gFakeDevice; }
 static NSArray *dinput_ports(id s, SEL c) { return @[]; }
 
+// `dispatch_once` because both entry points that build the fakes
+// (`defaultDeviceWithMediaType:` and DiscoverySession `devices`) can be
+// called from any thread, and apps do hit them concurrently at startup.
+// A plain `if (gFakeDevice) return;` lets two threads in at once, and
+// the second `objc_allocateClassPair` for an already-registered name
+// returns Nil — which `objc_registerClassPair` then dereferences.
 static void SimCamBuildObjects(void) {
-    if (gFakeDevice) return;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        SimCamBuildObjectsOnce();
+    });
+}
+
+static void SimCamBuildObjectsOnce(void) {
     Class devCls = NSClassFromString(@"AVCaptureDevice");
     Class fmtCls = NSClassFromString(@"AVCaptureDeviceFormat");
     Class inCls  = NSClassFromString(@"AVCaptureDeviceInput");
@@ -174,9 +188,33 @@ static CVPixelBufferRef SimCamCopyPixelBuffer(void) {
 static NSMutableArray<SimCamVCOutputReg *> *gOutputs = nil;
 static dispatch_source_t gTimer = NULL;
 
+// `gOutputs` is written from whatever thread the app configures its
+// capture graph on and read from the delivery timer's queue, so every
+// touch goes through this lock. `gRunningSessions` tracks the sessions
+// the app has actually started (by pointer, unretained — we only ever
+// compare identity), so delivery follows the session lifecycle instead
+// of running forever from the first delegate registration.
+static NSLock *gStateLock = nil;
+static NSMutableSet<NSValue *> *gRunningSessions = nil;
+
+static void SimCamStateInit(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        gStateLock = [NSLock new];
+        gOutputs = [NSMutableArray array];
+        gRunningSessions = [NSMutableSet set];
+    });
+}
+
 static void SimCamDeliverTick(void) {
     @autoreleasepool {
-        if (gOutputs.count == 0) return;
+        SimCamStateInit();
+        [gStateLock lock];
+        BOOL idle = (gOutputs.count == 0 || gRunningSessions.count == 0);
+        NSArray<SimCamVCOutputReg *> *regs = idle ? nil : [gOutputs copy];
+        [gStateLock unlock];
+        if (idle) return;
+
         CVPixelBufferRef pb = SimCamCopyPixelBuffer();
         if (!pb) return;
 
@@ -192,7 +230,7 @@ static void SimCamDeliverTick(void) {
         CVPixelBufferRelease(pb);
         if (st != noErr || !sbuf) return;
 
-        for (SimCamVCOutputReg *reg in [gOutputs copy]) {
+        for (SimCamVCOutputReg *reg in regs) {
             AVCaptureVideoDataOutput *out = reg.output;
             id<AVCaptureVideoDataOutputSampleBufferDelegate> del = reg.delegate;
             if (!out || !del || !reg.queue) continue;
@@ -212,14 +250,21 @@ static void SimCamDeliverTick(void) {
     }
 }
 
+// The timer runs for the life of the process once armed; `SimCamDeliverTick`
+// gates on there being a running session with a registered output, so an
+// idle tick costs a lock and a compare. `dispatch_once` because the two
+// callers (startRunning, delegate registration) race — an unguarded
+// `if (gTimer)` can leave two timers delivering every frame twice.
 static void SimCamStartDelivery(void) {
-    if (gTimer) return;
-    dispatch_queue_t q = dispatch_queue_create("com.baguette.simcam.delivery", DISPATCH_QUEUE_SERIAL);
-    gTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
-    dispatch_source_set_timer(gTimer, DISPATCH_TIME_NOW, (uint64_t)(NSEC_PER_SEC / 30), NSEC_PER_SEC / 60);
-    dispatch_source_set_event_handler(gTimer, ^{ SimCamDeliverTick(); });
-    dispatch_resume(gTimer);
-    NSLog(@"[SimCamVC] frame delivery started (~30fps)");
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        dispatch_queue_t q = dispatch_queue_create("com.baguette.simcam.delivery", DISPATCH_QUEUE_SERIAL);
+        gTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
+        dispatch_source_set_timer(gTimer, DISPATCH_TIME_NOW, (uint64_t)(NSEC_PER_SEC / 30), NSEC_PER_SEC / 60);
+        dispatch_source_set_event_handler(gTimer, ^{ SimCamDeliverTick(); });
+        dispatch_resume(gTimer);
+        NSLog(@"[SimCamVC] frame delivery started (~30fps)");
+    });
 }
 
 // MARK: - Hooks
@@ -293,25 +338,58 @@ static void h_addOutput(id self, SEL _cmd, id output) {
     // doesn't need to be wired into the (source-less) session.
 }
 
-// Never run the real graph — just start our frame delivery. Overrides the
-// (device-availability-gated) startRunning hook in SimCamInject.m.
+// Never run the real graph — just track the session as running and let
+// the delivery timer feed its outputs. Overrides the
+// (device-availability-gated) startRunning hook in SimCamInject.m, which
+// is why that one never gets a chance to block on a source-less graph.
 static IMP gOrigStartRunning2 = NULL;
 static void h_startRunning(id self, SEL _cmd) {
+    SimCamStateInit();
+    [gStateLock lock];
+    [gRunningSessions addObject:[NSValue valueWithPointer:(__bridge void *)self]];
+    [gStateLock unlock];
     SimCamStartDelivery();
 }
-static void h_stopRunning(id self, SEL _cmd) {}
+
+// The app stopping its session has to stop the frames: leaving the timer
+// feeding a stopped session's delegate burns CPU and hands the app
+// buffers it has said it doesn't want.
+static void h_stopRunning(id self, SEL _cmd) {
+    SimCamStateInit();
+    [gStateLock lock];
+    [gRunningSessions removeObject:[NSValue valueWithPointer:(__bridge void *)self]];
+    [gStateLock unlock];
+}
 
 static void h_setSBDelegate(id self, SEL _cmd, id delegate, dispatch_queue_t queue) {
     ((void (*)(id, SEL, id, dispatch_queue_t))gOrigSetSBDelegate)(self, _cmd, delegate, queue);
-    if (!gOutputs) gOutputs = [NSMutableArray array];
+    SimCamStateInit();
+    [gStateLock lock];
+    // One registration per output: re-registering replaces, and
+    // clearing the delegate (the documented way to detach) removes.
+    // Appending blindly delivers every frame N times to an output that
+    // re-set its delegate, and strands the old one.
+    NSMutableArray<SimCamVCOutputReg *> *keep = [NSMutableArray array];
+    for (SimCamVCOutputReg *reg in gOutputs) {
+        if (reg.output != nil && reg.output != (AVCaptureVideoDataOutput *)self) {
+            [keep addObject:reg];  // also drops registrations whose output died
+        }
+    }
     if (delegate && queue) {
         SimCamVCOutputReg *reg = [SimCamVCOutputReg new];
         reg.output = (AVCaptureVideoDataOutput *)self;
         reg.delegate = delegate;
         reg.queue = queue;
-        [gOutputs addObject:reg];
+        [keep addObject:reg];
+    }
+    gOutputs = keep;
+    [gStateLock unlock];
+
+    if (delegate && queue) {
         NSLog(@"[SimCamVC] video-data-output delegate registered");
         SimCamStartDelivery();
+    } else {
+        NSLog(@"[SimCamVC] video-data-output delegate cleared");
     }
 }
 

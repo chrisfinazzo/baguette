@@ -102,13 +102,20 @@ POST /simulators/:udid/camera-source?name=<filename>
 
 Accepts images (`png jpg jpeg gif heic heif`) and videos
 (`mov mp4 m4v`); anything else is refused `415` before the body is
-read. Unlike `/files` (consumed synchronously by `simctl`), the bytes
-are staged into a **persistent per-udid slot** because the camera
-WebSocket streams them *later* — a new upload replaces the previous
-one, and the slot is cleared when the camera socket closes. The
-browser never sends a host path; `camera_start` just names the
-`source` kind and the server reads the staged file. `?name=` is
-reduced to its last path component, so it can't escape the slot.
+read, and a udid that isn't a known device is refused `404`. Unlike
+`/files` (consumed synchronously by `simctl`), the bytes are staged
+into a **persistent per-udid slot** because the camera WebSocket
+streams them *later* — a new upload replaces the previous one, and the
+slot is cleared when the camera socket closes. The browser never sends
+a host path; `camera_start` just names the `source` kind and the
+server reads the staged file.
+
+Both halves of the staged path are treated as untrusted: `?name=` is
+reduced to its last path component, and the udid must name a
+`CameraSourceSlot` (letters, digits, `-`, `_`) before it becomes a
+directory — the slot is replaced with a recursive delete on every
+upload, and the udid arrives percent-decoded off the request path, so
+an unchecked one could carry `..` out of the staging root.
 
 `camera_devices` lands once on connect and again after every
 `camera_list`. `camera_state` lands after every `camera_start` /

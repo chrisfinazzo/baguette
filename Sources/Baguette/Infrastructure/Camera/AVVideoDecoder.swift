@@ -23,6 +23,7 @@ final class AVVideoDecoder: VideoDecoder, @unchecked Sendable {
     private var output: AVAssetReaderTrackOutput?
 
     func start(path: String, maxDimension: Int) async throws {
+        stop()  // cancel any reader still streaming, so start is self-contained
         setConfig(path: path, maxDimension: maxDimension)
         try await openReader()
     }
@@ -35,8 +36,10 @@ final class AVVideoDecoder: VideoDecoder, @unchecked Sendable {
         }
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { return nil }
         let seconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
-        let presentationMs = UInt32(Swift.max(0, seconds * 1000))
-        return Self.decode(pixelBuffer: pixelBuffer, presentationMs: presentationMs)
+        return Self.decode(
+            pixelBuffer: pixelBuffer,
+            presentationMs: DecodedVideoFrame.presentationMs(seconds: seconds)
+        )
     }
 
     func rewind() async throws {
@@ -146,7 +149,9 @@ final class AVVideoDecoder: VideoDecoder, @unchecked Sendable {
     }
 }
 
-enum VideoDecoderError: Error, Equatable, CustomStringConvertible {
+/// `LocalizedError` as well as `CustomStringConvertible` — see
+/// `StillImageError` for why both spellings are needed.
+enum VideoDecoderError: LocalizedError, Equatable, CustomStringConvertible {
     case notStarted
     case noVideoTrack(String)
     case cannotRead(String)
@@ -158,4 +163,6 @@ enum VideoDecoderError: Error, Equatable, CustomStringConvertible {
         case .cannotRead(let path): return "video decoder: could not read '\(path)'"
         }
     }
+
+    var errorDescription: String? { description }
 }

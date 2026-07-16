@@ -9,13 +9,26 @@ import Foundation
 final class VideoFileCapture: CameraCapture, @unchecked Sendable {
     private let decoder: any VideoDecoder
     private let maxDimension: Int
+    private let maxPacingGapMs: UInt32
     private let lock = NSLock()
     private var task: Task<Void, Never>?
     private var sequence: UInt32 = 0
 
-    init(decoder: any VideoDecoder, maxDimension: Int = SharedFrameLayout.maxCanvasWidth) {
+    /// - Parameters:
+    ///   - maxDimension: canvas cap each decoded frame is fitted into.
+    ///   - maxPacingGapMs: ceiling on the wait between two frames. A
+    ///     corrupt asset can report neighbouring timestamps days apart;
+    ///     honoured literally that parks the pump and the feed goes
+    ///     dead. The sim's reader calls the shared buffer stale after
+    ///     ~1 s regardless, so there's nothing to gain past that.
+    init(
+        decoder: any VideoDecoder,
+        maxDimension: Int = SharedFrameLayout.maxCanvasWidth,
+        maxPacingGapMs: UInt32 = 1000
+    ) {
         self.decoder = decoder
         self.maxDimension = maxDimension
+        self.maxPacingGapMs = maxPacingGapMs
     }
 
     convenience init() {
@@ -54,6 +67,9 @@ final class VideoFileCapture: CameraCapture, @unchecked Sendable {
             do { decoded = try decoder.nextFrame() } catch { break }
 
             guard let frame = decoded else {
+                // A cancel racing EOF must not pay for a rewind — that
+                // re-opens the asset and reloads its track metadata.
+                if Task.isCancelled { break }
                 emptyStreak += 1
                 if emptyStreak >= 2 { break }  // rewound and still nothing
                 do { try await decoder.rewind() } catch { break }
@@ -65,9 +81,13 @@ final class VideoFileCapture: CameraCapture, @unchecked Sendable {
             // Pace to the gap since the previous frame; a rewind resets
             // the clock (lastPresentationMs == nil → emit immediately).
             if let last = lastPresentationMs, frame.presentationMs > last {
-                let gapMs = frame.presentationMs - last
+                let gapMs = Swift.min(frame.presentationMs - last, maxPacingGapMs)
                 try? await Task.sleep(nanoseconds: UInt64(gapMs) * 1_000_000)
             }
+            // The sleep above reports cancellation by throwing, and `try?`
+            // swallows it — so re-check, or a stopped pump emits one last
+            // frame into a buffer nobody is streaming any more.
+            if Task.isCancelled { break }
             lastPresentationMs = frame.presentationMs
 
             let seq = nextSequence()

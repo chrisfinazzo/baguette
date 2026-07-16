@@ -54,7 +54,12 @@ enum StillImage {
     }
 }
 
-enum StillImageError: Error, Equatable, CustomStringConvertible {
+/// `LocalizedError` as well as `CustomStringConvertible`: `CameraSession`
+/// reports a failed start to the browser as `error.localizedDescription`,
+/// and that bridge ignores `description` — without `errorDescription` the
+/// socket shows Foundation's "The operation couldn't be completed.
+/// (Baguette.StillImageError error 0.)" instead of the reason.
+enum StillImageError: LocalizedError, Equatable, CustomStringConvertible {
     case decodeFailed(String)
     case contextCreationFailed
 
@@ -64,4 +69,6 @@ enum StillImageError: Error, Equatable, CustomStringConvertible {
         case .contextCreationFailed: return "still image: could not create a BGRA context"
         }
     }
+
+    var errorDescription: String? { description }
 }

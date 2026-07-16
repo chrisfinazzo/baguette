@@ -349,7 +349,8 @@ POST /simulators/<UDID>/camera-source?name=<filename>   (raw bytes)
 ```
 
 Accepts `png jpg jpeg gif heic heif` (image) and `mov mp4 m4v`
-(video). The upload is staged per-udid and replaces any previous one;
+(video); anything else is `415`, and an unknown `<UDID>` is `404`. The
+upload is staged per-udid and replaces any previous one;
 `camera_start` then resolves it by `source` kind.
 
 Server → client text frames:

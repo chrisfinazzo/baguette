@@ -298,9 +298,17 @@ struct Server: Sendable {
         // inside the request), these bytes must OUTLIVE the POST — the
         // camera WebSocket streams them later — so they're staged into a
         // persistent per-udid slot and remembered by CameraSourceStaging.
-        router.post("/simulators/:udid/camera-source") { r, _ in
+        router.post("/simulators/:udid/camera-source") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let udid = Self.udidParam(r)
+            // Resolve the udid against a real device before it names a
+            // directory — `udidParam` percent-decodes, so an unchecked
+            // udid can carry `..` into the staging root. `CameraSourceSlot`
+            // refuses those too; this is the same check `/files` makes and
+            // it keeps the error honest ("unknown udid" beats a slot error).
+            guard !udid.isEmpty, simulators.find(udid: udid) != nil else {
+                return errorJSON("unknown udid: \(udid)", status: .notFound)
+            }
             let rawName = String(r.uri.queryParameters.get("name") ?? "source")
             let filename = (rawName as NSString).lastPathComponent
             let nameURL = URL(fileURLWithPath: filename)
@@ -1411,15 +1419,10 @@ struct Server: Sendable {
         // immediately without an extra round-trip.
         await sendDeviceList(cameras: cameras, outbound: outbound)
 
-        defer { Task { await session.stop() } }
-        // Drop any uploaded image/video source when the socket closes so
-        // a stale file can't leak into the next session.
-        defer { CameraSourceStaging.shared.clear(udid: udid) }
-
         // 1-Hz heartbeat: sample FPS off the frame counter and push
         // `camera_state` so the browser's "streaming · X fps" readout
         // updates while frames flow. Detached child task — cancelled
-        // when the WS loop exits.
+        // during teardown below.
         let heartbeat = Task { @MainActor in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
@@ -1430,7 +1433,6 @@ struct Server: Sendable {
                 }
             }
         }
-        defer { heartbeat.cancel() }
 
         do {
             for try await frame in inbound {
@@ -1445,8 +1447,20 @@ struct Server: Sendable {
                 )
             }
         } catch {
-            // socket closed; defer cleans up
+            // socket closed; teardown below
         }
+
+        // Teardown, explicitly ordered rather than deferred. `stop()`
+        // disarms DYLD_INSERT_LIBRARIES on this sim, so it has to be
+        // *awaited* here: fired into a detached task it could land after
+        // a reconnecting socket armed the next session and disarm that
+        // one instead. Capture must also stop before the staged file is
+        // dropped, which is the reverse of what LIFO defers gave us.
+        heartbeat.cancel()
+        await session.stop()
+        // Drop any uploaded image/video source when the socket closes so
+        // a stale file can't leak into the next session.
+        await CameraSourceStaging.shared.clear(udid: udid)
     }
 
     @MainActor

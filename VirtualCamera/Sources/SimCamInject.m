@@ -269,6 +269,15 @@ static void simcam_capturePhoto(id self,
 /// original and let the queue proceed — the ready callback fires and the app
 /// reveals the preview. With a real device (including Mac-camera passthrough)
 /// we call through untouched.
+///
+/// NOTE: superseded and currently unreachable. `SimCamInstallVirtualCamera()`
+/// runs last in `simcam_install` and re-swizzles `startRunning` to
+/// `h_startRunning`, which never chains to the IMP it replaced (this one).
+/// Kept because this file is vendored from SimCam — see VENDORED_FROM.md —
+/// and deleting it would complicate re-syncing upstream. Read the
+/// device-availability check below as history, not as live behaviour: the
+/// virtual camera fabricates a device, so the `nil` test would no longer
+/// mean "no camera" even if this did run.
 static void simcam_startRunning(id self, SEL _cmd) {
     if ([AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo] == nil) {
         NSLog(@"[SimCamInject] startRunning: no capture device — skipping blocking start so onCameraReady can fire");

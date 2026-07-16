@@ -13,6 +13,24 @@ struct DecodedVideoFrame: Equatable, Sendable {
     let height: UInt32
     let presentationMs: UInt32
 
+    /// Project a decoder's timestamp — seconds within the asset — onto
+    /// this frame's millisecond clock.
+    ///
+    /// A malformed asset reports an invalid or indefinite timestamp,
+    /// which reaches us as a non-finite number of seconds, and a
+    /// corrupt one can report a finite value far past what the clock
+    /// holds. `UInt32.init(_: Double)` traps on both, which would take
+    /// the whole server down for one bad upload — so saturate instead
+    /// of trusting the file. Non-finite reads as "start of asset": a
+    /// frame we can't place is better paced immediately than deferred.
+    static func presentationMs(seconds: Double) -> UInt32 {
+        let ms = seconds * 1000
+        // NaN has to go first: it compares false against everything, so
+        // it would fall straight through `min`/`max` and trap below.
+        guard ms.isFinite else { return 0 }
+        return UInt32(min(max(ms, 0), Double(UInt32.max)))
+    }
+
     /// Project into a `CameraFrame` under an orchestrator-assigned
     /// sequence. Throws if the pixels don't match the dimensions
     /// (delegates to `CameraFrame`'s validation).
