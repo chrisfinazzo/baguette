@@ -177,9 +177,9 @@ struct CommandParsingTests {
 
     // MARK: - location
 
-    @Test func `location lists set start and clear leaves`() {
+    @Test func `location lists set start walk and clear leaves`() {
         let names = LocationCommand.configuration.subcommands.map { $0.configuration.commandName }
-        #expect(Set(names) == ["set", "start", "clear"])
+        #expect(Set(names) == ["set", "start", "walk", "clear"])
         #expect(LocationCommand.configuration.commandName == "location")
     }
 
@@ -218,6 +218,40 @@ struct CommandParsingTests {
     @Test func `location start with a single waypoint builds no route`() throws {
         let cmd = try LocationCommand.Start.parse(["--udid", "U", "37.6,-122.4"])
         #expect(cmd.route == nil)
+    }
+
+    @Test func `location walk parses a bearing and speed into a vector`() throws {
+        let cmd = try LocationCommand.Walk.parse([
+            "--udid", "U", "--bearing", "90", "--speed", "5", "37.3349,-122.0090",
+        ])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.walk == LocationWalk(
+            origin: Coordinate(latitude: 37.3349, longitude: -122.0090)!,
+            bearing: Bearing(degrees: 90),
+            speed: 5
+        ))
+        #expect(LocationCommand.Walk.configuration.commandName == "walk")
+    }
+
+    @Test func `location walk normalises a bearing off the compass circle`() throws {
+        let cmd = try LocationCommand.Walk.parse([
+            "--udid", "U", "--bearing", "450", "--speed", "5", "1,2",
+        ])
+        #expect(cmd.walk?.bearing == Bearing(degrees: 90))
+    }
+
+    @Test func `location walk builds no vector for a non-positive speed`() throws {
+        let cmd = try LocationCommand.Walk.parse([
+            "--udid", "U", "--bearing", "0", "--speed", "0", "1,2",
+        ])
+        #expect(cmd.walk == nil)
+    }
+
+    @Test func `location walk builds no vector from an out-of-range origin`() throws {
+        let cmd = try LocationCommand.Walk.parse([
+            "--udid", "U", "--bearing", "0", "--speed", "5", "120,0",
+        ])
+        #expect(cmd.walk == nil)
     }
 
     @Test func `location clear parses --udid`() throws {

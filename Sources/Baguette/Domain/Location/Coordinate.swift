@@ -41,4 +41,47 @@ public struct Coordinate: Equatable, Sendable {
     /// the browser panel posts. Numbers, not strings, so it round-trips
     /// through `JSONSerialization`.
     public var jsonString: String { "{\"latitude\":\(latitude),\"longitude\":\(longitude)}" }
+
+    /// Mean Earth radius in metres (IUGG). The sphere is plenty for a
+    /// simulator joystick: an ellipsoidal model would shift a 15 km
+    /// projection by a few metres, well under the noise of a simulated
+    /// GPS fix.
+    static let earthRadius = 6_371_008.8
+
+    /// The point `metres` away along `bearing`, by the standard
+    /// great-circle destination formula.
+    ///
+    /// Total by construction, so `LocationWalk` can project without
+    /// unwrapping: `asin` can't leave [-90, 90], and the longitude is
+    /// wrapped back onto [-180, 180] instead of overflowing past the
+    /// antimeridian. A non-finite distance is the identity rather than a
+    /// coordinate of NaN.
+    public func projected(bearing: Bearing, metres: Double) -> Coordinate {
+        guard metres.isFinite else { return self }
+
+        let angular = metres / Self.earthRadius     // distance as an angle at the earth's centre
+        let lat1 = latitude * .pi / 180
+        let lon1 = longitude * .pi / 180
+        let theta = bearing.radians
+
+        let lat2 = asin(
+            sin(lat1) * cos(angular) + cos(lat1) * sin(angular) * cos(theta)
+        )
+        let lon2 = lon1 + atan2(
+            sin(theta) * sin(angular) * cos(lat1),
+            cos(angular) - sin(lat1) * sin(lat2)
+        )
+
+        // Only wrap when the projection actually crossed the
+        // antimeridian — running every longitude through the modulo
+        // would cost precision on the overwhelmingly common in-range case.
+        var degreesLon = lon2 * 180 / .pi
+        if degreesLon > 180 || degreesLon < -180 {
+            degreesLon = (degreesLon + 540).truncatingRemainder(dividingBy: 360) - 180
+        }
+
+        // Can't fail: `asin` bounds the latitude and the wrap above
+        // bounds the longitude.
+        return Coordinate(latitude: lat2 * 180 / .pi, longitude: degreesLon)!
+    }
 }
