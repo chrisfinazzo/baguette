@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.81] - 2026-07-17
+
 ### Added
 
 - **Virtual camera for camera-less simulators — unmodified apps see a working camera.** The preview-layer painting only shows frames in an app that already has a running `AVCaptureSession`, which needs a real `AVCaptureDevice` — a Mac *without* a camera has none, so real camera apps (expo-camera, VisionCamera, straight AVFoundation) never start and sit on a permission/loading screen. `SimCamVirtualCamera.m` mocks the *entire* capture graph at the public AVFoundation boundary (the [swmansion/SimCam](https://simcam.swmansion.com/) approach; fed from the shared buffer instead of a socket): a fabricated `AVCaptureDevice` from `defaultDeviceWithMediaType:`/`DiscoverySession.devices`, a **dummy `AVCaptureDeviceInput`** so the real initializer never dereferences the device format's private `FigCaptureSource` (which crashes on a fabricated device), session add-input/output + `startRunning` / `stopRunning` intercepted so no real (source-less) graph is built (that would hang ~9 s and stall the app), and a 30 fps timer that turns `/tmp/SimCam.bgra` into `CVPixelBuffer` → `CMSampleBuffer` delivered straight to the app's `AVCaptureVideoDataOutput` delegate — delivery follows the app's own session lifecycle, so a stopped session stops getting frames. With this, an app on a camera-less Mac gets a device, becomes "ready", and shows baguette's image/video/webcam — **no app edits**. **Injection is now cleaned up on teardown**: `camera_start` arms `DYLD_INSERT_LIBRARIES` (all apps), and `CameraSession.stop` disarms it (`launchctl unsetenv`) — fixing the well-known SimCam bug where the dylib stays injected into every launch until reboot. Known limits: the private `AVCaptureDeviceFormat` accessors the graph shims are iOS-version-specific (verified iOS 26 / expo-camera 57); `AVCaptureMetadataOutput` isn't fed synthesized barcodes yet (the camera shows, but a metadata-based scanner won't detect a code); the app must be relaunched *after* `camera_start`. See [`docs/features/camera.md`](docs/features/camera.md).
@@ -236,7 +240,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.80...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.81...HEAD
+[0.1.81]: https://github.com/tddworks/baguette/compare/v0.1.80...v0.1.81
 [0.1.80]: https://github.com/tddworks/baguette/compare/v0.1.79...v0.1.80
 [0.1.79]: https://github.com/tddworks/baguette/compare/v0.1.78...v0.1.79
 [0.1.78]: https://github.com/tddworks/baguette/compare/v0.1.77...v0.1.78
