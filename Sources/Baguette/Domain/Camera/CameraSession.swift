@@ -15,7 +15,7 @@ final class CameraSession {
 
     enum Phase: Equatable, Sendable {
         case idle
-        case streaming(deviceUID: String)
+        case streaming(source: CameraSource)
     }
 
     private(set) var phase: Phase = .idle
@@ -24,21 +24,47 @@ final class CameraSession {
     private(set) var startedAt: Date?
     private(set) var flags: CameraFlags = CameraFlags()
 
-    private let capture: any CameraCapture
+    private let webcam: any CameraCapture
+    private let image: any CameraCapture
+    private let video: any CameraCapture
     private let sink: any CameraFrameSink
     private let injection: any SimulatorInjection
+
+    /// The capture serving the current stream — retained so `stop`
+    /// tears down exactly the producer that `start` selected.
+    private var activeCapture: (any CameraCapture)?
+
+    /// The simulator whose launchd domain we armed with
+    /// `DYLD_INSERT_LIBRARIES` — retained so `stop` disarms it. Leaving
+    /// it armed loads the dylib into every future app launch on that
+    /// sim until it reboots, so teardown must unset it.
+    private var armedSimulator: (any Simulator)?
 
     private var frameCount: UInt64 = 0
     private var fpsLastSample: (Date, UInt64)?
 
     init(
-        capture: any CameraCapture,
+        webcam: any CameraCapture,
+        image: any CameraCapture,
+        video: any CameraCapture,
         sink: any CameraFrameSink,
         injection: any SimulatorInjection
     ) {
-        self.capture = capture
+        self.webcam = webcam
+        self.image = image
+        self.video = video
         self.sink = sink
         self.injection = injection
+    }
+
+    /// The producer that owns `source`. The session is the single place
+    /// that maps a source to its capture — no composite abstraction.
+    private func capture(for source: CameraSource) -> any CameraCapture {
+        switch source {
+        case .device: return webcam
+        case .image:  return image
+        case .video:  return video
+        }
     }
 
     /// Replace the display preferences shipped with each frame. Takes
@@ -48,10 +74,10 @@ final class CameraSession {
     }
 
     /// Arm the dylib on `simulator` and start pulling frames off
-    /// `device`. On any failure the session stays `.idle` with
+    /// `source`. On any failure the session stays `.idle` with
     /// `lastError` populated; callers can read both fields without
     /// catching.
-    func start(device: CameraDevice, on simulator: any Simulator, dylibPath: String) async {
+    func start(source: CameraSource, on simulator: any Simulator, dylibPath: String) async {
         guard case .idle = phase else { return }
         do {
             try await injection.arm(dylibPath: dylibPath, on: simulator)
@@ -59,28 +85,48 @@ final class CameraSession {
             lastError = error.localizedDescription
             return
         }
+        armedSimulator = simulator
+        let capture = capture(for: source)
         do {
-            try await capture.start(device: device) { [weak self] frame in
+            try await capture.start(source: source) { [weak self] frame in
                 Task { @MainActor in self?.deliver(frame) }
             }
         } catch {
             lastError = error.localizedDescription
+            try? await injection.disarm(on: simulator)
+            armedSimulator = nil
             return
         }
-        phase = .streaming(deviceUID: device.uid)
+        activeCapture = capture
+        phase = .streaming(source: source)
         startedAt = Date()
         frameCount = 0
         fpsLastSample = nil
         lastError = nil
     }
 
+    /// Tear the stream down and disarm the dylib.
+    ///
+    /// Every state change is claimed *before* the first `await`. Being
+    /// `@MainActor` serialises the steps but doesn't make them atomic:
+    /// a second `stop` interleaving at a suspension point would still
+    /// read `.streaming`, and go on to stop the same capture and disarm
+    /// the same simulator twice.
     func stop() async {
         guard case .streaming = phase else { return }
-        await capture.stop()
+        let capture = activeCapture
+        let sim = armedSimulator
         phase = .idle
+        activeCapture = nil
+        armedSimulator = nil
         startedAt = nil
         fps = 0
         fpsLastSample = nil
+
+        await capture?.stop()
+        if let sim {
+            try? await injection.disarm(on: sim)
+        }
     }
 
     /// Tick called by the WS heartbeat (once per second). Computes

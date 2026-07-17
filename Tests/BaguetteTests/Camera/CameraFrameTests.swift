@@ -38,4 +38,17 @@ struct CameraFrameTests {
             )
         }
     }
+
+    @Test func `resequenced swaps the sequence but preserves the pixels`() throws {
+        let pixels = Data(repeating: 0x7F, count: 16)  // 2×2 BGRA
+        let seed = try CameraFrame(
+            sequence: 1, timestampMs: 40, width: 2, height: 2, pixels: pixels
+        )
+        let bumped = seed.resequenced(7)
+        #expect(bumped.sequence == 7)
+        #expect(bumped.width == 2)
+        #expect(bumped.height == 2)
+        #expect(bumped.timestampMs == 40)
+        #expect(bumped.pixels == pixels)
+    }
 }

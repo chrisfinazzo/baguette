@@ -25,11 +25,14 @@ final class AVCameraCapture: CameraCapture, @unchecked Sendable {
     }
 
     func start(
-        device: CameraDevice,
+        source: CameraSource,
         onFrame: @escaping @Sendable (CameraFrame) -> Void
     ) async throws {
+        guard case .device(let uid) = source else {
+            throw CameraCaptureError.unsupportedSource(source.wireKind)
+        }
         resetSequence()
-        try await video.start(deviceUniqueID: device.uid) { [weak self] raw in
+        try await video.start(deviceUniqueID: uid) { [weak self] raw in
             guard let self else { return }
             let seq = self.nextSequence()
             do {

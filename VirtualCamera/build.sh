@@ -31,6 +31,8 @@ build_slice() {
         -framework QuartzCore \
         -framework CoreGraphics \
         -framework AVFoundation \
+        -framework CoreMedia \
+        -framework CoreVideo \
         -framework ImageIO \
         -framework CoreServices \
         -fobjc-arc \
@@ -42,7 +44,8 @@ build_slice() {
         Sources/SimCamInject.m \
         Sources/SimCamPreviewLayerDriver.m \
         Sources/SimCamFakePhoto.m \
-        Sources/SimCamSharedFrameReader.m
+        Sources/SimCamSharedFrameReader.m \
+        Sources/SimCamVirtualCamera.m
 }
 
 build_slice arm64

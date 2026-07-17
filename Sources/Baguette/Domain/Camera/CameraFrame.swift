@@ -5,7 +5,11 @@ import Foundation
 /// and treats `width * height * 4` pixels verbatim, so a mismatch
 /// here would either tear or read past the buffer.
 struct CameraFrame: Sendable {
-    let sequence: UInt32
+    /// Mutable because a still-image source re-emits the same validated
+    /// pixels with a fresh, advancing sequence every tick (the dylib's
+    /// reader only re-renders when the sequence changes). `width` /
+    /// `height` / `pixels` stay immutable — those carry the invariant.
+    private(set) var sequence: UInt32
     let timestampMs: UInt32
     let width: UInt32
     let height: UInt32
@@ -38,6 +42,16 @@ struct CameraFrame: Sendable {
         self.width = width
         self.height = height
         self.pixels = pixels
+    }
+
+    /// The same frame with a new sequence number. Preserves the
+    /// validated pixels/dimensions, so no re-validation (or `throws`) is
+    /// needed. Lets a still-image source keep the shared buffer "fresh"
+    /// by re-writing identical pixels under an advancing sequence.
+    func resequenced(_ sequence: UInt32) -> CameraFrame {
+        var copy = self
+        copy.sequence = sequence
+        return copy
     }
 }
 

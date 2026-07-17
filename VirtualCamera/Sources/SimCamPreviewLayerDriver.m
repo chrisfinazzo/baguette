@@ -7,10 +7,19 @@ static const CFTimeInterval kStaleAfter = 1.0;  // seconds
 
 @interface SimCamPreviewLayerDriver ()
 @property (nonatomic, weak) CALayer *layer;
+// A plain sublayer we own and paint into. Painting the target layer's
+// own `contents` does NOT work when the target is an
+// `AVCaptureVideoPreviewLayer` (the class it is on the `setSession:`
+// hook path) — that layer renders its capture session through a private
+// path and ignores `contents`. A sublayer renders above the (empty)
+// video and displays our frames reliably. Also correct for the plain
+// view layers the picker-walker path attaches to.
+@property (nonatomic, strong, nullable) CALayer *overlay;
 @property (nonatomic, strong) SimCamSharedFrameReader *reader;
 @property (nonatomic, strong, nullable) CADisplayLink *displayLink;
 @property (nonatomic, assign) CFTimeInterval lastFreshFrameTime;
 @property (nonatomic, assign) BOOL showingPlaceholder;
+@property (nonatomic, assign) BOOL loggedFirstPaint;
 @property (nonatomic, strong, nullable) UIImage *cachedPlaceholder;
 @end
 
@@ -33,6 +42,21 @@ static const CFTimeInterval kStaleAfter = 1.0;  // seconds
     _displayLink = nil;
 }
 
+/// Lazily create (and keep parented + sized to) the overlay sublayer we
+/// paint into. Re-parents if the target layer changed.
+- (CALayer *)overlayInLayer:(CALayer *)layer {
+    CALayer *overlay = self.overlay;
+    if (overlay == nil || overlay.superlayer != layer) {
+        overlay = [CALayer layer];
+        overlay.zPosition = 1000;        // above the preview layer's video
+        overlay.masksToBounds = YES;
+        [layer addSublayer:overlay];
+        self.overlay = overlay;
+    }
+    overlay.frame = layer.bounds;        // track resize / rotation
+    return overlay;
+}
+
 - (void)tick {
     CALayer *layer = self.layer;
     if (layer == nil) {
@@ -42,25 +66,38 @@ static const CFTimeInterval kStaleAfter = 1.0;  // seconds
     }
 
     UIImage *image = [self.reader latestImage];
+
+    // Disable implicit animations — contents change every frame, and a
+    // per-frame cross-fade would smear the video.
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+
     if (image != nil) {
         self.lastFreshFrameTime = CACurrentMediaTime();
         self.showingPlaceholder = NO;
-        layer.contents = (__bridge id)image.CGImage;
+        CALayer *overlay = [self overlayInLayer:layer];
+        if (!self.loggedFirstPaint) {
+            self.loggedFirstPaint = YES;
+            NSLog(@"[SimCamInject] painting frames into overlay sublayer (%.0fx%.0f)",
+                  image.size.width, image.size.height);
+        }
+        overlay.contents = (__bridge id)image.CGImage;
         // Black background so the aspect-fit letterbox bands are black,
         // not whatever default gray the underlying CAM* view uses.
-        layer.backgroundColor = [UIColor blackColor].CGColor;
+        overlay.backgroundColor = [UIColor blackColor].CGColor;
 
         // Per-frame display preferences come through the shared-buffer
         // header (set by the Mac HUD). Default is Fit + no mirror, which
         // matches a native camera app's "what you see is what you save"
         // contract; the user can flip these in the HUD without restart.
         uint32_t flags = self.reader.latestFlags;
-        layer.contentsGravity = (flags & kSimCamFlagFillGravity)
+        overlay.contentsGravity = (flags & kSimCamFlagFillGravity)
             ? kCAGravityResizeAspectFill
             : kCAGravityResizeAspect;
-        layer.affineTransform = (flags & kSimCamFlagMirror)
+        overlay.affineTransform = (flags & kSimCamFlagMirror)
             ? CGAffineTransformMakeScale(-1, 1)
             : CGAffineTransformIdentity;
+        [CATransaction commit];
         return;
     }
 
@@ -71,11 +108,14 @@ static const CFTimeInterval kStaleAfter = 1.0;  // seconds
     if (staleness > kStaleAfter && !self.showingPlaceholder) {
         UIImage *placeholder = [self placeholderImage];
         if (placeholder != nil) {
-            layer.contents = (__bridge id)placeholder.CGImage;
-            layer.contentsGravity = kCAGravityResizeAspect;
+            CALayer *overlay = [self overlayInLayer:layer];
+            overlay.contents = (__bridge id)placeholder.CGImage;
+            overlay.contentsGravity = kCAGravityResizeAspect;
+            overlay.affineTransform = CGAffineTransformIdentity;
             self.showingPlaceholder = YES;
         }
     }
+    [CATransaction commit];
 }
 
 - (UIImage *)placeholderImage {

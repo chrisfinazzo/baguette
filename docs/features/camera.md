@@ -1,18 +1,25 @@
 # Camera
 
-Pipe a Mac webcam (FaceTime HD, USB, Continuity Camera) into an iOS
-app's `AVCaptureVideoPreviewLayer`, `AVCapturePhotoOutput`, and
-`UIImagePickerController` running inside the simulator. The app sees
-the chosen Mac camera as if it were a real iOS camera — barcode
-scanners scan, profile-photo uploads work, viewfinders fill — without
-opening Xcode, without installing a separate menu-bar app.
+Pipe a camera source into an iOS app's `AVCaptureVideoPreviewLayer`,
+`AVCapturePhotoOutput`, and `UIImagePickerController` running inside
+the simulator. The source can be a **live Mac webcam** (FaceTime HD,
+USB, Continuity Camera), a **still image**, or a **looping video** —
+the app sees it as if it were a real iOS camera — barcode scanners
+scan, profile-photo uploads work, viewfinders fill — without opening
+Xcode, without installing a separate menu-bar app. Point a video of a
+barcode at a scanner, or a fixed headshot at a profile-photo picker,
+entirely from the browser.
 
 Two halves cooperate:
 
 - **Mac side** (this repo, Swift): a `CameraSession` orchestrator
-  driven from the browser's camera panel. Reads BGRA frames off an
-  `AVCaptureSession` and writes them into a fixed-size mmap'd file
-  (`/tmp/SimCam.bgra`).
+  driven from the browser's camera panel. It selects one of three
+  frame producers by `CameraSource` — `AVCameraCapture` (webcam, off
+  an `AVCaptureSession`), `ImageFileCapture` (a decoded still re-emitted
+  at ~30 fps), or `VideoFileCapture` (an `AVAssetReader` looped) — and
+  writes their BGRA frames into a fixed-size mmap'd file
+  (`/tmp/SimCam.bgra`). File sources are downscaled to fit the canvas
+  via the pure `ScaleToFit`.
 - **iOS-Simulator side** (`VirtualCamera/`, vendored from
   `asc-pro/SimCam`): a small ObjC dylib that hooks AVFoundation /
   UIImagePickerController inside every simulator-launched app and
@@ -20,16 +27,20 @@ Two halves cooperate:
   hardware camera. Loaded via `DYLD_INSERT_LIBRARIES`.
 
 The browser is the picker; baguette is the producer; the dylib is the
-consumer. No CLI verb in v1 — the surface is the browser's camera
-control card.
+consumer — and the dylib is **source-agnostic**: image and video
+frames are indistinguishable from webcam frames at the shared-buffer
+boundary, so adding file sources needed no dylib change. No CLI verb —
+the surface is the browser's camera control card and its WebSocket.
 
 ## Entry points
 
 - Browser camera card on `/simulators/<UDID>` (sidebar view, under
-  the Camera disclosure). One device dropdown, Start/Stop, Fit/Fill,
-  Mirror, live FPS.
-- Wire JSON over the `/simulators/:udid/camera` WebSocket — agents
-  can drive the same flow programmatically.
+  the Camera disclosure). A source selector (Webcam / Image / Video),
+  a device dropdown or a file chooser, Start/Stop, Fit/Fill, Mirror,
+  live FPS.
+- Wire JSON over the `/simulators/:udid/camera` WebSocket + the
+  `POST /simulators/:udid/camera-source` upload route — agents can
+  drive the same flow programmatically.
 
 ## Wire JSON
 
@@ -41,14 +52,22 @@ exchanges text frames.
 ```json
 { "type": "camera_list" }
 { "type": "camera_start",
-  "deviceUID": "0x14600000046d0825",
+  "source": "webcam",          // "webcam" | "image" | "video"; default "webcam"
+  "deviceUID": "0x14600000046d0825",  // required for webcam, ignored otherwise
   "fit": "fit",                // "fit" | "fill"
   "mirror": false }
+{ "type": "camera_start", "source": "image", "fit": "fit", "mirror": false }
+{ "type": "camera_start", "source": "video", "fit": "fill", "mirror": false }
 { "type": "camera_stop" }
 { "type": "camera_set_flags",
   "fit": "fill",
   "mirror": true }
 ```
+
+For `image` / `video` there is **no path on the wire** — the browser
+uploads the file first (see the route below) and the server resolves
+the staged host file for this udid. A missing `source` defaults to
+`webcam`, so pre-existing clients keep working.
 
 **Server → browser:**
 
@@ -64,13 +83,39 @@ exchanges text frames.
   "ok": true,
   "phase": "streaming",        // "idle" | "streaming"
   "fps": 29.97,
-  "device": "0x14600000046d0825" }
+  "source": "webcam",          // "webcam" | "image" | "video" while streaming
+  "device": "0x14600000046d0825" }  // present only for a webcam source
 { "type": "camera_state",
   "ok": false,
   "phase": "idle",
   "fps": 0,
   "error": "Camera access denied. Open System Settings → Privacy → Camera and enable baguette." }
 ```
+
+### Uploading an image / video source
+
+```
+POST /simulators/:udid/camera-source?name=<filename>
+     body = raw file bytes (application/octet-stream)
+     → { "ok": true, "kind": "image" }   // or "video"
+```
+
+Accepts images (`png jpg jpeg gif heic heif`) and videos
+(`mov mp4 m4v`); anything else is refused `415` before the body is
+read, and a udid that isn't a known device is refused `404`. Unlike
+`/files` (consumed synchronously by `simctl`), the bytes are staged
+into a **persistent per-udid slot** because the camera WebSocket
+streams them *later* — a new upload replaces the previous one, and the
+slot is cleared when the camera socket closes. The browser never sends
+a host path; `camera_start` just names the `source` kind and the
+server reads the staged file.
+
+Both halves of the staged path are treated as untrusted: `?name=` is
+reduced to its last path component, and the udid must name a
+`CameraSourceSlot` (letters, digits, `-`, `_`) before it becomes a
+directory — the slot is replaced with a recursive delete on every
+upload, and the udid arrives percent-decoded off the request path, so
+an unchecked one could carry `..` out of the staging root.
 
 `camera_devices` lands once on connect and again after every
 `camera_list`. `camera_state` lands after every `camera_start` /
@@ -191,21 +236,94 @@ prefix to keep upstream re-syncs diff-friendly; see
 
 ## Adding a new camera source
 
-The current adapter pulls from `AVCaptureSession` (Mac webcams). To
-add a different source — e.g. a posted image stream from an agent,
-or `getUserMedia` from the browser:
+There are three producers today — `AVCameraCapture` (webcam),
+`ImageFileCapture`, `VideoFileCapture` — each a `CameraCapture` the
+`CameraSession` selects by inspecting a `CameraSource`
+(`.device / .image / .video`). To add a fourth (e.g. a browser
+`getUserMedia` stream):
 
-1. New `CameraCapture` implementation in `Infrastructure/Camera/`.
-   Same role-noun for the collaborator it depends on (e.g.
-   `BrowserFrameStream`) if it's conversational; or a one-shot
-   adapter if the API gives back a stream you can pump directly.
-2. Add a new WS message type (e.g. `camera_frame_data`) in
-   `CameraMessage` with a parser test.
-3. Wire the dispatch into `Server.cameraWS` — switch on the new
-   case and call into the appropriate session method.
+1. Add a case to `CameraSource` + a `wireKind`, and teach
+   `CameraStartSource` / `CameraMessage.parse` the new `source` token
+   (parser test first).
+2. New `CameraCapture` implementation in `Infrastructure/Camera/`. Use
+   a role-noun collaborator (like `VideoDecoder`) if the API is
+   conversational; a one-shot decode (like `StillImage.load`) if not.
+   Fit the frame into the canvas with `ScaleToFit` and hand it to
+   `onFrame` as a `CameraFrame`.
+3. Inject it into `CameraSession` and add its `case` to
+   `capture(for:)`; resolve the source in `Server.handleCameraLine`.
 
-`SharedMemoryFrameSink` and `SimulatorInjection` stay the same —
-they don't care where the bytes came from.
+`SharedMemoryFrameSink`, `SimulatorInjection`, and the dylib stay the
+same — they don't care where the bytes came from.
+
+## Virtual camera device (camera-less simulators)
+
+The preview-layer painting above shows frames only in apps that already
+got a working `AVCaptureSession` — which needs a real `AVCaptureDevice`.
+A simulator on a Mac **without a camera** has none, so `AVCaptureDevice`
+discovery returns nil and real camera apps (expo-camera, VisionCamera,
+straight AVFoundation) never start — they show a permission/loading
+state, and there's nothing for the preview hook to paint.
+
+`SimCamVirtualCamera.m` fixes that by **mocking the entire capture graph**
+at the public AVFoundation boundary (the approach
+[swmansion/SimCam](https://simcam.swmansion.com/) uses; baguette feeds
+from the shared buffer instead of a socket). It's app-free — the app
+sees a normal camera:
+
+- `+[AVCaptureDevice defaultDeviceWithMediaType:]` and
+  `-[AVCaptureDeviceDiscoverySession devices]` → a fabricated
+  `AVCaptureDevice` subclass.
+- `-[AVCaptureDeviceInput initWithDevice:error:]` → a **dummy input**
+  for the fake device, so the real initializer (which dereferences the
+  device format's private `FigCaptureSource`) never runs.
+- `-[AVCaptureSession canAddInput:/addInput:/canAddOutput:/addOutput:]`
+  → accept the dummy graph without wiring real hardware.
+- `-[AVCaptureVideoDataOutput setSampleBufferDelegate:queue:]` → capture
+  the delegate; a 30 fps timer builds `CVPixelBuffer` → `CMSampleBuffer`
+  from `/tmp/SimCam.bgra` and calls
+  `captureOutput:didOutputSampleBuffer:fromConnection:` directly.
+- The fake `AVCaptureDeviceFormat` shims the private accessors
+  AVFoundation reads during setup (`figCaptureSourceVideoFormat` → NULL,
+  `videoSupportedFrameRateRanges` → `@[]`) plus
+  `+[AVCapturePhotoSettings photoSettings]`, so `AVCapturePhotoOutput`
+  init doesn't crash on the fabricated format.
+
+With this, an unmodified app gets a device, `AVCaptureSession` "runs",
+`onCameraReady`-style callbacks fire, and the preview + data-output show
+baguette's image/video — no app edits.
+
+**Injection is automatic (all apps), and armed only while streaming.**
+`camera_start` arms the sim's launchd domain
+(`SimctlSimulatorInjection`: `launchctl setenv DYLD_INSERT_LIBRARIES`),
+so **every app launched afterward** loads the dylib — SimCam-style, no
+per-app configuration. `stop` (and the WS `defer`) **disarms**
+(`launchctl unsetenv`), so the dylib does *not* stay injected into every
+future launch until reboot (the bug SimCam is known for). `CameraSession`
+owns this: it records the armed simulator on `start` and unsets it on
+`stop` / failed-start.
+
+The one ordering rule: **the app must be (re)launched *after*
+`camera_start`.** The dylib is inserted at exec time, so:
+
+1. In the browser camera card, pick a source and **Start** (arms + streams).
+2. **Relaunch the target app** — tap its icon, `xcrun simctl launch <udid> <bundle-id>`,
+   or `expo run:ios` (which launches via `simctl`). An app already running
+   from *before* Start won't have the dylib; a Metro JS reload doesn't
+   re-exec, so relaunch the native process.
+3. Open the camera screen — the app sees the virtual camera.
+
+To inject into a single app without arming the whole sim (e.g. a launch
+that bypasses launchd, like some Xcode Run configs),
+`SIMCTL_CHILD_DYLD_INSERT_LIBRARIES` passes the dylib to one launch:
+
+```
+SIMCTL_CHILD_DYLD_INSERT_LIBRARIES="$HOME/Library/Application Support/Baguette/builds/<sha>/VirtualCamera.dylib" \
+  xcrun simctl launch --terminate-running-process <udid> <bundle-id>
+```
+
+The dylib survives Metro/JS reloads; relaunch only when the native app
+restarts.
 
 ## Known limits (v1)
 
@@ -217,6 +335,16 @@ they don't care where the bytes came from.
 - **No CLI yet.** `baguette camera --udid … --device <UID>` would
   be a thin layer over the same WS handler; the wire path is
   already there for agents that need it.
+- **Video rotation isn't applied.** `VideoFileCapture` streams frames
+  in their *encoded* orientation — a clip recorded with a rotation
+  transform (many phone videos) plays sideways. Fitting and looping
+  work; rotation correction is deferred.
+- **No audio.** A video's audio track is ignored — the camera path
+  carries frames only.
+- **Still images are re-emitted at ~30 fps.** A single write would be
+  hidden after ~1 s (the dylib's reader gates on an advancing sequence
+  and shows "No camera signal" once stale), so `ImageFileCapture`
+  re-writes the same pixels under a fresh sequence on a timer.
 - **No "apps needing reopen" diagnostic.** SimCamMac surfaces a list
   of running apps that started before the dylib was armed. Baguette
   defers that to a v2; users who don't see frames should
@@ -224,3 +352,16 @@ they don't care where the bytes came from.
 - **Mac-only producer.** A future browser `getUserMedia` source
   (sketched in the design phase) would let the page's webcam feed
   the iOS app without going through AVFoundation on the host.
+- **Virtual-camera format shims are AVFoundation-version-specific.**
+  The graph mock neutralises the specific private `AVCaptureDeviceFormat`
+  accessors AVFoundation reads on iOS 26 during capture setup
+  (`figCaptureSourceVideoFormat`, `videoSupportedFrameRateRanges`). A
+  future iOS may read a different accessor and crash the target app
+  until that one is shimmed too — the trade-off of mocking private
+  internals. Verified on iOS 26 with expo-camera 57.
+- **No metadata/barcode delivery from the virtual camera.** Frames reach
+  `AVCaptureVideoDataOutput` and the preview, but `AVCaptureMetadataOutput`
+  isn't fed synthesized barcode objects — an app that scans via metadata
+  output sees the camera but won't detect a code. Feeding
+  `AVCaptureMetadataOutput` (e.g. Vision QR detection over the frames)
+  is a follow-up.
