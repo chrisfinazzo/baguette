@@ -31,12 +31,15 @@ final class H264Encoder: @unchecked Sendable {
     private var height: Int32 = 0
     private let fps: Int32
     private var bitrate: Int
+    private let tuning: H264Tuning
     private var emittedDescription = false
     private var frameCount: Int64 = 0
 
-    init(fps: Int, bitrate: Int = 2_000_000, onEncoded: (@Sendable (Encoded) -> Void)? = nil) {
+    init(fps: Int, bitrate: Int = 2_000_000, tuning: H264Tuning = .lowLatency,
+         onEncoded: (@Sendable (Encoded) -> Void)? = nil) {
         self.fps = Int32(fps)
         self.bitrate = bitrate
+        self.tuning = tuning
         self.onEncoded = onEncoded
     }
 
@@ -116,12 +119,18 @@ final class H264Encoder: @unchecked Sendable {
             self.session = nil
         }
 
+        // Low-latency rate control is a create-time spec, not a settable
+        // property; everything else below is a post-create property.
+        let encoderSpec: CFDictionary? = tuning.lowLatencyRateControl
+            ? [kVTVideoEncoderSpecification_EnableLowLatencyRateControl: kCFBooleanTrue!] as CFDictionary
+            : nil
+
         var sess: VTCompressionSession?
         let status = VTCompressionSessionCreate(
             allocator: kCFAllocatorDefault,
             width: width, height: height,
             codecType: kCMVideoCodecType_H264,
-            encoderSpecification: nil,
+            encoderSpecification: encoderSpec,
             imageBufferAttributes: nil,
             compressedDataAllocator: kCFAllocatorDefault,
             outputCallback: nil,
@@ -130,20 +139,21 @@ final class H264Encoder: @unchecked Sendable {
         )
         guard status == noErr, let sess else { return }
 
-        let props: [(CFString, Any)] = [
-            (kVTCompressionPropertyKey_RealTime, kCFBooleanTrue!),
+        // Values from `H264Tuning` (unit-tested); mapping to VT keys is the
+        // irreducible call. Rejected properties return a non-noErr status
+        // we intentionally ignore.
+        var props: [(CFString, Any)] = [
+            (kVTCompressionPropertyKey_RealTime, (tuning.realTime ? kCFBooleanTrue : kCFBooleanFalse)!),
             (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel),
-            (kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse!),
+            (kVTCompressionPropertyKey_AllowFrameReordering, (tuning.allowFrameReordering ? kCFBooleanTrue : kCFBooleanFalse)!),
             (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: bitrate)),
             (kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: fps)),
-            // 5-second keyframe interval — IDRs are ~5–10× larger than
-            // P-frames, so a forced IDR mid-stream causes a visible
-            // encode/transport stall. Spacing them out by 5s keeps the
-            // typical pinch / scroll gesture inside one P-frame run, so
-            // motion stays smooth. Late-joiner resync waits up to 5s,
-            // which we sidestep by emitting a JPEG seed on first frame.
-            (kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: fps * 5)),
+            (kVTCompressionPropertyKey_MaxKeyFrameInterval,
+             NSNumber(value: tuning.maxKeyFrameInterval(fps: Int(fps)))),
         ]
+        if let maxDelay = tuning.maxFrameDelayCount {
+            props.append((kVTCompressionPropertyKey_MaxFrameDelayCount, NSNumber(value: maxDelay)))
+        }
         for (key, value) in props {
             VTSessionSetProperty(sess, key: key, value: value as CFTypeRef)
         }
