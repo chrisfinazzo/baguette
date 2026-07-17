@@ -9,17 +9,19 @@ import Foundation
 /// down — the BGRA request, the fit, the row-padding strip, rewinding,
 /// the not-started/no-track errors — only exist against `AVAssetReader`.
 ///
-/// The assets are pre-encoded fixtures rather than clips synthesised per
-/// run: encoding H.264 needs a working VideoToolbox encoder, which a CI
-/// runner may not have, and an encoder that can't start stalls the write
-/// rather than failing it. Decoding needs no encoder, so reading a
-/// committed clip keeps the suite honest everywhere.
+/// `.serialized` is load-bearing, not tidiness: several `AVAssetReader`s
+/// decoding at once deadlock on a small CI runner. Every reader parks in
+/// `copyNextSampleBuffer` -> MediaToolbox -> `FigSemaphoreWaitRelative`
+/// and none ever wakes, so the whole test process hangs until the job
+/// times out — an 8-core dev Mac has the headroom to hide it, a 3-core
+/// runner does not. One reader at a time is fine, so the suite decodes
+/// one at a time.
 ///
 /// Both fixtures hold 4 frames at 30 fps of solid grey ramping 40, 60,
 /// 80, 100 — consecutive frames decode to distinct pixels, which is what
 /// lets the rewind test prove it landed back on frame 0 specifically.
 /// Regenerate with `Tests/BaguetteTests/Fixtures/README.md`.
-@Suite("AVVideoDecoder")
+@Suite("AVVideoDecoder", .serialized)
 struct AVVideoDecoderTests {
 
     /// Copy a fixture out of the test bundle into a temp file. The
