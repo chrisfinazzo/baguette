@@ -235,14 +235,23 @@ Wired (use freely):
   shells out to `xcrun simctl location`). `baguette location set --udid
   <X> <lat,lon>` pins a point; `baguette location start --udid <X>
   [--speed <m/s>] [--distance <m>] [--interval <s>] <lat,lon> <lat,lon>…`
-  runs a moving route; `baguette location clear --udid <X>` restores live
+  runs a moving route; `baguette location walk --udid <X> --bearing <deg>
+  --speed <m/s> <lat,lon>` heads off along a compass bearing (driving
+  `CLLocation.course`); `baguette location clear --udid <X>` restores live
   location. Position/waypoints are `lat,lon` **tokens** (e.g.
   `37.3318,-122.0312`); a token whose latitude starts with `-` must
   follow a `--` separator. `serve`: `POST /simulators/<X>/location` with a
-  `{latitude,longitude}` point or `{waypoints:[…],speed?}` route body, and
-  `DELETE` to clear. Out-of-range or <2-waypoint bodies return `400`.
+  `{latitude,longitude}` point, `{waypoints:[…],speed?}` route, or
+  `{latitude,longitude,bearing,speed}` walk body, and `DELETE` to clear.
+  Out-of-range, <2-waypoint, or speed-less-walk bodies return `400`.
   Browser focus page has a **Location** card (map-pin toolbar button) with
-  a Leaflet map. See
+  a Leaflet map and a **Walk** joystick — the stick steers absolute, while
+  `W`/`S` drive along the current heading and `A`/`D` turn it (tank
+  controls); **Replay** retraces the walked trail as a route.
+  **Two iOS-26 limits:** `CLHeading` (compass) is unavailable in the
+  simulator entirely (`headingAvailable() == false`), and `course` is
+  derived on a flat lat/lon grid so diagonal bearings skew by
+  `1/cos(latitude)` (~6.5° at lat 37; cardinals are exact). See
   [`docs/features/location.md`](../../docs/features/location.md).
 
 NOT wired (skill should NOT propose these):

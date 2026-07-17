@@ -199,10 +199,11 @@ struct Server: Sendable {
         }
 
         // Location — `POST` sets the simulated GPS position (a single
-        // point, or a moving route when the body carries `waypoints`);
-        // `DELETE` clears it back to live. Backed by `simctl location`;
-        // pure parse + dispatch lives in `Server.applyLocation` /
-        // `clearLocation` for unit testing.
+        // point; a moving route when the body carries `waypoints`; or the
+        // joystick's walk vector when it carries `bearing`); `DELETE`
+        // clears it back to live. Backed by `simctl location`; pure parse
+        // + dispatch lives in `Server.applyLocation` / `clearLocation`
+        // for unit testing.
         router.post("/simulators/:udid/location") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let buffer = try? await r.body.collect(upTo: 64 * 1024)
@@ -213,7 +214,7 @@ struct Server: Sendable {
             case .ok:
                 return jsonOK
             case .invalidBody:
-                return errorJSON("location body must be a point {latitude,longitude} or a {waypoints:[…]} route", status: .badRequest)
+                return errorJSON("location body must be a point {latitude,longitude}, a {waypoints:[…]} route, or a {latitude,longitude,bearing,speed} walk", status: .badRequest)
             case .unknownDevice:
                 return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
             case .dispatchFailed:
@@ -678,13 +679,14 @@ struct Server: Sendable {
 
     // MARK: - Location routes
 
-    /// A parsed location request — either a single point (`set`) or a
-    /// moving route (`start`). The route body is distinguished by a
-    /// `waypoints` array; otherwise a bare `latitude`/`longitude` pair is
-    /// a point.
+    /// A parsed location request — a single point (`set`), a moving route
+    /// (`start`), or the browser joystick's walk vector. The route body is
+    /// distinguished by a `waypoints` array and the walk by a `bearing`;
+    /// otherwise a bare `latitude`/`longitude` pair is a point.
     enum LocationRequest: Equatable {
         case point(Coordinate)
         case route(LocationRoute)
+        case walk(LocationWalk)
     }
 
     /// Outcome of the location routes — one case per HTTP-status branch.
@@ -696,10 +698,16 @@ struct Server: Sendable {
     }
 
     /// Parse a `LocationRequest` from a JSON request body. Returns `nil`
-    /// for malformed JSON, an out-of-range point, or a route with fewer
-    /// than two valid waypoints — fail loud rather than silently dropping
-    /// it. Numbers arrive as JSON numbers; `Coordinate` / `LocationRoute`
-    /// own the validation.
+    /// for malformed JSON, an out-of-range point, a route with fewer
+    /// than two valid waypoints, or a walk with no positive speed — fail
+    /// loud rather than silently dropping it. Numbers arrive as JSON
+    /// numbers; `Coordinate` / `LocationRoute` / `LocationWalk` own the
+    /// validation.
+    ///
+    /// Order matters. A walk body carries `latitude`/`longitude` just
+    /// like a point does, so `bearing` has to be read *before* the bare
+    /// point branch — otherwise every joystick vector would parse as a
+    /// stationary point and the device would never move.
     static func parseLocationRequest(json: String) -> LocationRequest? {
         guard let data = json.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data),
@@ -716,6 +724,14 @@ struct Server: Sendable {
                 interval: doubleField(dict["interval"])
             ) else { return nil }
             return .route(route)
+        }
+        if let bearing = doubleField(dict["bearing"]) {
+            guard let origin = coordinateFromJSON(object),
+                  let speed = doubleField(dict["speed"]),
+                  let walk = LocationWalk(
+                      origin: origin, bearing: Bearing(degrees: bearing), speed: speed
+                  ) else { return nil }
+            return .walk(walk)
         }
         guard let coordinate = coordinateFromJSON(object) else { return nil }
         return .point(coordinate)
@@ -759,6 +775,11 @@ struct Server: Sendable {
             switch request {
             case .point(let coordinate): try await sim.location().set(coordinate)
             case .route(let route): try await sim.location().start(route)
+            // A walk is a route — projected over the horizon along its
+            // bearing — so the joystick reuses the `start` path that makes
+            // locationd derive course, rather than the `set` path that
+            // reports course = -1.
+            case .walk(let walk): try await sim.location().start(walk.route())
             }
             return .ok
         } catch {

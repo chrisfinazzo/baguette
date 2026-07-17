@@ -12,8 +12,8 @@ import Foundation
 struct LocationCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "location",
-        abstract: "Set, route, or clear the booted simulator's simulated GPS location",
-        subcommands: [Set.self, Start.self, Clear.self]
+        abstract: "Set, route, walk, or clear the booted simulator's simulated GPS location",
+        subcommands: [Set.self, Start.self, Walk.self, Clear.self]
     )
 
     /// `baguette location set --udid <UDID> <lat,lon>`
@@ -111,6 +111,67 @@ struct LocationCommand: ParsableCommand {
                 throw ExitCode.failure
             }
             log("Started \(simulator.name) route over \(route.waypoints.count) waypoints")
+        }
+    }
+
+    /// `baguette location walk --udid <UDID> --bearing <deg> --speed <m/s> <lat,lon>`
+    ///
+    /// The shell-side spelling of the browser joystick's Walk mode: head
+    /// off from a position in a compass direction, and keep going. Unlike
+    /// `set` — which pins a *stationary* point, reported to apps with
+    /// `course = -1` — a walk travels, so locationd derives
+    /// `CLLocation.course` from the motion and hands the bearing to the
+    /// app. Under the hood it's a `start` route projected over the
+    /// horizon; `LocationWalk` owns that projection.
+    ///
+    /// Stop the walk with `location set` (pins it, course goes back to
+    /// -1) or `location clear` (drops the override entirely).
+    struct Walk: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "walk",
+            abstract: "Walk from a lat,lon position along a compass bearing, driving CLLocation.course"
+        )
+
+        @OptionGroup var options: DeviceOption
+
+        @Option(help: "Compass bearing in degrees clockwise from north (0 = N, 90 = E). Normalised onto the circle.")
+        var bearing: Double
+
+        @Option(help: "Speed in metres/second (1.4 ≈ walking, 25 ≈ driving)")
+        var speed: Double
+
+        @Argument(help: "Starting position as a lat,lon token, e.g. 37.3349,-122.0090")
+        var position: String
+
+        /// The parsed vector as a validated Domain value — `nil` when the
+        /// origin is malformed / out of range or the speed isn't
+        /// positive. The single mapping `run()` and the parsing tests
+        /// both exercise.
+        var walk: LocationWalk? {
+            guard let origin = Coordinate(token: position) else { return nil }
+            return LocationWalk(origin: origin, bearing: Bearing(degrees: bearing), speed: speed)
+        }
+
+        func run() async throws {
+            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
+            guard let simulator = simulators.find(udid: options.udid) else {
+                log("Device \(options.udid) not found")
+                throw ExitCode.failure
+            }
+            guard let walk else {
+                log("location walk: give a valid lat,lon origin and a speed above 0")
+                throw ExitCode.failure
+            }
+            do {
+                try await simulator.location().start(walk.route())
+            } catch {
+                log("location walk failed: \(error)")
+                throw ExitCode.failure
+            }
+            log("""
+                Walking \(simulator.name) from \(walk.origin.argument) \
+                on bearing \(walk.bearing.degrees)° (\(walk.bearing.cardinal)) at \(walk.speed) m/s
+                """)
         }
     }
 
