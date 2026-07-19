@@ -22,6 +22,17 @@ For releases prior to this changelog, see the
   location exists, the raw dyld error is replaced by a message naming both
   paths searched and pointing at `DEVELOPER_DIR`.
 
+- **Xcode 27 support — device chrome renders again on 9-slice devices.**
+  Xcode 27 stopped publishing `mainScreenWidth` / `mainScreenHeight` /
+  `mainScreenScale` on a device type's `profile.plist` (124 of 124 device types
+  carry them on Xcode 26; 0 of 124 on Xcode 27) and moved the same values into
+  a sibling `capabilities.plist`. Only the 9-slice chrome path reads a screen
+  size, so every iPad — plus iPhone 17e — lost its bezel while devices with a
+  baked composite kept theirs. Both shapes are now read, preferring the
+  profile's own keys. The `integrated` display is selected explicitly: the same
+  list carries `tvOut` / `carPlay` entries at 720×480 and a resizable `scene`
+  entry at 7680×4320, any of which would have sized a bezel wrongly ([#28]).
+
 [#28]: https://github.com/tddworks/baguette/issues/28
 
 ---

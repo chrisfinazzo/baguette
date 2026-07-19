@@ -12,6 +12,13 @@ protocol ChromeStore: Sendable {
     /// turns that into a `nil` asset for the caller.
     func profilePlistData(deviceName: String) throws -> Data
 
+    /// Raw `capabilities.plist` from the same device-type bundle.
+    /// Xcode 27 publishes screen dimensions here instead of on the
+    /// profile; Xcode ≤26 has no such file, so throwing is the normal
+    /// path there and `LiveChromes` falls back to the profile's own
+    /// keys.
+    func capabilitiesPlistData(deviceName: String) throws -> Data
+
     /// Raw `chrome.json` for a chrome bundle (bare identifier — no
     /// `com.apple.dt.devicekit.chrome.` prefix).
     func chromeJSONData(chromeIdentifier: String) throws -> Data

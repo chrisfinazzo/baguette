@@ -20,6 +20,11 @@ struct FileSystemChromeStore: ChromeStore {
         return try Data(contentsOf: URL(fileURLWithPath: path))
     }
 
+    func capabilitiesPlistData(deviceName: String) throws -> Data {
+        let path = "\(deviceTypesRoot)/\(deviceName).simdevicetype/Contents/Resources/capabilities.plist"
+        return try Data(contentsOf: URL(fileURLWithPath: path))
+    }
+
     func chromeJSONData(chromeIdentifier: String) throws -> Data {
         let path = "\(chromeRoot)/\(chromeIdentifier).devicechrome/Contents/Resources/chrome.json"
         return try Data(contentsOf: URL(fileURLWithPath: path))

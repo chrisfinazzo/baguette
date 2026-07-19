@@ -6,10 +6,25 @@ import Mockable
 @Suite("LiveChromes")
 struct LiveChromesTests {
 
+    /// A store shaped like Xcode ≤26: no `capabilities.plist`, so the
+    /// screen size comes from the profile's own `mainScreen*` keys.
+    ///
+    /// Stubbed here rather than in each test because `LiveChromes` asks
+    /// every store for capabilities now, and Mockable traps on any
+    /// requirement the production path reaches without a return value —
+    /// even one the caller wraps in `try?`. Tests that want the Xcode 27
+    /// shape stub it themselves.
+    private func makeChromeStore() -> MockChromeStore {
+        let store = MockChromeStore()
+        given(store).capabilitiesPlistData(deviceName: .any)
+            .willThrow(StubError.notFound)
+        return store
+    }
+
     // MARK: - happy path
 
     @Test func `assets returns parsed chrome and rasterized composite`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let pdf = Data("PDF-COMPOSITE".utf8)
         let png = ChromeImage(data: Data("PNG-DATA".utf8), size: Size(width: 393, height: 852))
@@ -30,7 +45,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets caches by chrome identifier across repeated lookups`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let pdf = Data("X".utf8)
         let png = ChromeImage(data: Data("Y".utf8), size: Size(width: 1, height: 1))
@@ -56,7 +71,7 @@ struct LiveChromesTests {
     // MARK: - degraded paths — every step gives nil cleanly
 
     @Test func `assets returns nil when profile plist is unreadable`() {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         given(store).profilePlistData(deviceName: .any).willThrow(StubError.notFound)
 
@@ -65,7 +80,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets returns nil when chrome JSON is unreadable`() {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
         given(store).chromeJSONData(chromeIdentifier: .any).willThrow(StubError.notFound)
@@ -75,7 +90,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets returns nil when chrome has neither composite nor full slice`() {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
         given(store).chromeJSONData(chromeIdentifier: .any)
@@ -88,7 +103,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets composes a 9-slice bezel using screen size from plist`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composed = ChromeImage(data: Data("9SLICE-PNG".utf8), size: Size(width: 926, height: 1302))
 
@@ -132,7 +147,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets returns nil for 9-slice bundle when plist lacks screen size`() {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         // chromeIdentifier present but mainScreen* keys missing — the
         // 9-slice path can't size the canvas, so the asset is unloadable.
@@ -148,7 +163,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets returns nil when a 9-slice piece is unreadable`() {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
         given(store).chromeJSONData(chromeIdentifier: .any)
@@ -167,7 +182,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets returns nil when composite PDF is unreadable`() {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
         given(store).chromeJSONData(chromeIdentifier: .any).willReturn(Self.fixtureChromeJSON)
@@ -179,7 +194,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets returns nil when rasterizer fails`() {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
         given(store).chromeJSONData(chromeIdentifier: .any).willReturn(Self.fixtureChromeJSON)
@@ -193,7 +208,7 @@ struct LiveChromesTests {
     // Drives `assemble` end-to-end with all four button anchors so the
     // anchor switch in computeMargins / buttonTopLeft is fully exercised.
     @Test func `assets composes a merged bezel for left right top and bottom buttons`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composite = ChromeImage(data: Data("composite".utf8), size: Size(width: 100, height: 200))
         let buttonImage = ChromeImage(data: Data("btn".utf8), size: Size(width: 10, height: 20))
@@ -242,7 +257,7 @@ struct LiveChromesTests {
     // accidental `imgW + offX` = -5 → 0 the prior production code
     // would compute.
     @Test func `assets uses chrome devicePadding as button margins`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composite = ChromeImage(data: Data("composite".utf8), size: Size(width: 100, height: 200))
         let sideBtn = ChromeImage(data: Data("side".utf8), size: Size(width: 20, height: 60))
@@ -296,7 +311,7 @@ struct LiveChromesTests {
     //   y = 2 * 160 - 160 = 160  (TOP-edge convention; y delta is
     //                             zero on horizontal-only animations)
     @Test func `assets positions right-anchor button mirroring rollover delta inward`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composite = ChromeImage(data: Data("c".utf8), size: Size(width: 100, height: 200))
         let btn = ChromeImage(data: Data("b".utf8), size: Size(width: 36, height: 67))
@@ -333,7 +348,7 @@ struct LiveChromesTests {
     // for the digital crown and side button, so honoring `onTop` fixes
     // every watch family in one go.
     @Test func `assets layers onTop buttons above the composite`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composite = ChromeImage(data: Data("composite".utf8), size: Size(width: 100, height: 200))
         let behind = ChromeImage(data: Data("behind".utf8), size: Size(width: 10, height: 20))
@@ -377,7 +392,7 @@ struct LiveChromesTests {
     // When every button image fails to rasterize the merged-canvas path
     // is skipped — assets fall back to the bare composite, no compose call.
     @Test func `assets falls back to bare composite when every button image fails`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composite = ChromeImage(data: Data("c".utf8), size: Size(width: 100, height: 200))
 
@@ -410,7 +425,7 @@ struct LiveChromesTests {
     // being dropped after the merge.
 
     @Test func `assets retains the bare composite separate from the merged composite`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composite = ChromeImage(data: Data("composite-bare".utf8), size: Size(width: 100, height: 200))
         let buttonImage = ChromeImage(data: Data("btn".utf8), size: Size(width: 10, height: 20))
@@ -439,7 +454,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets retains every button image keyed by name`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let composite = ChromeImage(data: Data("c".utf8), size: Size(width: 100, height: 200))
         let buttonImage = ChromeImage(data: Data("btn".utf8), size: Size(width: 10, height: 20))
@@ -471,7 +486,7 @@ struct LiveChromesTests {
     }
 
     @Test func `assets falls back bareComposite to composite when chrome has no buttons`() throws {
-        let store = MockChromeStore()
+        let store = makeChromeStore()
         let rasterizer = MockPDFRasterizer()
         let pdf = Data("pdf".utf8)
         let composite = ChromeImage(data: Data("c".utf8), size: Size(width: 1, height: 1))
