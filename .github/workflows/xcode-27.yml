@@ -68,12 +68,13 @@ jobs:
       - name: Build
         run: swift build -c release
 
-      - name: Unit tests
-        run: swift test
-
       # End-to-end: on a machine with no Xcode 26, an unfixed baguette
       # emits the "SimulatorKit not found" diagnostic and cannot drive a
       # simulator at all. Its absence is the fix working.
+      #
+      # Ordered ahead of the suite because it is what this job exists to
+      # prove — an unrelated regression elsewhere must not cost us the
+      # primary evidence.
       - name: Assert baguette resolves SimulatorKit
         run: |
           OUT=$(.build/release/Baguette list 2>&1) || true
@@ -87,3 +88,29 @@ jobs:
             exit 1
           fi
           echo "SimulatorKit resolved and loaded."
+
+      - name: Unit tests
+        if: always()
+        run: swift test
+
+      # The 9-slice chrome suite passes on the macOS 26 image and fails
+      # on this one — six devices whose .simdevicetype is installed, but
+      # whose DeviceKit chrome bundle no longer resolves. Separate from
+      # the SimulatorKit relocation and not yet understood, so dump the
+      # inputs the store actually reads rather than guessing.
+      - name: Capture DeviceKit layout (chrome suite diagnostics)
+        if: always()
+        run: |
+          echo "=== /Library/Developer/DeviceKit/Chrome ==="
+          ls -1 /Library/Developer/DeviceKit/Chrome 2>&1 | head -40
+          echo
+          for DEVICE in "iPhone 17e" "iPad (9th generation)"; do
+            PLIST="/Library/Developer/CoreSimulator/Profiles/DeviceTypes/$DEVICE.simdevicetype/Contents/Resources/profile.plist"
+            echo "=== $DEVICE ==="
+            if [ -e "$PLIST" ]; then
+              /usr/libexec/PlistBuddy -c 'Print :chromeIdentifier' "$PLIST" 2>&1 || \
+                echo "  (no chromeIdentifier key)"
+            else
+              echo "  no profile.plist"
+            fi
+          done
