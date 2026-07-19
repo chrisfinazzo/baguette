@@ -10,6 +10,20 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+
+- **Xcode 27 support — SimulatorKit is found at its new location.** Xcode 27
+  moved `SimulatorKit.framework` out of the developer directory
+  (`Contents/Developer/Library/PrivateFrameworks/`) and up into
+  `Contents/SharedFrameworks/`. Every `dlopen` site hardcoded the old path, so
+  a machine whose only Xcode is 27 failed to load SimulatorKit at all and no
+  simulator control worked ([#28]). Both layouts are now probed, oldest-first,
+  so Xcode ≤26 resolves to exactly the path it always did. When neither
+  location exists, the raw dyld error is replaced by a message naming both
+  paths searched and pointing at `DEVELOPER_DIR`.
+
+[#28]: https://github.com/tddworks/baguette/issues/28
+
 ---
 
 ## [0.1.81] - 2026-07-17

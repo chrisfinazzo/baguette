@@ -287,10 +287,8 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
     /// reveals which byte is the edge slot in the message buffer.
     private static func dumpMouseEventMessage(x: Double, y: Double, edge: UInt32) -> String? {
         let dev = CoreSimulators.developerDir()
-        let kitPath = (dev as NSString).appendingPathComponent(
-            "Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
-        )
-        guard let kit = dlopen(kitPath, RTLD_NOW) else { return nil }
+        guard let kitPath = SimulatorKitFramework.path(developerDir: dev),
+              let kit = dlopen(kitPath, RTLD_NOW) else { return nil }
         guard let sym = dlsym(kit, "IndigoHIDMessageForMouseNSEvent") else { return nil }
         // 9-arg shape — same `MouseFn` typealias as IndigoHIDInput.
         typealias MouseFn = @convention(c) (
@@ -365,9 +363,11 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
         // 1. Open SimulatorKit — same dlopen the production HID input
         //    already does. We need the trackpad wrapper symbol.
         let dev = CoreSimulators.developerDir()
-        let kitPath = (dev as NSString).appendingPathComponent(
-            "Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
-        )
+        guard let kitPath = SimulatorKitFramework.path(developerDir: dev) else {
+            return Outcome(accepted: false, messageSize: 0, dispatched: false,
+                           reason: "SimulatorKit not found under \(dev) — see issue #28",
+                           hex: nil)
+        }
         guard let kit = dlopen(kitPath, RTLD_NOW) else {
             return Outcome(accepted: false, messageSize: 0, dispatched: false,
                            reason: "dlopen SimulatorKit failed: \(String(cString: dlerror()))",
