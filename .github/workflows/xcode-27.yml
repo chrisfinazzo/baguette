@@ -1,0 +1,89 @@
+name: Xcode 27 compatibility
+
+# Xcode 27 relocated SimulatorKit.framework (issue #28). The `xcode-27`
+# runner image is the only place we can prove the fix: it ships Xcode 27
+# beta 3 and *no* Xcode 26, so `CoreSimulators.developerDir()` has
+# nothing to silently fall back to. On a developer machine with both
+# Xcodes installed, the fallback masks the bug — baguette works via 26
+# whether or not the fix is present, so a green local run proves nothing.
+#
+# The image is a public preview and can queue, so this is opt-in rather
+# than part of the PR gate.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/xcode-27-simulatorkit-path]
+
+jobs:
+  xcode-27:
+    name: SimulatorKit resolves on Xcode 27
+    runs-on: xcode-27
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Record the toolchain under test
+        run: |
+          xcodebuild -version
+          xcode-select -p
+          swift --version
+
+      # The whole fix rests on a relocation reported by third parties.
+      # Assert it directly rather than trusting the report: this step is
+      # the primary evidence, and it fails loudly if Apple moves the
+      # framework again in a later beta.
+      - name: Assert SimulatorKit's location on Xcode 27
+        run: |
+          DEV="$(xcode-select -p)"
+          OLD="$DEV/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
+          NEW="$(dirname "$DEV")/SharedFrameworks/SimulatorKit.framework/SimulatorKit"
+
+          echo "old (Xcode <=26): $OLD"
+          echo "new (Xcode 27):   $NEW"
+          [ -e "$OLD" ] && echo "  present at OLD" || echo "  absent at OLD"
+          [ -e "$NEW" ] && echo "  present at NEW" || echo "  absent at NEW"
+
+          if [ ! -e "$NEW" ]; then
+            echo "::error::SimulatorKit is not at the expected Xcode 27 location."
+            echo "Candidates actually present under the Xcode bundle:"
+            find "$(dirname "$DEV")" -maxdepth 4 -name 'SimulatorKit.framework' 2>/dev/null || true
+            exit 1
+          fi
+
+      # Guards the premise of this job: if a future image adds an
+      # Xcode 26, the fallback returns and every assertion below starts
+      # passing for the wrong reason.
+      - name: Assert no Xcode 26 is installed to fall back to
+        run: |
+          FOUND=$(ls -d /Applications/Xcode*26*.app 2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "::error::Xcode 26 present — developerDir() can fall back, so this job no longer tests Xcode 27."
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Only Xcode 27 installed — no fallback available."
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Unit tests
+        run: swift test
+
+      # End-to-end: on a machine with no Xcode 26, an unfixed baguette
+      # emits the "SimulatorKit not found" diagnostic and cannot drive a
+      # simulator at all. Its absence is the fix working.
+      - name: Assert baguette resolves SimulatorKit
+        run: |
+          OUT=$(.build/release/Baguette list 2>&1) || true
+          echo "$OUT"
+          if echo "$OUT" | grep -q "SimulatorKit not found"; then
+            echo "::error::baguette could not resolve SimulatorKit on Xcode 27."
+            exit 1
+          fi
+          if echo "$OUT" | grep -q "SimulatorKit load failed"; then
+            echo "::error::SimulatorKit was found but failed to dlopen on Xcode 27."
+            exit 1
+          fi
+          echo "SimulatorKit resolved and loaded."
