@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.82] - 2026-07-20
+
 ### Fixed
 
 - **Xcode 27 support — SimulatorKit is found at its new location.** Xcode 27
@@ -265,7 +269,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.81...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.82...HEAD
+[0.1.82]: https://github.com/tddworks/baguette/compare/v0.1.81...v0.1.82
 [0.1.81]: https://github.com/tddworks/baguette/compare/v0.1.80...v0.1.81
 [0.1.80]: https://github.com/tddworks/baguette/compare/v0.1.79...v0.1.80
 [0.1.79]: https://github.com/tddworks/baguette/compare/v0.1.78...v0.1.79
