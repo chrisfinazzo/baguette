@@ -1,0 +1,150 @@
+name: Xcode 27 compatibility
+
+# Xcode 27 relocated SimulatorKit.framework (issue #28). The `xcode-27`
+# runner image is the only place we can prove the fix: it ships Xcode 27
+# beta 3 and *no* Xcode 26, so `CoreSimulators.developerDir()` has
+# nothing to silently fall back to. On a developer machine with both
+# Xcodes installed, the fallback masks the bug — baguette works via 26
+# whether or not the fix is present, so a green local run proves nothing.
+#
+# Two triggers, for two different ways this can break:
+#
+#   - push / pull_request — our own changes regressing Xcode 27 support.
+#   - schedule — Apple moving things again in a later beta. That breaks
+#     with no commit of ours involved, so nothing else would catch it;
+#     a weekly run turns a silent break into a dated red build.
+#
+# The image is a public preview and can queue, so the scheduled run is
+# weekly rather than nightly.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  xcode-27:
+    name: Xcode 27 compatibility
+    runs-on: xcode-27
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Record the toolchain under test
+        run: |
+          xcodebuild -version
+          xcode-select -p
+          swift --version
+
+      # The whole fix rests on a relocation reported by third parties.
+      # Assert it directly rather than trusting the report: this step is
+      # the primary evidence, and it fails loudly if Apple moves the
+      # framework again in a later beta.
+      - name: Assert SimulatorKit's location on Xcode 27
+        run: |
+          DEV="$(xcode-select -p)"
+          OLD="$DEV/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
+          NEW="$(dirname "$DEV")/SharedFrameworks/SimulatorKit.framework/SimulatorKit"
+
+          echo "old (Xcode <=26): $OLD"
+          echo "new (Xcode 27):   $NEW"
+          [ -e "$OLD" ] && echo "  present at OLD" || echo "  absent at OLD"
+          [ -e "$NEW" ] && echo "  present at NEW" || echo "  absent at NEW"
+
+          if [ ! -e "$NEW" ]; then
+            echo "::error::SimulatorKit is not at the expected Xcode 27 location."
+            echo "Candidates actually present under the Xcode bundle:"
+            find "$(dirname "$DEV")" -maxdepth 4 -name 'SimulatorKit.framework' 2>/dev/null || true
+            exit 1
+          fi
+
+      # Guards the premise of this job: if a future image adds an
+      # Xcode 26, the fallback returns and every assertion below starts
+      # passing for the wrong reason.
+      - name: Assert no Xcode 26 is installed to fall back to
+        run: |
+          FOUND=$(ls -d /Applications/Xcode*26*.app 2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "::error::Xcode 26 present — developerDir() can fall back, so this job no longer tests Xcode 27."
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Only Xcode 27 installed — no fallback available."
+
+      - name: Build
+        run: swift build -c release
+
+      # End-to-end: on a machine with no Xcode 26, an unfixed baguette
+      # emits the "SimulatorKit not found" diagnostic and cannot drive a
+      # simulator at all. Its absence is the fix working.
+      #
+      # Ordered ahead of the suite because it is what this job exists to
+      # prove — an unrelated regression elsewhere must not cost us the
+      # primary evidence.
+      - name: Assert baguette resolves SimulatorKit
+        run: |
+          OUT=$(.build/release/Baguette list 2>&1) || true
+          echo "$OUT"
+          if echo "$OUT" | grep -q "SimulatorKit not found"; then
+            echo "::error::baguette could not resolve SimulatorKit on Xcode 27."
+            exit 1
+          fi
+          if echo "$OUT" | grep -q "SimulatorKit load failed"; then
+            echo "::error::SimulatorKit was found but failed to dlopen on Xcode 27."
+            exit 1
+          fi
+          echo "SimulatorKit resolved and loaded."
+
+      - name: Unit tests
+        if: always()
+        run: swift test
+
+      # The second relocation this repo had to absorb: Xcode 27 dropped
+      # mainScreenWidth/Height/Scale from profile.plist and publishes
+      # them in capabilities.plist under an `integrated` display. Only
+      # the 9-slice chrome path reads a screen size, so a regression
+      # here costs every iPad its bezel while composite devices look
+      # fine — a quiet failure worth asserting rather than inferring
+      # from the suite.
+      - name: Assert screen dimensions are where Xcode 27 puts them
+        if: always()
+        run: |
+          TYPES=/Library/Developer/CoreSimulator/Profiles/DeviceTypes
+          python3 - "$TYPES" <<'PY'
+          import glob, os, plistlib, sys
+
+          types = sys.argv[1]
+          checked = legacy = modern = 0
+          for d in sorted(glob.glob(f"{types}/*.simdevicetype")):
+              prof, caps = (f"{d}/Contents/Resources/profile.plist",
+                            f"{d}/Contents/Resources/capabilities.plist")
+              if not os.path.exists(prof):
+                  continue
+              checked += 1
+              p = plistlib.load(open(prof, "rb"))
+              if all(k in p for k in
+                     ("mainScreenWidth", "mainScreenHeight", "mainScreenScale")):
+                  legacy += 1
+                  continue
+              if not os.path.exists(caps):
+                  continue
+              displays = (plistlib.load(open(caps, "rb"))
+                          .get("capabilities", {}).get("displays", []))
+              if any(x.get("displayType") == "integrated" for x in displays):
+                  modern += 1
+
+          print(f"device types:            {checked}")
+          print(f"  legacy profile keys:   {legacy}")
+          print(f"  capabilities.plist:    {modern}")
+
+          if checked and legacy + modern == 0:
+              print("::error::No device type exposes a screen size in either "
+                    "known shape — 9-slice chrome would lose every bezel.")
+              raise SystemExit(1)
+          print("Screen dimensions readable in a known shape.")
+          PY

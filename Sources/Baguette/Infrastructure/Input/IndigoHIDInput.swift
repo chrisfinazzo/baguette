@@ -611,9 +611,10 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private func resolveFunctions() {
         guard mouseFn == nil else { return }
         let dev = CoreSimulators.developerDir()
-        let path = (dev as NSString).appendingPathComponent(
-            "Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
-        )
+        guard let path = SimulatorKitFramework.path(developerDir: dev) else {
+            logErr("SimulatorKit not found under \(dev) — see issue #28")
+            return
+        }
         guard let handle = dlopen(path, RTLD_NOW) else {
             logErr("SimulatorKit dlopen failed: \(dlerrorString())")
             return

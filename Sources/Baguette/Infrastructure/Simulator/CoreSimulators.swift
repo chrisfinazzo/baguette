@@ -140,11 +140,23 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         guard !loaded else { return }
         loaded = true
         let dev = developerDir()
+        // CoreSimulator lives outside Xcode, in a system path that
+        // Xcode 27 left alone.
         let coreSim = "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator"
-        let simKit = (dev as NSString)
-            .appendingPathComponent("Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit")
         if dlopen(coreSim, RTLD_NOW | RTLD_GLOBAL) == nil {
             logErr("CoreSimulator load failed: \(dlerrorString())")
+        }
+        guard let simKit = SimulatorKitFramework.path(developerDir: dev) else {
+            // No Xcode on this machine carries SimulatorKit at either
+            // known location. Say so — a raw dyld error here names one
+            // path the user never had and reads as a broken install.
+            logErr("SimulatorKit not found. Searched:")
+            for candidate in SimulatorKitFramework.candidatePaths(developerDir: dev) {
+                logErr("  \(candidate)")
+            }
+            logErr("Set DEVELOPER_DIR to an Xcode that has it, or see")
+            logErr("https://github.com/tddworks/baguette/issues/28")
+            return
         }
         if dlopen(simKit, RTLD_NOW | RTLD_GLOBAL) == nil {
             logErr("SimulatorKit load failed: \(dlerrorString())")
@@ -186,9 +198,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     }
 
     private static func hasSimulatorKit(at developerDir: String) -> Bool {
-        let path = (developerDir as NSString)
-            .appendingPathComponent("Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit")
-        return FileManager.default.fileExists(atPath: path)
+        SimulatorKitFramework.path(developerDir: developerDir) != nil
     }
 
     private static func scanApplications() -> String? {

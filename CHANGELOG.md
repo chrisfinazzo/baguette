@@ -10,6 +10,31 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+
+- **Xcode 27 support — SimulatorKit is found at its new location.** Xcode 27
+  moved `SimulatorKit.framework` out of the developer directory
+  (`Contents/Developer/Library/PrivateFrameworks/`) and up into
+  `Contents/SharedFrameworks/`. Every `dlopen` site hardcoded the old path, so
+  a machine whose only Xcode is 27 failed to load SimulatorKit at all and no
+  simulator control worked ([#28]). Both layouts are now probed, oldest-first,
+  so Xcode ≤26 resolves to exactly the path it always did. When neither
+  location exists, the raw dyld error is replaced by a message naming both
+  paths searched and pointing at `DEVELOPER_DIR`.
+
+- **Xcode 27 support — device chrome renders again on 9-slice devices.**
+  Xcode 27 stopped publishing `mainScreenWidth` / `mainScreenHeight` /
+  `mainScreenScale` on a device type's `profile.plist` (124 of 124 device types
+  carry them on Xcode 26; 0 of 124 on Xcode 27) and moved the same values into
+  a sibling `capabilities.plist`. Only the 9-slice chrome path reads a screen
+  size, so every iPad — plus iPhone 17e — lost its bezel while devices with a
+  baked composite kept theirs. Both shapes are now read, preferring the
+  profile's own keys. The `integrated` display is selected explicitly: the same
+  list carries `tvOut` / `carPlay` entries at 720×480 and a resizable `scene`
+  entry at 7680×4320, any of which would have sized a bezel wrongly ([#28]).
+
+[#28]: https://github.com/tddworks/baguette/issues/28
+
 ---
 
 ## [0.1.81] - 2026-07-17

@@ -54,7 +54,14 @@ final class LiveChromes: Chromes, @unchecked Sendable {
     private func resolveProfile(deviceName: String) -> DeviceProfile? {
         do {
             let plistData = try store.profilePlistData(deviceName: deviceName)
-            return try DeviceProfile.parsing(plistData: plistData)
+            // Absent on Xcode ≤26 — the profile carries the screen
+            // there, so a missing capabilities file is not an error.
+            let capabilities = try? store.capabilitiesPlistData(
+                deviceName: deviceName
+            )
+            return try DeviceProfile.parsing(
+                plistData: plistData, capabilitiesData: capabilities
+            )
         } catch {
             return nil
         }

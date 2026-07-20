@@ -276,10 +276,8 @@ enum IOHIDDigitizerDispatch {
     private static func ensureSymbols() -> Bool {
         if symbolsResolved { return true }
         let dev = CoreSimulators.developerDir()
-        let kitPath = (dev as NSString).appendingPathComponent(
-            "Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
-        )
-        guard let kit = dlopen(kitPath, RTLD_NOW) else { return false }
+        guard let kitPath = SimulatorKitFramework.path(developerDir: dev),
+              let kit = dlopen(kitPath, RTLD_NOW) else { return false }
         let dyld = UnsafeMutableRawPointer(bitPattern: -2)
         guard let pCreateDig = dlsym(dyld, "IOHIDEventCreateDigitizerEvent"),
               let pCreateFin = dlsym(dyld, "IOHIDEventCreateDigitizerFingerEvent"),
