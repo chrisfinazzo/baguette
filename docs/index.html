@@ -39,7 +39,7 @@
     .shell { width: min(1180px, calc(100% - 48px)); margin: 0 auto; position: relative; }
 
     header { width: min(1180px, calc(100% - 48px)); height: 64px; display: flex; align-items: center; margin: 18px auto 0; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.52); box-shadow: 0 12px 35px rgba(42,61,89,.10), inset 0 1px 0 rgba(255,255,255,.88); backdrop-filter: blur(28px) saturate(165%); -webkit-backdrop-filter: blur(28px) saturate(165%); transition: width .25s ease, border-radius .25s ease, background .25s ease, box-shadow .25s ease, border-color .25s ease; }
-    header.is-scrolled { width: 100%; border-width: 0 0 1px; border-radius: 0 0 18px 18px; background: rgba(247,250,255,.68); border-color: rgba(255,255,255,.9); box-shadow: 0 13px 32px rgba(35,54,84,.13), inset 0 -1px 0 rgba(255,255,255,.56); }
+    header.is-scrolled { width: 100%; margin-top: 0; border-width: 0 0 1px; border-radius: 0 0 18px 18px; background: rgba(247,250,255,.68); border-color: rgba(255,255,255,.9); box-shadow: 0 13px 32px rgba(35,54,84,.13), inset 0 -1px 0 rgba(255,255,255,.56); }
     .scroll-edge { height: 48px; margin-bottom: -48px; position: sticky; top: 64px; z-index: 19; pointer-events: none; background: linear-gradient(to bottom, rgba(238,245,252,.22), transparent); backdrop-filter: blur(22px) saturate(155%); -webkit-backdrop-filter: blur(22px) saturate(155%); -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.8) 30%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.8) 30%, transparent 100%); opacity: 0; transition: opacity .22s ease; }
     .scroll-edge.is-visible { opacity: 1; }
     .nav { display: flex; align-items: center; justify-content: space-between; }
@@ -256,7 +256,7 @@
     </section>
 
     <section id="install" class="install shell">
-      <div class="install-card"><div class="section-index">03 / Get started</div><h2>From source to first stream in minutes.</h2><p>Clone the repository, build the release binary, and launch the server. Requires Xcode 26 on Apple Silicon.</p><div class="command"><code><span>$</span> git clone https://github.com/tddworks/baguette.git</code><button class="copy-button" type="button" data-copy="git clone https://github.com/tddworks/baguette.git">Copy</button></div></div>
+      <div class="install-card"><div class="section-index">03 / Get started</div><h2>From install to first stream in minutes.</h2><p>Install Baguette with Homebrew and launch the server. Requires Xcode 26 on Apple Silicon.</p><div class="command"><code><span>$</span> brew install baguette</code><button class="copy-button" type="button" data-copy="brew install baguette">Copy</button></div></div>
     </section>
   </main>
 
