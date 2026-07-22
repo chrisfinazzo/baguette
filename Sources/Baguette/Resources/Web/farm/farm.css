@@ -156,8 +156,9 @@ header {
 
 /* ===== MAIN ===== */
 main {
+  --focus-width: 420px;
   display: grid;
-  grid-template-columns: 280px 1fr 420px;
+  grid-template-columns: 280px minmax(0, 1fr) 9px var(--focus-width);
   overflow: hidden;
   min-height: 0;
 }
@@ -773,10 +774,35 @@ main {
 .list-row.selected .row-actions { opacity: 1; }
 
 /* ===== FOCUS PANE ===== */
+.focus-resizer {
+  position: relative;
+  background: var(--panel-2);
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.focus-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 4px;
+  width: 1px;
+  background: var(--rule);
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+.focus-resizer:hover::after,
+.focus-resizer:focus-visible::after,
+body.focus-resizing .focus-resizer::after {
+  background: var(--phosphor);
+  box-shadow: 0 0 8px var(--phosphor-glow);
+}
+body.focus-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
 .focus {
-  border-left: 1px solid var(--rule);
   background: var(--panel-2);
   overflow-y: auto;
+  min-width: 0;
   display: flex; flex-direction: column;
 }
 .focus::-webkit-scrollbar { width: 4px; }

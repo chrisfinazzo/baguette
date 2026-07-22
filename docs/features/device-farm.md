@@ -49,8 +49,8 @@ served URL structure — no rewriting, no flat-file aliasing.
 ```
 ┌─ HEADER ──────────────────────────────────────────────────────────┐
 │ Baguette / DEVICE FARM   FLEET · FPS · BANDWIDTH · LATENCY · CLOCK│
-├──────────┬───────────────────────────────────────────┬────────────┤
-│  RAIL    │  GRID / WALL / LIST                       │ FOCUS PANE │
+├──────────┬───────────────────────────────────────────┬─┬──────────┤
+│  RAIL    │  GRID / WALL / LIST                       │↔│FOCUS PANE│
 │          │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐      │ big preview│
 │ Platform │  │  📱  │ │  📱  │ │  📱  │ │  ⌚  │      │            │
 │ Runtime  │  └──────┘ └──────┘ └──────┘ └──────┘      │  TELEMETRY │
@@ -61,9 +61,20 @@ served URL structure — no rewriting, no flat-file aliasing.
 └─ CLI MIRROR: baguette serve --platform … --runtime … --focus <udid> ┘
 ```
 
-Three columns, one main row, plus header + footer. The CLI mirror
+Three content columns separated by a resize handle, one main row,
+plus header + footer. The CLI mirror
 footer reflects the current filter / focus state as a Baguette
 invocation — useful for copy-paste reproduction.
+
+The focused-device pane starts at 420 px and can be resized by dragging
+its left divider. It is bounded to 260–720 px while reserving at least
+320 px for the fleet view whenever the viewport permits. Arrow keys resize the focused pane when the
+divider has keyboard focus; Home/End select its bounds, and double-click
+restores 420 px. The selected width is stored in
+`localStorage.baguette.farm.focusWidth`, then re-clamped when the browser
+window changes size. Making the pane narrower also shortens portrait
+device previews, which keeps the full screen visible on displays using
+large OS scaling without zooming the whole page.
 
 ## Frontend split
 
@@ -78,6 +89,7 @@ farm.css          design tokens + Grid / Wall / List + focus styles
 farm-views.js     pure DOM renderers (one fn per view + sub-region)
 farm-tile.js      FarmTile: per-device StreamSession + canvas + mirror
 farm-focus.js     FarmFocus: focus-pane chrome (telemetry, controls)
+farm-focus-width.js adjustable focus-pane width + persisted preference
 farm-filter.js    FarmFilter: facet state + predicate (extractable)
 farm-app.js       FarmApp: orchestrator (boot, render, dispatch)
 ```

@@ -11,14 +11,15 @@
 </head>
 <body>
 <!--
-  Static shell. The five scripts below own one job each, hung off
+  Static shell. The six farm scripts below own one job each, hung off
   `window` as IIFE classes (same pattern as sim-list.js / sim-stream.js):
 
-    1. farm-views.js  — Grid / Wall / List renderers (pure DOM)
-    2. farm-tile.js   — FarmTile: per-device thumbnail StreamSession
-    3. farm-focus.js  — FarmFocus: full-quality focused-device pane
-    4. farm-filter.js — FarmFilter: filter state + sidebar wiring
-    5. farm-app.js    — FarmApp: orchestrator (boot, fetch, dispatch)
+    1. farm-focus-width.js — persisted focus-pane resizing
+    2. farm-views.js       — Grid / Wall / List renderers (pure DOM)
+    3. farm-tile.js        — FarmTile: per-device thumbnail StreamSession
+    4. farm-focus.js       — FarmFocus: full-quality focused-device pane
+    5. farm-filter.js      — FarmFilter: filter state + sidebar wiring
+    6. farm-app.js         — FarmApp: orchestrator (boot, fetch, dispatch)
 
   No bundler, no module graph. Load order matters: dependents go last.
 -->
@@ -30,6 +31,10 @@
       <div class="grid-head" id="farm-grid-head"></div>
       <div id="farm-view-host"></div>
     </section>
+    <div class="focus-resizer" id="farm-focus-resizer" role="separator"
+         aria-label="Resize focused device pane" aria-orientation="vertical"
+         aria-valuemin="260" aria-valuemax="720" aria-valuenow="420"
+         tabindex="0" title="Drag to resize · Double-click to reset"></div>
     <aside class="focus" id="farm-focus"></aside>
   </main>
   <footer id="farm-cli"></footer>
@@ -49,6 +54,7 @@
 <script src="/baguette/parts/keyboard.js"></script>
 <script src="/baguette/simulator.js"></script>
 <script src="/baguette/baguette.js"></script>
+<script src="/farm/farm-focus-width.js"></script>
 <script src="/farm/farm-views.js"></script>
 <script src="/farm/farm-tile.js"></script>
 <script src="/farm/farm-focus.js"></script>
