@@ -21,7 +21,7 @@ struct CommandParsingTests {
             "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "render-3d", "describe-ui", "logs", "serve",
             "orientation", "status-bar", "location", "install", "add-media",
-            "diag-digitizer-trackpad", "lifetime",
+            "plugin", "diag-digitizer-trackpad", "lifetime",
         ])
     }
 

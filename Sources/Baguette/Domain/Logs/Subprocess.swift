@@ -54,6 +54,31 @@ protocol Subprocess: AnyObject, Sendable {
         onExit:  @escaping @Sendable (Int32) -> Void
     ) throws
 
+    /// Like the `stdin` variant, but also pins the child's working
+    /// directory and replaces its environment.
+    ///
+    /// Added for plugin commands, where both are part of the contract
+    /// rather than conveniences: `workingDirectory` is the plugin's
+    /// own root, so a relative `run` path resolves against the
+    /// plugin's files and a plugin cannot reach for the host's cwd;
+    /// `environment` is how the invocation context (server URL,
+    /// device, per-session token) reaches a child that may be written
+    /// in any language.
+    ///
+    /// `environment` is the child's *complete* environment —
+    /// implementations do not merge it with the parent's. Callers that
+    /// want the parent's PATH must pass it through explicitly, which
+    /// keeps what a plugin inherits an explicit decision.
+    func run(
+        executable: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        environment: [String: String],
+        stdin: Data,
+        onBytes: @escaping @Sendable (Data) -> Void,
+        onExit:  @escaping @Sendable (Int32) -> Void
+    ) throws
+
     /// Send the child the platform's polite-stop signal
     /// (`SIGTERM` on POSIX). Idempotent: repeated calls are
     /// no-ops once the child is already gone or has been asked

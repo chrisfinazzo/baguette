@@ -42,6 +42,10 @@ let package = Package(
                 // Data-driven 3D device definitions. Large USDZ assets are
                 // downloaded from their declared source and SHA-256 verified.
                 .copy("Resources/Models3D"),
+                // Plugins baguette ships (the reference accessibility
+                // audit). Resolved at runtime by `PluginRoot`, the same
+                // three-step lookup `WebRoot` uses for the web assets.
+                .copy("Resources/Plugins"),
                 // iOS-Simulator dylib (vendored under `VirtualCamera/`,
                 // built by `VirtualCamera/build.sh` and staged here by
                 // the top-level `build.sh`). `VirtualCameraInstaller`

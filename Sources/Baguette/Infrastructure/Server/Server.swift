@@ -39,26 +39,35 @@ struct Server: Sendable {
     let chromes: any Chromes
     let models: any DeviceModels
     let deviceRenderer: any DeviceRenderer
+    let plugins: any Plugins
     let host: String
     let port: Int
     let allowedHosts: Set<String>
+    /// Minted per `serve` session and handed to plugin subprocesses in
+    /// their environment; the plugin routes check it. See
+    /// `Server.makeSessionToken`.
+    let sessionToken: String
 
     init(
         simulators: any Simulators,
         chromes: any Chromes,
         models: any DeviceModels = DeviceModelCatalog.empty,
         deviceRenderer: any DeviceRenderer = RealityKitDeviceRenderer(),
+        plugins: any Plugins = FileSystemPlugins(roots: []),
         host: String = "127.0.0.1",
         port: Int = 8421,
-        allowedHosts: [String] = []
+        allowedHosts: [String] = [],
+        sessionToken: String = Server.makeSessionToken()
     ) {
         self.simulators = simulators
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
+        self.plugins = plugins
         self.host = host
         self.port = port
         self.allowedHosts = Set(allowedHosts.map { $0.lowercased() })
+        self.sessionToken = sessionToken
     }
 
     func run() async throws {
@@ -112,6 +121,8 @@ struct Server: Sendable {
 
         // Stream page — same sim.html, JS routes the inner view based on URL.
         router.get("/simulators/:udid") { _, _ in Self.staticAsset("sim.html") }
+
+        registerPluginRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in
@@ -2018,7 +2029,7 @@ struct Server: Sendable {
 
     /// Pull the UDID out of a `/simulators/<udid>/<verb>` request.
     /// `<verb>` is the last segment, `<udid>` the one before.
-    private static func udidParam(_ request: Request) -> String {
+    static func udidParam(_ request: Request) -> String {
         let parts = request.uri.path.split(separator: "/")
         guard parts.count >= 3 else { return "" }
         return String(parts[parts.count - 2]).removingPercentEncoding ?? ""

@@ -1,0 +1,21 @@
+{
+  "name": "a11y",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Accessibility audit for the current screen",
+  "capabilities": ["describe-ui"],
+  "contributes": {
+    "commands": [
+      { "id": "audit", "title": "Run accessibility audit", "run": ["/usr/bin/python3", "bin/audit.py"] }
+    ],
+    "panels": [
+      {
+        "id": "audit",
+        "title": "Accessibility",
+        "icon": "accessibility",
+        "when": "simulator.booted",
+        "body": { "kind": "list", "source": "audit", "rowAction": "highlight" }
+      }
+    ]
+  }
+}

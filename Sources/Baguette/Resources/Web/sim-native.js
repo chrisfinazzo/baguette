@@ -35,6 +35,7 @@
   let sim = null;           // Baguette SDK Simulator
   let logPanel = null;
   let axInspector = null;
+  let pluginPanels = null;   // PluginPanels — manifest-declared plugin UI
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let locationPanel = null;  // LocationPanel — simctl location map picker
@@ -457,6 +458,9 @@
     // portrait while the simulator is still landscape.
     if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
     mountAxInspector();
+    // Once only — `startSession` re-runs on every format swap, and
+    // re-mounting would append a second copy of every plugin button.
+    if (!pluginPanels) mountPlugins();
   }
 
   // --- Power card ----------------------------------------------------
@@ -684,6 +688,62 @@
         }
       },
     });
+  }
+
+  // Plugin contributions — manifest-declared toolbar buttons + panels
+  // fetched from /plugins.json and drawn by the host. `onHighlight`
+  // converts a row's device-point frame into a box over the live
+  // screen; the frame arrives in the same units as gesture
+  // coordinates, so the only maths is the display scale.
+  function mountPlugins() {
+    if (!window.PluginPanels || !sim) return;
+    window.PluginPanels.injectCSS();
+
+    let host = document.getElementById('nativePluginHost');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'nativePluginHost';
+      host.className = 'plugin-host';
+      host.hidden = true;
+      document.body.appendChild(host);
+    }
+
+    const strip = document.querySelector('#simNativeView .tb-actions')
+               || document.getElementById('nativeToolScroll');
+    if (!strip) return;
+
+    pluginPanels = new window.PluginPanels({
+      udid,
+      toolbar: strip,
+      host,
+      isBooted: () => true,
+      onHighlight: (frame) => paintPluginHighlight(frame),
+      log: (msg) => console.log('[plugin]', msg),
+    });
+    pluginPanels.load();
+  }
+
+  function paintPluginHighlight(frame) {
+    let box = document.getElementById('nativePluginHighlight');
+    if (!frame) { if (box) box.remove(); return; }
+    if (!sim || !sim.screenArea) return;
+
+    const area = sim.screenArea;
+    const device = sim.screen.size;
+    if (!device || !device.width || !device.height) return;
+    const scaleX = area.clientWidth / device.width;
+    const scaleY = area.clientHeight / device.height;
+
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'nativePluginHighlight';
+      box.className = 'plugin-highlight';
+      area.appendChild(box);
+    }
+    box.style.left   = (frame.x * scaleX) + 'px';
+    box.style.top    = (frame.y * scaleY) + 'px';
+    box.style.width  = (frame.width * scaleX) + 'px';
+    box.style.height = (frame.height * scaleY) + 'px';
   }
 
   function reflectFormat(format) {
