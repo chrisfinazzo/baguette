@@ -6,9 +6,9 @@
 //
 // Modifier-key multi-touch (matches Apple Simulator.app):
 //   no modifier           → 1 finger: tap on release, drag-stream
-//                            on motion (synthesised as 2 coincident
-//                            fingers because iOS 26.4 misroutes
-//                            single-point streaming).
+//                            on motion, held touch-stream once the
+//                            button sits still past LONG_PRESS_MS so
+//                            iOS's long-press recognisers fire.
 //   Option (alt) + drag   → 2-finger pinch around screen centre.
 //   Option+Shift + drag   → 2-finger parallel pan around centre.
 //   Wheel                 → 2-finger pan with idle-close.
@@ -31,6 +31,12 @@
 
   const BASE_SPREAD_PT = 80;            // sim-pt for pinch/pan modifier
   const DRAG_THRESHOLD_PX = 8;          // mouse delta to promote pending→drag
+  // Mouse held still this long → promote to a held touch stream so
+  // iOS's long-press recognisers see a finger that stays down. Sits
+  // above a normal click (60–120 ms) and below UIKit's own 500 ms
+  // minimumPressDuration, which starts counting from OUR touch-down —
+  // so a context menu surfaces ~750 ms into the user's press.
+  const LONG_PRESS_MS = 250;
   const EDGE_BAND_NORM = 0.93;          // mouse: bottom edge hot zone
   const TOP_BAND_NORM  = 0.07;          // mouse: top edge hot zone
   // Touch on iPhone Safari reports `clientY` as the centroid of the
@@ -120,6 +126,15 @@
       let state = null;
       let lastMoveMs = 0;
 
+      // Disarm the pending press's long-press timer. Safe to call in
+      // any state — only `pending` ever carries a timer.
+      const cancelHold = () => {
+        if (state && state.holdTimer) {
+          clearTimeout(state.holdTimer);
+          state.holdTimer = null;
+        }
+      };
+
       const modeOf = (e) =>
         (e.altKey && e.shiftKey) ? 'pan' :
         e.altKey                 ? 'pinch' :
@@ -180,11 +195,46 @@
           this._previewPan(r, /* shiftPxX */ 0, /* shiftPxY */ 0);
           this.log('pan begin');
         } else {
-          // Deferred: decide tap vs drag on first movement past threshold.
+          // Deferred: motion past DRAG_THRESHOLD_PX promotes to a drag
+          // stream (see mousemove); stillness past LONG_PRESS_MS
+          // promotes to a held touch stream (below); neither → a
+          // one-shot tap on release.
           state = { mode: 'pending',
                     startVx: vx, startVy: vy, startW: r.width, startH: r.height,
                     startClientX: e.clientX, startClientY: e.clientY,
-                    startedAt: Date.now() };
+                    startedAt: Date.now(), holdTimer: null };
+
+          // Long press. A held mouse button used to collapse into the
+          // same 50 ms `tap` envelope as a click, so nothing that
+          // needs a sustained touch — context menus, icon jiggle
+          // mode, the magnifier loupe — could ever fire from the web
+          // UI. Stream `touch1-down` now and let mouseup send
+          // `touch1-up`, exactly like a real finger on the touch path.
+          //
+          // NOT a `tap` envelope with a long `duration`: that hold is
+          // an `usleep` inside `IOHIDDigitizerDispatch.tap`, which
+          // would block the server's MainActor for the whole press
+          // (stalling every other gesture) and paint nothing until
+          // release. Streaming shows iOS reacting live.
+          //
+          // Landing in `drag-stream` is deliberate — the finger is
+          // already down, so sliding after the hold continues the same
+          // touch. That's the sequence iOS wants for press-then-drag
+          // (rearranging home-screen icons, dragging a list row).
+          state.holdTimer = setTimeout(() => {
+            // `detach()` nulls `_el` but can't reach this closure's
+            // `state` — bail rather than strand a touch-down with no
+            // matching up on a torn-down stream.
+            if (!state || state.mode !== 'pending' || !this._el) return;
+            const startPt = this._pointInScreen({
+              clientX: state.startClientX, clientY: state.startClientY,
+            });
+            this._ripple(state.startClientX, state.startClientY);
+            state = { mode: 'drag-stream', fromHold: true };
+            this.screen.touchDown([startPt]);
+            lastMoveMs = 0;
+            this.log('long press begin');
+          }, LONG_PRESS_MS);
         }
       });
 
@@ -230,6 +280,7 @@
         // and are gated behind the Alt / Shift modifiers above.
         if (state.mode === 'pending') {
           if (Math.hypot(vx - state.startVx, vy - state.startVy) < DRAG_THRESHOLD_PX) return;
+          cancelHold();
           const start = this._pointInScreen({
             clientX: state.startVx + (e.clientX - vx),
             clientY: state.startVy + (e.clientY - vy),
@@ -249,6 +300,7 @@
 
       const end = (e) => {
         if (!state) return;
+        cancelHold();
         const r = this._el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
 
@@ -261,7 +313,7 @@
           this.log(`${state.mode} end`);
         } else if (state.mode === 'drag-stream') {
           this.screen.touchUp([this._pointInScreen(e)]);
-          this.log('drag end');
+          this.log(state.fromHold ? 'long press end' : 'drag end');
         } else if (state.mode === 'pending') {
           // Never promoted past tap threshold → one-shot tap.
           const r0 = this._el.getBoundingClientRect();
