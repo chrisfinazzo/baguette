@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.83] - 2026-07-22
+
 ### Added
 
 - **Adjustable focused-device pane in Device Farm ([#36](https://github.com/tddworks/baguette/issues/36)).** Drag the divider beside the focused device to resize its pane from 260–720 px, making portrait previews short enough to fit on displays using large OS scaling without zooming the whole page. The divider also supports arrow keys, Home/End, and double-click reset; the chosen width persists across reloads and re-clamps when the window shrinks. See [`docs/features/device-farm.md`](docs/features/device-farm.md).
@@ -273,7 +277,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.82...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.83...HEAD
+[0.1.83]: https://github.com/tddworks/baguette/compare/v0.1.82...v0.1.83
 [0.1.82]: https://github.com/tddworks/baguette/compare/v0.1.81...v0.1.82
 [0.1.81]: https://github.com/tddworks/baguette/compare/v0.1.80...v0.1.81
 [0.1.80]: https://github.com/tddworks/baguette/compare/v0.1.79...v0.1.80
