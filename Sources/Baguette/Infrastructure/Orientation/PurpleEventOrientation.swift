@@ -43,12 +43,24 @@ final class PurpleEventOrientation: Orientation, @unchecked Sendable {
 /// name. Mirrors idb's `[simulator.device lookup:@"…" error:&err]`.
 /// Returns `nil` when CoreSimulator hasn't vended that port (e.g.
 /// device not booted yet) or the selector isn't present.
+///
+/// The out-parameter is typed `AutoreleasingUnsafeMutablePointer` —
+/// the same shape every other `…WithError:` thunk in this codebase
+/// uses (see `invokeBoolWithError` and friends), and the only one that
+/// matches ObjC's `NSError * __autoreleasing *` ownership. What comes
+/// back through it is a **+0, autoreleased** error: it belongs to the
+/// surrounding pool, not to us. A plain `UnsafeMutablePointer<NSError?>`
+/// would let ARC release it on our behalf as well, and the process
+/// would die at the next pool pop — far from here, in whatever task
+/// happened to be draining. Booted devices never hit this: the lookup
+/// succeeds and CoreSimulator writes no error at all, which is why it
+/// only ever crashed on a *shutdown* simulator.
 private func lookupMachPort(on device: NSObject, named name: String) -> UInt32? {
     let sel = NSSelectorFromString("lookup:error:")
     guard device.responds(to: sel) else { return nil }
     let imp = device.method(for: sel)
     typealias Lookup = @convention(c) (
-        AnyObject, Selector, NSString, UnsafeMutablePointer<NSError?>?
+        AnyObject, Selector, NSString, AutoreleasingUnsafeMutablePointer<NSError?>
     ) -> UInt32
     let fn = unsafeBitCast(imp, to: Lookup.self)
     var err: NSError?

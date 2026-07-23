@@ -40,6 +40,9 @@
   let locationPanel = null;  // LocationPanel — simctl location map picker
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
+  let powerCard = null;      // boot affordance shown on an unbooted device's screen
+  let bootPollTimer = null;  // /simulators.json poll while a boot is in flight
+  let firstFrameTimer = null; // fallback so the card can't outlive a live stream
 
   // CW rotation cycle. Two flavours — iPhone UIKit refuses
   // `portrait-upside-down` for apps that don't opt in (which is
@@ -286,23 +289,43 @@
     //    edge flags from the rotated visual frame to portrait
     //    (iOS expects portrait coords regardless of the bezel's
     //    CSS rotation).
-    sim = await window.Baguette.use({
-      host: location.origin,
-      udid,
-      send: (payload) => {
-        if (!session) return;
-        const out = currentOrientation === 'portrait'
-          ? payload
-          : remapEnvelopeToPortrait(payload);
-        session.send(out);
-      },
-      getOrientation: () => currentOrientation,
-      log: (msg) => console.log('[native]', msg),
-    });
-    sim.mount(document.getElementById('nativeDeviceFrame'));
+    //
+    //    `use` rejects when `definition.json` 404s — the udid isn't in
+    //    the device set (deep link to a deleted device, typo'd UDID) or
+    //    the model has no DeviceKit chrome. Without the catch the whole
+    //    bootstrap unwinds and the tab sits blank; the power card says
+    //    so instead.
+    try {
+      sim = await window.Baguette.use({
+        host: location.origin,
+        udid,
+        send: (payload) => {
+          if (!session) return;
+          const out = currentOrientation === 'portrait'
+            ? payload
+            : remapEnvelopeToPortrait(payload);
+          session.send(out);
+        },
+        getOrientation: () => currentOrientation,
+        log: (msg) => console.log('[native]', msg),
+      });
+      sim.mount(document.getElementById('nativeDeviceFrame'));
+    } catch (e) {
+      console.warn('[native] no device definition:', (e && e.message) || e);
+      sim = null;
+    }
 
-    // 4. Open stream — paints frames into sim.canvas.
-    startSession(pickFormat());
+    // 4. Open stream — but only if there's a guest to stream. A
+    //    shutdown device has no framebuffer, no HID, and no
+    //    PurpleWorkspacePort; opening the socket would just paint
+    //    black forever with no hint as to why. Show the power card on
+    //    the device's own screen instead and start the stream once
+    //    the user boots it (or once the boot already underway lands).
+    if (sim && isBooted(meta.state)) {
+      startSession(pickFormat());
+    } else {
+      showPowerCard(sim ? meta.state : '');
+    }
 
     wireActions();
     wireToolbarScroll();
@@ -326,6 +349,14 @@
     // — the bezel renders un-rotated but the iOS framebuffer
     // shows UI from the stale orientation, which looks upside
     // down to the user.
+    //
+    // Only meaningful once the guest is up: an unbooted device has no
+    // PurpleWorkspacePort to send the GSEvent to. `resetToPortrait`
+    // runs again after a boot completes.
+    if (isBooted(meta.state)) resetToPortrait();
+  }
+
+  function resetToPortrait() {
     fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
         { method: 'POST' }).catch(() => { /* best-effort */ });
   }
@@ -391,7 +422,12 @@
     session = new window.StreamSession({
       udid, format, version: 'v2',
       canvas: sim.canvas,
-      onSize: (w, h) => { lastPaintedSize = { w, h }; },
+      onSize: (w, h) => {
+        lastPaintedSize = { w, h };
+        // First frame after a boot — the guest is genuinely up, so
+        // drop the power card and hand the screen back to the stream.
+        hidePowerCard();
+      },
       onFps:  (fps) => {
         const el = document.getElementById('nativeStatus');
         if (el) el.textContent = fps + ' fps';
@@ -406,6 +442,199 @@
     // portrait while the simulator is still landscape.
     if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
     mountAxInspector();
+  }
+
+  // --- Power card ----------------------------------------------------
+  // A tab opened on a device that isn't running used to load a bezel
+  // wrapped around a socket that would never carry a frame — no boot
+  // control anywhere in focus mode, so the only way out was back to
+  // the list. The card puts the boot control on the device's own
+  // screen and drives the wait, then hands the screen to the stream.
+  //
+  // Three phases:
+  //   off      — Boot button. The device is Shutdown (or shutting down).
+  //   booting  — POST sent (or the device was already Booting when the
+  //              tab opened); polling /simulators.json for "Booted".
+  //   starting — CoreSimulator says Booted; the stream is open and
+  //              we're waiting on the first composited frame.
+  // `gone` is the degenerate case: the udid isn't in the device set at
+  // all, so there is nothing to boot.
+
+  const BOOT_POLL_MS = 1000;
+  const BOOT_TIMEOUT_MS = 180000;   // cold boots on a busy Mac are slow
+  const FIRST_FRAME_TIMEOUT_MS = 15000;
+  const IDLE_POLL_MS = 4000;        // watch for a boot we didn't start
+
+  function isBooted(state) {
+    return String(state || '') === 'Booted';
+  }
+
+  function showPowerCard(state) {
+    hidePowerCard();
+
+    // Normally the card goes on the device's own glass. With no
+    // definition there's no bezel to sit inside, so it stands alone in
+    // the empty device slot and gets its own device-ish silhouette.
+    const glass = sim && sim.screenArea;
+    const host = glass || document.getElementById('nativeDeviceFrame');
+    if (!host) return;
+
+    powerCard = document.createElement('div');
+    powerCard.className = glass ? 'power-card' : 'power-card power-card--bare';
+    // The SDK's PointerInterpreter is attached to the same screenArea.
+    // Without this, clicking Boot also dispatches a tap gesture at the
+    // button's coords into a simulator that can't receive it.
+    ['pointerdown', 'pointerup', 'pointermove', 'mousedown', 'mouseup', 'click']
+        .forEach((evt) => powerCard.addEventListener(evt, (e) => e.stopPropagation()));
+    host.appendChild(powerCard);
+
+    if (!state) {
+      renderPowerCard('gone');
+    } else if (String(state) === 'Booting') {
+      // Someone else already started it — join the wait rather than
+      // POSTing a second boot.
+      renderPowerCard('booting');
+      waitForBoot();
+    } else {
+      renderPowerCard('off');
+    }
+  }
+
+  function hidePowerCard() {
+    if (!powerCard && !bootPollTimer && !firstFrameTimer) return;
+    if (bootPollTimer)   { clearTimeout(bootPollTimer);   bootPollTimer = null; }
+    if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
+    if (powerCard && powerCard.parentNode) powerCard.parentNode.removeChild(powerCard);
+    powerCard = null;
+    const view = document.getElementById('simNativeView');
+    if (view) view.removeAttribute('data-power');
+  }
+
+  const POWER_GLYPH =
+      '<path d="M12 3.5v7.5"/>' +
+      '<path d="M6.9 6.9a7.5 7.5 0 1 0 10.2 0"/>';
+  const SPIN_GLYPH =
+      '<circle cx="12" cy="12" r="8.6" stroke-opacity="0.22"/>' +
+      '<path d="M20.6 12A8.6 8.6 0 0 0 12 3.4"/>';
+
+  // Renders one phase into the existing card. `detail` overrides the
+  // subtitle — used to surface a boot failure verbatim instead of a
+  // generic "try again".
+  function renderPowerCard(phase, detail) {
+    if (!powerCard) return;
+    // Whatever poll belonged to the previous phase is done with.
+    if (bootPollTimer) { clearTimeout(bootPollTimer); bootPollTimer = null; }
+    powerCard.setAttribute('data-phase', phase);
+    // Presence of `data-power` on the root is what dims the toolbar;
+    // the value carries the phase for anyone inspecting the DOM.
+    const view = document.getElementById('simNativeView');
+    if (view) view.setAttribute('data-power', phase);
+
+    const copy = {
+      off:      { title: 'Not booted',  sub: deviceName || 'This simulator', btn: 'Boot' },
+      booting:  { title: 'Booting…',    sub: 'Waiting for CoreSimulator',    btn: null },
+      starting: { title: 'Starting…',   sub: 'Waiting for the first frame',  btn: null },
+      gone:     { title: 'Unavailable', sub: 'This simulator is no longer in the device set.', btn: null },
+    }[phase] || {};
+
+    const glyph = (phase === 'booting' || phase === 'starting') ? SPIN_GLYPH : POWER_GLYPH;
+    powerCard.innerHTML =
+        '<svg class="power-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.7" stroke-linecap="round" width="34" height="34" aria-hidden="true">' +
+        glyph + '</svg>' +
+        '<div class="power-title"></div>' +
+        '<div class="power-sub"></div>' +
+        (copy.btn ? '<button class="power-btn" type="button"></button>' : '');
+
+    powerCard.querySelector('.power-title').textContent = copy.title || '';
+    const sub = powerCard.querySelector('.power-sub');
+    sub.textContent = detail || copy.sub || '';
+    if (detail) sub.setAttribute('data-error', 'true');
+
+    const btn = powerCard.querySelector('.power-btn');
+    if (btn) {
+      btn.textContent = copy.btn;
+      btn.addEventListener('click', requestBoot);
+    }
+
+    const status = document.getElementById('nativeStatus');
+    if (status) status.textContent = phase === 'gone' ? 'unavailable' : 'not booted';
+
+    if (phase === 'off') watchForExternalBoot();
+  }
+
+  // While the Boot button is up, keep an eye on the device — it can
+  // come up from anywhere: `baguette boot`, another tab, Xcode,
+  // `simctl`. Without this the card would sit on "Not booted" over an
+  // already-running guest until the user clicked a button they no
+  // longer needed (and CoreSimulator rejects a boot in that state, so
+  // the click would report a failure that isn't one).
+  function watchForExternalBoot() {
+    bootPollTimer = setTimeout(async () => {
+      bootPollTimer = null;
+      if (!powerCard || powerCard.getAttribute('data-phase') !== 'off') return;
+      const meta = await fetchDeviceMeta(udid);
+      if (!powerCard) return;
+      if (isBooted(meta.state)) onBooted();
+      else watchForExternalBoot();
+    }, IDLE_POLL_MS);
+  }
+
+  // POST /simulators/<udid>/boot, then poll until CoreSimulator agrees.
+  // The route is synchronous on the server side (it calls
+  // `bootWithOptions:error:`), but "returned" only means the boot was
+  // accepted — the guest keeps coming up afterwards, which is what the
+  // poll is for.
+  async function requestBoot() {
+    renderPowerCard('booting');
+    try {
+      const r = await fetch('/simulators/' + encodeURIComponent(udid) + '/boot',
+          { method: 'POST' });
+      if (!r.ok) {
+        // CoreSimulator refuses a boot when the device is already
+        // booted. If that's why this failed, the user got what they
+        // wanted — go live instead of reporting an error.
+        const meta = await fetchDeviceMeta(udid);
+        if (isBooted(meta.state)) { onBooted(); return; }
+        const body = await r.json().catch(() => null);
+        renderPowerCard('off', (body && body.error) || ('boot failed (HTTP ' + r.status + ')'));
+        return;
+      }
+    } catch (e) {
+      renderPowerCard('off', 'boot request failed — is the server still running?');
+      return;
+    }
+    waitForBoot();
+  }
+
+  function waitForBoot(deadline) {
+    const until = deadline || (Date.now() + BOOT_TIMEOUT_MS);
+    bootPollTimer = setTimeout(async () => {
+      if (!powerCard) return;            // card dismissed underneath us
+      const meta = await fetchDeviceMeta(udid);
+      if (isBooted(meta.state)) {
+        onBooted();
+        return;
+      }
+      if (Date.now() >= until) {
+        renderPowerCard('off',
+            'still not booted after ' + Math.round(BOOT_TIMEOUT_MS / 60000) + ' min');
+        return;
+      }
+      waitForBoot(until);
+    }, BOOT_POLL_MS);
+  }
+
+  // CoreSimulator flipped to Booted. That's earlier than SpringBoard
+  // being on screen, so keep the card up (as "Starting…") until a
+  // frame actually lands — with a fallback, because the stream only
+  // emits when SimulatorKit composites and a device sitting on a
+  // static screen may not composite anything for a while.
+  function onBooted() {
+    renderPowerCard('starting');
+    startSession(pickFormat());
+    resetToPortrait();
+    firstFrameTimer = setTimeout(hidePowerCard, FIRST_FRAME_TIMEOUT_MS);
   }
 
   // Lazy-mounts the AXInspector once a surface + session are ready.
@@ -481,10 +710,14 @@
           name: hit.name || 'Simulator',
           runtime: hit.displayRuntime
               || formatRuntime(hit.runtime || hit.os || ''),
+          // `SimulatorState.description` — "Booted" / "Shutdown" /
+          // "Booting" / "ShuttingDown" / "Creating". Absent only if
+          // the device vanished between page load and this fetch.
+          state: hit.state || '',
         };
       }
     } catch (_) { /* fall through */ }
-    return { name: 'Simulator', runtime: '' };
+    return { name: 'Simulator', runtime: '', state: '' };
   }
 
   function formatRuntime(raw) {
@@ -741,6 +974,7 @@
 
   function wireUnload() {
     window.addEventListener('beforeunload', () => {
+      try { hidePowerCard(); } catch (_) { /* ignore */ }
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
