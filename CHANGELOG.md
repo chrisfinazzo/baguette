@@ -10,6 +10,22 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+
+- **`baguette serve` no longer segfaults when a tab opens on a non-booted
+  simulator.** The simulator page POSTs `/orientation?value=portrait` on load,
+  which asks CoreSimulator for the device's `PurpleWorkspacePort`. A shutdown
+  device has none, so the lookup writes back an `NSError` — and the adapter's
+  `@convention(c)` thunk typed that ObjC `NSError **` out-parameter as a plain
+  `UnsafeMutablePointer<NSError?>` instead of an
+  `AutoreleasingUnsafeMutablePointer`. ARC then released an autoreleased error
+  it never owned, and the process died at the next autorelease-pool pop —
+  inside an unrelated task, which is why the crash reports pointed at
+  `objc_autoreleasePoolPop` with no baguette frame in sight. Booted devices
+  were never affected: the lookup succeeds and no error is written. Orientation
+  on a non-booted device now fails cleanly with a 500 instead of taking the
+  server down.
+
 ---
 
 ## [0.1.84] - 2026-07-23
