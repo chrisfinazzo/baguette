@@ -12,6 +12,13 @@ For releases prior to this changelog, see the
 
 ---
 
+## [0.1.84] - 2026-07-23
+
+### Changed
+- Bug fixes and improvements.
+
+---
+
 ## [0.1.83] - 2026-07-22
 
 ### Added
@@ -277,7 +284,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.83...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.84...HEAD
+[0.1.84]: https://github.com/tddworks/baguette/compare/v0.1.83...v0.1.84
 [0.1.83]: https://github.com/tddworks/baguette/compare/v0.1.82...v0.1.83
 [0.1.82]: https://github.com/tddworks/baguette/compare/v0.1.81...v0.1.82
 [0.1.81]: https://github.com/tddworks/baguette/compare/v0.1.80...v0.1.81
