@@ -11,7 +11,8 @@ struct PluginsCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "plugin",
         abstract: "Inspect and run installed plugins",
-        subcommands: [List.self, Show.self, Validate.self, Run.self]
+        subcommands: [List.self, Show.self, Validate.self, Run.self,
+                      Install.self, Remove.self, Update.self]
     )
 
     /// Shared `--plugin-dir` for local authoring: point baguette at a
@@ -126,6 +127,86 @@ struct PluginsCommand: ParsableCommand {
             default:
                 log(outcome.errorText ?? "plugin failed")
                 throw ExitCode.failure
+            }
+        }
+    }
+
+    /// `baguette plugin install <name | owner/repo[/name]>`
+    struct Install: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "install",
+            abstract: "Install a plugin — a bare name from a trusted bakery, or owner/repo[/name] directly"
+        )
+
+        @Argument(help: "A plugin name, or owner/repo[/plugin] / a git URL.") var target: String
+        @Flag(name: .customLong("yes"), help: "Accept the trust prompt for a new bakery without asking.")
+        var accept = false
+
+        func run() async throws {
+            let install = BakeryCommand.installer()
+
+            // A bare name (no `/`, not a URL) resolves across bakeries
+            // already trusted — no new consent. Anything with a slash is
+            // a direct reference, which may add a new bakery.
+            let looksBare = !target.contains("/") && !target.contains(":")
+            let installed: [InstalledPlugin]
+            if looksBare {
+                installed = try await install.installByName(target)
+            } else {
+                let ref = try BakeryRef.parse(target)
+                let preview = try await install.preview(ref)
+                switch TrustDecision.decide(alreadyTrusted: preview.alreadyTrusted, accepted: accept) {
+                case .granted: break
+                case .mustAsk:
+                    guard TrustPrompt.confirm(
+                        TrustDecision.prompt(source: preview.menu.name ?? target, commit: preview.commit)
+                    ) else { log("Not installed."); throw ExitCode.failure }
+                }
+                installed = try await install.install(ref: ref, requested: ref.plugin)
+            }
+
+            for plugin in installed {
+                print("✓ installed \(plugin.name) @ \(plugin.commit) (from \(plugin.bakery))")
+            }
+            print("  refresh the browser to see it in the plugins rail")
+        }
+    }
+
+    struct Remove: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "remove", abstract: "Uninstall a plugin"
+        )
+
+        @Argument(help: "Installed plugin name.") var name: String
+
+        func run() throws {
+            try BakeryCommand.installer().remove(name: name)
+            print("✓ removed \(name)")
+        }
+    }
+
+    struct Update: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "update", abstract: "Re-install plugins from their bakery at its latest commit"
+        )
+
+        @Argument(help: "Plugin name to update; omit to update all installed plugins.") var name: String?
+
+        func run() async throws {
+            let install = BakeryCommand.installer()
+            let registry = FileSystemBakeries(home: BakeryCommand.home)
+            let targets = try registry.installed().filter { name == nil || $0.name == name }
+            guard !targets.isEmpty else { print("Nothing to update."); return }
+
+            let bakeries = try registry.bakeries()
+            for plugin in targets {
+                guard let bakery = bakeries.first(where: { $0.id == plugin.bakery }) else {
+                    log("skipping \(plugin.name): its bakery \(plugin.bakery) is no longer trusted")
+                    continue
+                }
+                let ref = try BakeryRef.parse(bakery.url)
+                let installed = try await install.install(ref: ref, requested: plugin.name)
+                for p in installed { print("✓ \(p.name) @ \(p.commit)") }
             }
         }
     }

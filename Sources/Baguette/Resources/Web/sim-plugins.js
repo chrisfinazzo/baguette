@@ -112,14 +112,23 @@
     }
 
     render() {
-      const panels = this.visiblePanels();
-      // No rail at all when nothing is contributed — an empty rail is
-      // just clutter that says "a feature exists but you have none".
-      if (!panels.length) return;
-
       PluginPanels.injectCSS();
       this.buildRail();
-      for (const { plugin, panel } of panels) this.addButton(plugin, panel);
+      for (const { plugin, panel } of this.visiblePanels()) this.addButton(plugin, panel);
+      // The "+ Add" entry point always shows, so a fresh user with no
+      // plugins can still add their first bakery from the browser.
+      this.addAddButton();
+    }
+
+    /// Tear the rail down and re-fetch — used after an install so the
+    /// new plugin's button appears without a page reload.
+    async reload() {
+      if (this.rail) this.rail.remove();
+      if (this.host) this.host.remove();
+      this.rail = null;
+      this.host = null;
+      this.openPanelID = null;
+      await this.load();
     }
 
     buildRail() {
@@ -158,6 +167,21 @@
       // markup here, and it never contains plugin input.
       button.innerHTML = iconSVG(panel.icon);
       button.addEventListener('click', () => this.toggle(pluginName, panel));
+      this.rail.appendChild(button);
+    }
+
+    /// A "+" at the foot of the rail that opens the add-a-bakery modal.
+    addAddButton() {
+      const divider = document.createElement('div');
+      divider.className = 'plugin-rail-divider';
+      this.rail.appendChild(divider);
+
+      const button = document.createElement('button');
+      button.className = 'plugin-rail-btn plugin-rail-add';
+      button.title = 'Add a plugin from a bakery';
+      button.setAttribute('aria-label', 'Add a plugin');
+      button.innerHTML = svgWrap('<path d="M12 5v14M5 12h14"/>', 18);
+      button.addEventListener('click', () => this.openAddModal());
       this.rail.appendChild(button);
     }
 
@@ -261,6 +285,102 @@
         if (rowAction === 'copy' && row.copy) navigator.clipboard.writeText(row.copy);
       });
     }
+
+    // --- add-a-bakery modal ------------------------------------------
+    //
+    // Two deliberate steps: Preview (safe — clones and reads the menu)
+    // then Install (the consented act, carrying accept:true). The user
+    // sees the source, the resolved commit, and the trust warning
+    // before anything lands on their machine.
+
+    openAddModal() {
+      const overlay = document.createElement('div');
+      overlay.className = 'plugin-modal-overlay';
+      overlay.innerHTML =
+        '<div class="plugin-modal" role="dialog" aria-label="Add a plugin">'
+        + '<div class="plugin-head">'
+        +   '<span class="plugin-title">Add a plugin</span>'
+        +   '<button class="plugin-close" aria-label="Close">✕</button>'
+        + '</div>'
+        + '<div class="plugin-modal-body">'
+        +   '<label class="plugin-field-label">Bakery — a git repo with a baguette.json</label>'
+        +   '<div class="plugin-field-row">'
+        +     '<input class="plugin-input" type="text" placeholder="owner/repo or a git URL" spellcheck="false">'
+        +     '<button class="plugin-btn plugin-preview-btn">Preview</button>'
+        +   '</div>'
+        +   '<div class="plugin-modal-result"></div>'
+        + '</div>'
+        + '</div>';
+      this.mount.appendChild(overlay);
+
+      const close = () => overlay.remove();
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      overlay.querySelector('.plugin-close').addEventListener('click', close);
+
+      const input = overlay.querySelector('.plugin-input');
+      const result = overlay.querySelector('.plugin-modal-result');
+      const preview = () => this.previewInto(input.value.trim(), result, close);
+      overlay.querySelector('.plugin-preview-btn').addEventListener('click', preview);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') preview(); });
+      input.focus();
+    }
+
+    async previewInto(ref, result, closeModal) {
+      if (!ref) return;
+      result.innerHTML = '<div class="plugin-status">Fetching…</div>';
+      let data;
+      try {
+        const res = await fetch('/bakeries/preview', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ref }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'preview failed');
+      } catch (error) {
+        result.innerHTML = '<div class="plugin-status plugin-error">' + escapeHTML(String(error.message || error)) + '</div>';
+        return;
+      }
+
+      const shortCommit = String(data.commit || '').slice(0, 10);
+      const rows = (data.plugins || []).map((p) =>
+        '<li class="plugin-offer">'
+        + '<span class="plugin-row-title">' + escapeHTML(p.name) + '</span>'
+        + '<button class="plugin-btn plugin-install-btn" data-plugin="' + escapeHTML(p.name) + '">Install</button>'
+        + '</li>').join('');
+
+      result.innerHTML =
+        '<div class="plugin-warn">'
+        +   '⚠ Plugins from <b>' + escapeHTML(data.name || ref) + '</b> run as programs on your Mac '
+        +   'with your permissions. Only add sources you trust. '
+        +   '<span class="plugin-commit">@' + escapeHTML(shortCommit) + '</span>'
+        + '</div>'
+        + '<ul class="plugin-offers">' + rows + '</ul>';
+
+      for (const btn of result.querySelectorAll('.plugin-install-btn')) {
+        btn.addEventListener('click', () => this.installFrom(ref, btn.dataset.plugin, btn, closeModal));
+      }
+    }
+
+    async installFrom(ref, plugin, button, closeModal) {
+      button.disabled = true;
+      button.textContent = 'Installing…';
+      try {
+        const res = await fetch('/bakeries/install', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ref, plugin, accept: true }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'install failed');
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Install';
+        button.insertAdjacentHTML('afterend',
+          '<span class="plugin-error plugin-inline-error"> ' + escapeHTML(String(error.message || error)) + '</span>');
+        return;
+      }
+      closeModal();
+      this.reload();   // the new plugin's button appears in the rail
+    }
   }
 
   // Host-owned styling. Injected here rather than added to
@@ -328,6 +448,43 @@
   .plugin-highlight { position: absolute; border: 2px solid var(--accent, #2563eb);
                       background: rgba(37,99,235,0.16); border-radius: 3px;
                       pointer-events: none; z-index: 30; }
+
+  .plugin-rail-add { color: var(--accent, #2563eb); }
+
+  .plugin-modal-overlay { position: fixed; inset: 0; z-index: 60;
+                          display: flex; align-items: center; justify-content: center;
+                          background: rgba(15,23,42,0.32); backdrop-filter: blur(2px); }
+  .plugin-modal { width: min(440px, 92vw);
+                  background: var(--nv-bar-bg, rgba(255,255,255,0.98));
+                  border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.12));
+                  border-top: 2px solid var(--accent, #2563eb);
+                  border-radius: 14px; box-shadow: 0 20px 60px rgba(15,23,42,0.30);
+                  overflow: hidden; }
+  .plugin-modal-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .plugin-field-label { font: 500 11px/1.3 -apple-system, sans-serif;
+                        color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
+  .plugin-field-row { display: flex; gap: 8px; }
+  .plugin-input { flex: 1; padding: 8px 10px; border-radius: 8px;
+                  border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.16));
+                  background: var(--panel, #fff); color: var(--nv-text, #1d1d1f);
+                  font: 400 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .plugin-btn { padding: 8px 12px; border: 0; border-radius: 8px; cursor: pointer;
+                font: 600 12px/1 -apple-system, sans-serif; color: #fff;
+                background: var(--accent, #2563eb); }
+  .plugin-btn:disabled { opacity: 0.6; cursor: default; }
+  .plugin-warn { font: 400 12px/1.45 -apple-system, sans-serif; color: var(--nv-text, #1d1d1f);
+                 background: color-mix(in srgb, #b45309 10%, transparent);
+                 border: 1px solid color-mix(in srgb, #b45309 26%, transparent);
+                 border-radius: 8px; padding: 10px; }
+  .plugin-commit { font: 500 11px/1 ui-monospace, Menlo, monospace;
+                   color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
+  .plugin-offers { list-style: none; margin: 4px 0 0; padding: 0;
+                   display: flex; flex-direction: column; gap: 6px; }
+  .plugin-offer { display: flex; align-items: center; justify-content: space-between;
+                  gap: 10px; padding: 8px 10px; border-radius: 8px;
+                  background: var(--nv-btn-hover, rgba(15,23,42,0.05));
+                  font: 500 13px/1.2 -apple-system, sans-serif; color: var(--nv-text, #1d1d1f); }
+  .plugin-inline-error { font-size: 11px; margin-left: 8px; }
 
   @media (max-width: 560px) {
     .plugin-host { right: 12px; left: 12px; width: auto; }

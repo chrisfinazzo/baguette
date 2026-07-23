@@ -123,6 +123,7 @@ struct Server: Sendable {
         router.get("/simulators/:udid") { _, _ in Self.staticAsset("sim.html") }
 
         registerPluginRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerBakeryRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in

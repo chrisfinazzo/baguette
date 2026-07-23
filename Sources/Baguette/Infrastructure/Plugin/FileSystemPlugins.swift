@@ -32,12 +32,12 @@ struct FileSystemPlugins: Plugins {
     /// so a user's own build of the same plugin shadows it.
     static func standard(
         bundledRoot: URL? = PluginRoot.bundled(),
-        home: URL = URL(fileURLWithPath: NSHomeDirectory()),
+        installedRoot: URL = BaguetteHome.pluginsRoot,
         projectDirectory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
         extraRoots: [URL] = []
     ) -> FileSystemPlugins {
         FileSystemPlugins(roots: [bundledRoot].compactMap { $0 } + [
-            home.appendingPathComponent(".baguette/plugins"),
+            installedRoot,
             projectDirectory.appendingPathComponent(".baguette/plugins"),
         ] + extraRoots)
     }

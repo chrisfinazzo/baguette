@@ -74,7 +74,7 @@ struct FileSystemPluginsTests {
         try bundled.install(plugin: "a11y", manifest: Self.manifest(name: "a11y"))
 
         let plugins = try FileSystemPlugins
-            .standard(bundledRoot: bundled.url, home: try TempRoot().url,
+            .standard(bundledRoot: bundled.url, installedRoot: try TempRoot().url,
                       projectDirectory: try TempRoot().url)
             .all()
         #expect(plugins.map(\.id) == ["a11y"])
@@ -84,17 +84,12 @@ struct FileSystemPluginsTests {
         // The bundled root sorts first precisely so an author can
         // shadow what baguette ships without uninstalling anything.
         let bundled = try TempRoot()
-        let home = try TempRoot()
+        let installed = try TempRoot()
         try bundled.install(plugin: "a11y", manifest: Self.manifest(name: "a11y", version: "1.0.0"))
-        // `standard(home:)` looks under `~/.baguette/plugins`, so the
-        // fixture has to sit where a real install would put it.
-        try home.install(
-            plugin: "a11y", manifest: Self.manifest(name: "a11y", version: "9.9.9"),
-            under: ".baguette/plugins"
-        )
+        try installed.install(plugin: "a11y", manifest: Self.manifest(name: "a11y", version: "9.9.9"))
 
         let plugins = try FileSystemPlugins
-            .standard(bundledRoot: bundled.url, home: home.url,
+            .standard(bundledRoot: bundled.url, installedRoot: installed.url,
                       projectDirectory: try TempRoot().url)
             .all()
         #expect(plugins.first?.manifest.version == "9.9.9")

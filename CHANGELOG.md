@@ -10,6 +10,32 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **Plugin system.** Third-party plugins add domain-specific affordances
+  (an Expo reload button, an accessibility audit, a deep-link bar) without
+  touching baguette's core. A plugin is a directory with a
+  `baguette-plugin.json` manifest declaring toolbar/panel contributions
+  backed by a command baguette runs as a subprocess — cwd pinned, fresh
+  environment carrying `BAGUETTE_URL`/`BAGUETTE_UDID`/`BAGUETTE_TOKEN`, a
+  timeout, and a one-line JSON answer. Nothing a plugin ships is ever loaded
+  into baguette's process or the served page. Plugins render in a dedicated
+  **plugins rail** on the focus-mode screen, deliberately separate from the
+  device toolbar so an installed plugin can't be mistaken for a core control.
+  A bundled accessibility-audit plugin ships in the binary as a reference.
+  CLI: `baguette plugin list | show | validate | run`. See
+  [`docs/features/plugins.md`](docs/features/plugins.md).
+- **Bakeries — plugin distribution.** A *bakery* is any git repo with a
+  `baguette.json` menu at its root. Trust a source once
+  (`baguette bakery add owner/repo`), then install any plugin it offers
+  (`baguette plugin install <name>`, or `owner/repo/name` directly), from the
+  CLI or the plugins rail's **+ Add** modal. Trust is per bakery — accepting
+  one means accepting that its plugins run as programs with your permissions —
+  and installing only copies files; nothing runs until you activate a plugin.
+  Everything pins to a commit; fetches are shallow, non-interactive, and pull
+  no submodules. Full lifecycle: `bakery add | list | remove | update`,
+  `plugin install | remove | update`.
+
 ---
 
 ## [0.1.88] - 2026-08-01
