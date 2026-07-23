@@ -70,26 +70,40 @@ jobs:
           cd release
           shasum -a 256 * > baguette_${{ steps.version.outputs.tag }}_checksums.txt
 
-      - name: Extract release notes from CHANGELOG
+      - name: Prepare release notes
         id: changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          NOTES=$(./scripts/extract-changelog.sh "$VERSION" 2>/dev/null || echo "")
-          if [ -z "$NOTES" ]; then
-            NOTES="Bug fixes and improvements."
-            echo "::warning::No CHANGELOG entry found for v$VERSION, using default message"
-            echo "used_fallback=true" >> $GITHUB_OUTPUT
+          CURATED=$(./scripts/extract-changelog.sh "$VERSION" 2>/dev/null || true)
+          GENERATED=$(gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="v$VERSION" \
+            -f target_commitish="$GITHUB_SHA" \
+            --jq '.body')
+
+          if [ -n "$CURATED" ]; then
+            printf '%s\n\n%s\n' "$CURATED" "$GENERATED" > release-notes.md
+          else
+            printf '%s\n' "$GENERATED" > release-notes.md
+            echo "::warning::No CHANGELOG entry found for v$VERSION; using GitHub-generated notes"
+            echo "used_generated=true" >> "$GITHUB_OUTPUT"
+
+            # Nest generated notes under the promoted version heading. The
+            # redundant compare link remains in the GitHub Release only.
+            printf '%s\n' "$GENERATED" \
+              | sed 's/^## What.s Changed$/### Changed/' \
+              | sed '/^\*\*Full Changelog\*\*:/d' \
+              > generated-changelog.md
           fi
-          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-          echo "$NOTES" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: baguette ${{ steps.version.outputs.tag }}
-          body: ${{ env.RELEASE_NOTES }}
+          body_path: release-notes.md
           files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -98,21 +112,16 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           ./scripts/promote-changelog.sh "$VERSION" "$(date +%Y-%m-%d)"
-          # Sync fallback release notes into the newly promoted [VERSION] section
-          if [ "${{ steps.changelog.outputs.used_fallback }}" = "true" ]; then
-            awk -v ver="$VERSION" '
-              $0 ~ ("^## \\[" ver "\\] - ") { in_ver=1; print; next }
-              in_ver && /[^[:space:]]/ && !/^---$/ { has_content=1 }
-              in_ver && /^---$/ {
-                if (!has_content) {
-                  print "### Changed"
-                  print "- Bug fixes and improvements."
-                  print ""
-                }
-                in_ver=0
-              }
-              in_ver && /^## \[/ { in_ver=0 }
+          # Preserve GitHub's PR + author attribution in CHANGELOG too when
+          # a contributor did not add a curated Unreleased entry.
+          if [ "${{ steps.changelog.outputs.used_generated }}" = "true" ]; then
+            awk -v ver="$VERSION" -v notes="generated-changelog.md" '
               { print }
+              $0 ~ ("^## \\[" ver "\\] - ") {
+                print ""
+                while ((getline line < notes) > 0) print line
+                close(notes)
+              }
             ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
           fi
           git config user.name "github-actions[bot]"
