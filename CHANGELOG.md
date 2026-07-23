@@ -10,6 +10,22 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **Boot a device from its own tab.** Opening `/simulators/<udid>` on a
+  simulator that isn't running used to mount a bezel around a stream that
+  would never carry a frame — a black rectangle with no explanation and no
+  way forward but the back button. The device's screen now carries a Boot
+  button, waits out the boot, and hands the screen to the live stream when
+  the first frame paints. Guest-dependent toolbar controls (rotate, camera,
+  status bar, location, logs, AX, home, screenshot, app switcher) are dimmed
+  until then; the back link and theme toggle stay live. The card also picks
+  up a boot started from anywhere else — `baguette boot`, another tab, Xcode,
+  `simctl` — without a click, and says so plainly when the UDID isn't in the
+  device set at all. No new endpoint: `/simulators.json` already carried
+  `state` and `POST /simulators/<udid>/boot` already existed. See
+  [`docs/features/boot.md`](docs/features/boot.md).
+
 ### Fixed
 
 - **`baguette serve` no longer segfaults when a tab opens on a non-booted
