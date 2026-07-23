@@ -116,7 +116,7 @@ extension Server {
 
     // MARK: - small shared helpers
 
-    private static func jsonResponse(_ json: String) -> Response {
+    static func jsonResponse(_ json: String) -> Response {
         Response(
             status: .ok,
             headers: [.contentType: "application/json", .cacheControl: "no-cache"],

@@ -43,10 +43,11 @@ struct Server: Sendable {
     let host: String
     let port: Int
     let allowedHosts: Set<String>
-    /// Minted per `serve` session and handed to plugin subprocesses in
-    /// their environment; the plugin routes check it. See
-    /// `Server.makeSessionToken`.
-    let sessionToken: String
+    /// Capability grants, one per plugin-command invocation. A plugin
+    /// subprocess authenticates with the token it was handed, which
+    /// carries exactly its manifest's declared capabilities and dies
+    /// with the command. See `PluginGrants`.
+    let grants: PluginGrants
 
     init(
         simulators: any Simulators,
@@ -57,7 +58,7 @@ struct Server: Sendable {
         host: String = "127.0.0.1",
         port: Int = 8421,
         allowedHosts: [String] = [],
-        sessionToken: String = Server.makeSessionToken()
+        grants: PluginGrants = PluginGrants()
     ) {
         self.simulators = simulators
         self.chromes = chromes
@@ -67,7 +68,7 @@ struct Server: Sendable {
         self.host = host
         self.port = port
         self.allowedHosts = Set(allowedHosts.map { $0.lowercased() })
-        self.sessionToken = sessionToken
+        self.grants = grants
     }
 
     func run() async throws {

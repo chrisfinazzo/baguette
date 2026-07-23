@@ -35,6 +35,22 @@ For releases prior to this changelog, see the
   Everything pins to a commit; fetches are shallow, non-interactive, and pull
   no submodules. Full lifecycle: `bakery add | list | remove | update`,
   `plugin install | remove | update`.
+- **Enforced plugin capabilities.** A manifest's `capabilities` list is now a
+  real permission boundary rather than documentation. Each command invocation
+  receives its own token carrying exactly the plugin's declared set, revoked
+  when the command exits; a plugin that didn't declare a capability gets a
+  `403` on the matching route even though its token is otherwise valid. Least
+  privilege by default — declaring nothing grants nothing — and an unknown
+  capability is a parse error, so typos surface at `baguette plugin validate`.
+  `baguette plugin show` prints what a plugin may do before you install it.
+  This replaces the shared session token, which by construction could not tell
+  one plugin from another.
+- **`POST /simulators/:udid/input`.** The gesture pipeline over HTTP, taking
+  the same envelope the stream socket and `baguette input` accept, so a plugin
+  can drive the device without holding a WebSocket open. Gated by the `input`
+  capability. A worked example ships in
+  [`examples/expo-bakery/`](examples/expo-bakery/) — an installable two-plugin
+  bakery that sends the React Native ⌘R / ⌘D dev chords.
 
 ---
 

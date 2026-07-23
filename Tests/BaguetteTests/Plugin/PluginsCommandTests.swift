@@ -40,6 +40,20 @@ struct PluginsCommandTests {
         #expect(text.contains("node bin/audit.js"))
     }
 
+    @Test func `show names the capabilities a plugin may use`() throws {
+        // The security-relevant line — what this plugin can ask
+        // baguette to do, before you install it.
+        let text = PluginsCommand.detail(
+            Self.plugin(name: "expo", version: "1.0.0", capabilities: [.input])
+        )
+        #expect(text.contains("capabilities: input"))
+    }
+
+    @Test func `show says so when a plugin asks for nothing`() throws {
+        let text = PluginsCommand.detail(Self.plugin(name: "inert", version: "1.0.0"))
+        #expect(text.contains("capabilities: none"))
+    }
+
     // MARK: - validate
 
     @Test func `validate accepts a well-formed manifest and counts its contributions`() throws {
@@ -61,11 +75,14 @@ struct PluginsCommandTests {
 
     // MARK: - helpers
 
-    static func plugin(name: String, version: String) -> Plugin {
+    static func plugin(
+        name: String, version: String, capabilities: [PluginCapability] = []
+    ) -> Plugin {
         Plugin(
             root: URL(fileURLWithPath: "/tmp/plugins/\(name)"),
             manifest: PluginManifest(
                 name: name, version: version, apiVersion: 1,
+                capabilities: capabilities,
                 commands: [
                     PluginCommand(id: "audit", title: "Run audit", run: ["node", "bin/audit.js"])
                 ]

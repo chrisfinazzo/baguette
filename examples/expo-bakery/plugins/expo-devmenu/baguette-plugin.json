@@ -1,0 +1,16 @@
+{
+  "name": "expo-devmenu",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Dev menu the focused Expo / React Native app",
+  "capabilities": ["input"],
+  "contributes": {
+    "commands": [
+      { "id": "go", "title": "Dev menu", "run": ["/usr/bin/python3", "bin/go.py"] }
+    ],
+    "panels": [
+      { "id": "go", "title": "Dev menu", "icon": "wrench", "when": "simulator.booted",
+        "body": { "kind": "list", "source": "go" } }
+    ]
+  }
+}

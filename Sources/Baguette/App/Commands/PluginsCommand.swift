@@ -241,6 +241,14 @@ struct PluginsCommand: ParsableCommand {
         var lines = ["\(plugin.id) \(plugin.manifest.version)"]
         if let description = plugin.manifest.description { lines.append(description) }
         lines.append("root: \(plugin.root.path)")
+        // The security-relevant line: exactly what this plugin may ask
+        // baguette to do. Shown before you trust it.
+        lines.append(
+            "capabilities: "
+            + (plugin.manifest.capabilities.isEmpty
+                ? "none"
+                : plugin.manifest.capabilities.map(\.rawValue).joined(separator: ", "))
+        )
 
         if !plugin.manifest.commands.isEmpty {
             lines.append("")

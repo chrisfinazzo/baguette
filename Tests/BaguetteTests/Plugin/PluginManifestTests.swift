@@ -55,6 +55,30 @@ struct PluginManifestTests {
         }
     }
 
+    // MARK: - capabilities
+
+    @Test func `parsing reads the declared capabilities`() throws {
+        let manifest = try PluginManifest.parsing(json: Self.fixtureCapabilities)
+        #expect(manifest.capabilities == [.describeUI, .screenshot])
+    }
+
+    @Test func `a manifest declaring no capabilities gets none`() throws {
+        // Least privilege by default: a plugin that says nothing can
+        // call nothing on the plugin API.
+        let manifest = try PluginManifest.parsing(json: Self.fixtureMinimal)
+        #expect(manifest.capabilities.isEmpty)
+    }
+
+    @Test func `an unknown capability is rejected`() throws {
+        // A typo would otherwise silently grant nothing and fail at
+        // runtime with a confusing 403 — catch it at validate time.
+        #expect(throws: PluginManifestError.unknownCapability(name: "root")) {
+            try PluginManifest.parsing(json: Data("""
+            { "name": "x", "version": "1.0.0", "apiVersion": 1, "capabilities": ["root"] }
+            """.utf8))
+        }
+    }
+
     // MARK: - panels
 
     @Test func `parsing reads a panel's identity and icon`() throws {
@@ -184,6 +208,13 @@ struct PluginManifestTests {
 
     static let fixtureNoName = Data("""
     { "version": "1.0.0", "apiVersion": 1 }
+    """.utf8)
+
+    static let fixtureCapabilities = Data("""
+    {
+      "name": "a11y", "version": "1.0.0", "apiVersion": 1,
+      "capabilities": ["describe-ui", "screenshot"]
+    }
     """.utf8)
 
     static let fixtureNoVersion = Data("""

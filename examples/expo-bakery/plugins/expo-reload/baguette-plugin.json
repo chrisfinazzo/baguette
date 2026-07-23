@@ -1,0 +1,16 @@
+{
+  "name": "expo-reload",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Reload the focused Expo / React Native app",
+  "capabilities": ["input"],
+  "contributes": {
+    "commands": [
+      { "id": "go", "title": "Reload", "run": ["/usr/bin/python3", "bin/go.py"] }
+    ],
+    "panels": [
+      { "id": "go", "title": "Reload", "icon": "reload", "when": "simulator.booted",
+        "body": { "kind": "list", "source": "go" } }
+    ]
+  }
+}

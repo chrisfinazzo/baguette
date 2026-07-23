@@ -1,0 +1,8 @@
+{
+  "name": "tddworks/expo-tools",
+  "description": "Expo / React Native helpers",
+  "plugins": [
+    { "name": "expo-reload",  "path": "plugins/expo-reload" },
+    { "name": "expo-devmenu", "path": "plugins/expo-devmenu" }
+  ]
+}

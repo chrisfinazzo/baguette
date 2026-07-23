@@ -29,7 +29,7 @@ A plugin is a directory containing `baguette-plugin.json`:
   "version": "1.0.0",
   "apiVersion": 1,                    // baguette refuses a newer contract
   "description": "Accessibility audit for the current screen",
-  "capabilities": ["describe-ui"],    // informational in this version
+  "capabilities": ["describe-ui"],    // enforced — see below
   "contributes": {
     "commands": [
       { "id": "audit", "title": "Run audit", "run": ["/usr/bin/python3", "bin/audit.py"] }
@@ -96,10 +96,48 @@ The command prints **one JSON object** on stdout and exits:
   baguette shows the message. Printing non-JSON is an error, not an
   empty result — a panel that renders nothing reads as "all clear".
 
-The plugin API a command may call (with the token): `/simulators.json`,
-boot/shutdown, `/simulators/:udid/screenshot.jpg`,
-`/simulators/:udid/describe-ui.json`, `status-bar`, `location`,
-`files`, and the gesture WebSocket.
+## Capabilities
+
+A plugin may only do what its manifest declared. `capabilities` is a
+closed set, and it is **enforced**, not documentation:
+
+| Capability | Grants |
+|---|---|
+| `describe-ui` | `GET /simulators/:udid/describe-ui.json` |
+| `input` | `POST /simulators/:udid/input` — gestures, keys, buttons |
+| `screenshot` | `GET /simulators/:udid/screenshot.jpg` |
+| `logs`, `status-bar`, `location`, `files`, `simulators` | the matching routes |
+
+**Least privilege by default**: a manifest that declares nothing gets
+nothing. An unknown capability is a parse error, so typos surface at
+`baguette plugin validate` rather than as a confusing runtime `403`.
+
+How it's enforced: each command invocation is handed its **own** token
+carrying exactly that plugin's declared set, revoked the moment the
+command exits. A plugin that didn't declare `input` gets
+
+```json
+{"ok":false,"error":"this plugin did not declare the \"input\" capability"}
+```
+
+with HTTP `403` — even though its token is otherwise valid. A shared
+session secret couldn't do this: every plugin would present the same
+credential, so the server could never tell who was calling.
+
+`baguette plugin show <name>` prints the capabilities before you install.
+
+### Sending input
+
+`POST /simulators/:udid/input` takes the same gesture envelope the
+stream socket and `baguette input` accept — so ⌘R to reload a React
+Native bundle is:
+
+```json
+{"type":"key","code":"KeyR","modifiers":["command"]}
+```
+
+See [`examples/expo-bakery/`](../../examples/expo-bakery/) for a complete
+working bakery built on this.
 
 ## Local authoring
 

@@ -89,21 +89,44 @@ struct PluginRoutesTests {
         #expect(message.contains("exited 3"))
     }
 
-    // MARK: - the session token
+    // MARK: - capability grants
 
-    @Test func `a plugin API call without the session token is rejected`() throws {
-        // Plugin subprocesses reach the server with no Origin header,
-        // which `isTrustedBrowserRequest` trusts outright. That's fine
-        // while the API is internal and not fine once it's advertised,
-        // so the plugin-facing routes check a per-session token.
-        #expect(!Server.isTrustedPluginRequest(token: nil, sessionToken: "secret"))
-        #expect(!Server.isTrustedPluginRequest(token: "guess", sessionToken: "secret"))
-        #expect(Server.isTrustedPluginRequest(token: "secret", sessionToken: "secret"))
+    @Test func `a command invocation is handed a grant for its plugin's capabilities`() async throws {
+        // The token the plugin receives must be a live grant carrying
+        // exactly what the manifest declared — that's what the plugin
+        // API checks.
+        let grants = PluginGrants()
+        let seen = SeenToken()
+        _ = await Server.runPlugin(
+            qualified: "a11y:audit",
+            context: Self.context,
+            plugins: Self.plugins(capabilities: [.describeUI]),
+            grants: grants,
+            subprocess: { Self.subprocess(recording: seen, grants: grants) }
+        )
+        #expect(seen.capabilities == [.describeUI])
     }
 
-    @Test func `each serve session mints a fresh token`() throws {
-        #expect(Server.makeSessionToken() != Server.makeSessionToken())
-        #expect(Server.makeSessionToken().count >= 32)
+    @Test func `the grant is revoked once the command finishes`() async throws {
+        // A leaked token is useless after the run it belonged to.
+        let grants = PluginGrants()
+        let seen = SeenToken()
+        _ = await Server.runPlugin(
+            qualified: "a11y:audit",
+            context: Self.context,
+            plugins: Self.plugins(capabilities: [.describeUI]),
+            grants: grants,
+            subprocess: { Self.subprocess(recording: seen, grants: grants) }
+        )
+        let token = try #require(seen.token)
+        #expect(grants.capabilities(for: token) == nil)
+    }
+
+    /// Captures the token handed to the child, and what it could do
+    /// while the child was running.
+    final class SeenToken: @unchecked Sendable {
+        var token: String?
+        var capabilities: [PluginCapability]?
     }
 
     // MARK: - helpers
@@ -126,13 +149,14 @@ struct PluginRoutesTests {
         return simulators
     }
 
-    static func plugins() -> MockPlugins {
+    static func plugins(capabilities: [PluginCapability] = []) -> MockPlugins {
         let plugins = MockPlugins()
         given(plugins).all().willReturn([
             Plugin(
                 root: URL(fileURLWithPath: "/tmp/plugins/a11y"),
                 manifest: PluginManifest(
                     name: "a11y", version: "1.0.0", apiVersion: 1,
+                    capabilities: capabilities,
                     commands: [PluginCommand(id: "audit", title: "Audit", run: ["true"])]
                 )
             )
@@ -148,6 +172,25 @@ struct PluginRoutesTests {
         ).willProduce { _, _, _, _, _, onBytes, onExit in
             onBytes(Data(stdout.utf8))
             onExit(exitCode)
+        }
+        given(sub).terminate().willReturn()
+        return sub
+    }
+
+    /// A child that reports what its handed token could do *while it
+    /// was running* — the grant is revoked after, so it has to be
+    /// sampled from inside the invocation.
+    static func subprocess(recording seen: SeenToken, grants: PluginGrants) -> MockSubprocess {
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, workingDirectory: .any,
+            environment: .any, stdin: .any, onBytes: .any, onExit: .any
+        ).willProduce { _, _, _, env, _, onBytes, onExit in
+            let token = env["BAGUETTE_TOKEN"]
+            seen.token = token
+            seen.capabilities = token.flatMap { grants.capabilities(for: $0) }
+            onBytes(Data(#"{"ok":true}"#.utf8))
+            onExit(0)
         }
         given(sub).terminate().willReturn()
         return sub

@@ -27,6 +27,9 @@ struct PluginManifest: Equatable, Sendable {
     /// One-line summary shown by `baguette plugin list` / `show`.
     /// `nil` when the manifest omits it.
     let description: String?
+    /// What this plugin may ask baguette to do. Empty means nothing —
+    /// least privilege by default.
+    let capabilities: [PluginCapability]
     let commands: [PluginCommand]
     let panels: [PluginPanel]
 
@@ -35,6 +38,7 @@ struct PluginManifest: Equatable, Sendable {
         version: String,
         apiVersion: Int,
         description: String? = nil,
+        capabilities: [PluginCapability] = [],
         commands: [PluginCommand] = [],
         panels: [PluginPanel] = []
     ) {
@@ -42,6 +46,7 @@ struct PluginManifest: Equatable, Sendable {
         self.version = version
         self.apiVersion = apiVersion
         self.description = description
+        self.capabilities = capabilities
         self.commands = commands
         self.panels = panels
     }
@@ -80,6 +85,13 @@ struct PluginManifest: Equatable, Sendable {
             throw PluginManifestError.missingVersion
         }
 
+        let capabilities = try (dict["capabilities"] as? [String] ?? []).map { raw in
+            guard let capability = PluginCapability(rawValue: raw) else {
+                throw PluginManifestError.unknownCapability(name: raw)
+            }
+            return capability
+        }
+
         let contributes = dict["contributes"] as? [String: Any] ?? [:]
 
         // Commands parse first: a panel body names the command whose
@@ -99,6 +111,7 @@ struct PluginManifest: Equatable, Sendable {
             version: version,
             apiVersion: apiVersion,
             description: dict["description"] as? String,
+            capabilities: capabilities,
             commands: commands,
             panels: panels
         )
@@ -119,6 +132,7 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
     case unknownPanelBody(kind: String)
     case unknownRowAction(name: String)
     case unknownCommandSource(id: String)
+    case unknownCapability(name: String)
 
     var description: String {
         switch self {
@@ -154,6 +168,11 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
                 """
         case .unknownCommandSource(let id):
             return "panel body names command \"\(id)\", which this plugin does not contribute"
+        case .unknownCapability(let name):
+            return """
+                unknown capability \"\(name)\" — use one of: \
+                \(PluginCapability.allCases.map(\.rawValue).joined(separator: ", "))
+                """
         }
     }
 }

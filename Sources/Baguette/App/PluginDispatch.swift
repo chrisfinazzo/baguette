@@ -89,16 +89,34 @@ enum PluginDispatch {
 
     /// Resolve `qualifiedCommand` (`a11y:audit`) against the installed
     /// plugins and run it.
+    ///
+    /// When `grants` is supplied, the invocation gets its own token
+    /// carrying exactly the plugin's declared capabilities, revoked the
+    /// moment the command finishes. That token — not a shared session
+    /// secret — is what the plugin API checks, so a plugin can only do
+    /// what its manifest asked for.
     static func run(
         qualifiedCommand: String,
         context: Context,
         plugins: any Plugins,
+        grants: PluginGrants? = nil,
         subprocess: @Sendable () -> any Subprocess = { HostSubprocess() }
     ) async -> Outcome {
         guard let (plugin, command) = (try? plugins.resolve(qualifiedCommand: qualifiedCommand)) ?? nil
         else {
             return .unknownCommand(id: qualifiedCommand)
         }
+
+        // Least privilege, scoped to this one run: the child gets a
+        // token carrying exactly what the manifest declared, revoked
+        // the moment the command returns.
+        let issuedToken = grants?.issue(
+            plugin: plugin.id, capabilities: plugin.manifest.capabilities
+        )
+        let runContext = issuedToken.map {
+            Context(serverURL: context.serverURL, udid: context.udid, token: $0)
+        } ?? context
+        defer { if let issuedToken { grants?.revoke(issuedToken) } }
 
         let child = subprocess()
         let collected = Collected()
@@ -115,8 +133,8 @@ enum PluginDispatch {
                                 // needing to know where the user's node lives.
                                 arguments: command.run,
                                 workingDirectory: plugin.root,
-                                environment: environment(for: context),
-                                stdin: contextJSON(qualifiedCommand, context),
+                                environment: environment(for: runContext),
+                                stdin: contextJSON(qualifiedCommand, runContext),
                                 onBytes: { collected.append($0) },
                                 onExit: { status in
                                     continuation.resume(returning: finish(status: status, collected: collected))
