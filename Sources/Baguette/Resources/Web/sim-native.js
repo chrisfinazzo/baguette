@@ -690,32 +690,18 @@
     });
   }
 
-  // Plugin contributions — manifest-declared toolbar buttons + panels
-  // fetched from /plugins.json and drawn by the host. `onHighlight`
-  // converts a row's device-point frame into a box over the live
-  // screen; the frame arrives in the same units as gesture
-  // coordinates, so the only maths is the display scale.
+  // Plugin contributions — a separate rail on the right edge, drawn by
+  // the host from /plugins.json. Kept apart from the device toolbar on
+  // purpose: baguette ships the toolbar, plugins are code you
+  // installed, and the split is a trust signal. `onHighlight` converts
+  // a row's device-point frame into a box over the live screen; the
+  // frame arrives in the same units as gesture coordinates, so the
+  // only maths is the display scale.
   function mountPlugins() {
     if (!window.PluginPanels || !sim) return;
-    window.PluginPanels.injectCSS();
-
-    let host = document.getElementById('nativePluginHost');
-    if (!host) {
-      host = document.createElement('div');
-      host.id = 'nativePluginHost';
-      host.className = 'plugin-host';
-      host.hidden = true;
-      document.body.appendChild(host);
-    }
-
-    const strip = document.querySelector('#simNativeView .tb-actions')
-               || document.getElementById('nativeToolScroll');
-    if (!strip) return;
-
     pluginPanels = new window.PluginPanels({
       udid,
-      toolbar: strip,
-      host,
+      mount: document.getElementById('simNativeView') || document.body,
       isBooted: () => true,
       onHighlight: (frame) => paintPluginHighlight(frame),
       log: (msg) => console.log('[plugin]', msg),
