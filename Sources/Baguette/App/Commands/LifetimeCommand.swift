@@ -69,7 +69,7 @@ struct LifetimeCommand: ParsableCommand {
             }
             log(Self.headline(desired))
             if restartSimulatorApp {
-                log("""
+                warn("""
                     Simulator.app is running and may overwrite this when it \
                     quits — quit and reopen it to be sure the change sticks.
                     """)
@@ -83,7 +83,11 @@ struct LifetimeCommand: ParsableCommand {
         print("  quitting the app   \(Self.effect(lifetime.detachOnAppQuit))")
         print("")
         if let advisory = lifetime.advisory {
-            print(advisory)
+            // The report is the command's product, so it goes to stdout
+            // — but the advisory is the same problem `serve` warns
+            // about, and it would read oddly as the only uncoloured
+            // warning in the tool.
+            print(TerminalStyle.warning(advisory, colored: terminalColorized(STDOUT_FILENO)))
         } else {
             print("Booted devices survive Simulator.app.")
         }

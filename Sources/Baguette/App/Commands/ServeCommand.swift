@@ -30,7 +30,7 @@ struct ServeCommand: AsyncParsableCommand {
         // another toolchain opened Simulator.app for you. Warn, don't
         // rewrite Xcode's preferences behind the user's back.
         if let advisory = SimulatorAppPreferences.lifetime().advisory {
-            log(advisory)
+            warn(advisory)
         }
 
         let server = Server(

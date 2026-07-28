@@ -19,7 +19,7 @@ struct BootCommand: ParsableCommand {
             try simulator.boot()
             log("Booted \(simulator.name)")
             if let advisory = SimulatorAppPreferences.lifetime().advisory {
-                log(advisory)
+                warn(advisory)
             }
         } catch {
             log("Boot failed: \(error)")
