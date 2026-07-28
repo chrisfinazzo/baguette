@@ -20,10 +20,11 @@ struct LoggerTests {
         warn("")
     }
 
-    @Test func `colour is resolved per file descriptor`() {
-        // Under `swift test` stderr is not a terminal, so this also
-        // pins that redirected output stays uncoloured.
-        _ = terminalColorized(STDERR_FILENO)
-        _ = terminalColorized(STDOUT_FILENO)
+    @Test func `a descriptor that isn't a terminal gets no colour`() {
+        // -1 is never a tty, so this is deterministic. Asserting on
+        // STDERR_FILENO would not be: `swift test` inherits the parent's
+        // stderr, which is a terminal when run interactively and a pipe
+        // in CI, so the expected value would flip with the environment.
+        #expect(terminalColorized(-1) == false)
     }
 }

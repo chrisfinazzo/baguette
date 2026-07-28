@@ -183,9 +183,38 @@ struct SimulatorLifetimeTests {
         #expect(advisory.contains("baguette lifetime --detach"))
     }
 
-    @Test func `a partial policy still advises because the device can be lost`() {
+    @Test func `Apple's default names both routes because both shut down`() throws {
+        let advisory = try #require(SimulatorLifetime.appleDefault.advisory)
+        #expect(advisory.contains("window"))
+        #expect(advisory.contains("quits"))
+    }
+
+    @Test func `detaching on window close leaves only the quit route named`() throws {
+        // Closing the window no longer shuts this device down, so saying
+        // it does would misdescribe what Simulator.app will actually do.
+        // Reachable from Simulator → Settings, where the two keys are
+        // independent checkboxes.
         let partial = SimulatorLifetime(detachOnWindowClose: true, detachOnAppQuit: false)
-        #expect(partial.advisory != nil)
+        let advisory = try #require(partial.advisory)
+        #expect(advisory.contains("quits"))
+        #expect(!advisory.contains("window"))
+    }
+
+    @Test func `detaching on quit leaves only the window route named`() throws {
+        let partial = SimulatorLifetime(detachOnWindowClose: false, detachOnAppQuit: true)
+        let advisory = try #require(partial.advisory)
+        #expect(advisory.contains("window"))
+        #expect(!advisory.contains("quits"))
+    }
+
+    @Test func `every advising policy still names the fix`() throws {
+        // Whichever routes are live, the advisory has to stay actionable.
+        for lifetime in [SimulatorLifetime.appleDefault,
+                         SimulatorLifetime(detachOnWindowClose: true, detachOnAppQuit: false),
+                         SimulatorLifetime(detachOnWindowClose: false, detachOnAppQuit: true)] {
+            let advisory = try #require(lifetime.advisory)
+            #expect(advisory.contains("baguette lifetime --detach"))
+        }
     }
 
     @Test func `a policy that survives Simulator app says nothing`() {

@@ -188,7 +188,8 @@ baguette <command> [options]
   shutdown --udid <UDID>                     Shutdown
   lifetime [--detach | --shutdown]           Show/set whether Simulator.app
                                              leaves devices booted when a
-                                             window closes (machine-wide)
+                                             window closes or the app quits
+                                             (machine-wide)
   orientation --udid <UDID>                  Rotate the booted simulator
               <portrait|landscape-left|       (GSEvent over PurpleWorkspacePort —
                landscape-right|portrait-      no NSView, host stays headless)

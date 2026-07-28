@@ -103,14 +103,25 @@ struct SimulatorLifetime: Equatable, Sendable {
     /// A one-line warning for commands that hold a device open (`serve`,
     /// `boot`), or nil when the policy already keeps devices alive.
     ///
-    /// This names the command that fixes it — an advisory that only
+    /// Only the routes that will actually shut a device down are named.
+    /// The two keys are independent checkboxes in Simulator → Settings,
+    /// so a half-detached policy is reachable, and claiming a route
+    /// shuts devices down when it doesn't would misdescribe what
+    /// Simulator.app is going to do — the one thing this message exists
+    /// to get right.
+    ///
+    /// It also names the command that fixes it: an advisory that only
     /// describes the problem is noise.
     var advisory: String? {
         guard !survivesSimulatorApp else { return nil }
+        // The guard leaves at least one route live, so this is never
+        // empty.
+        var routes: [String] = []
+        if !detachOnWindowClose { routes.append("their window is closed") }
+        if !detachOnAppQuit { routes.append("Simulator.app quits") }
         return """
-            Simulator.app will shut this device down when its window is \
-            closed or the app quits — run `baguette lifetime --detach` to \
-            leave booted devices running.
+            Booted devices will be shut down when \(routes.joined(separator: " or ")) \
+            — run `baguette lifetime --detach` to leave them running.
             """
     }
 
