@@ -21,7 +21,7 @@ struct CommandParsingTests {
             "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
             "orientation", "status-bar", "location", "install", "add-media",
-            "diag-digitizer-trackpad",
+            "diag-digitizer-trackpad", "lifetime",
         ])
     }
 
@@ -71,6 +71,43 @@ struct CommandParsingTests {
         #expect(cmd.options.udid == "XYZ")
         #expect(cmd.options.deviceSet == "/var/sims")
         #expect(ShutdownCommand.configuration.commandName == "shutdown")
+    }
+
+    // MARK: - lifetime
+
+    @Test func `lifetime with no flags is read-only`() throws {
+        let cmd = try LifetimeCommand.parse([])
+        #expect(cmd.detach == false)
+        #expect(cmd.shutdown == false)
+        #expect(LifetimeCommand.configuration.commandName == "lifetime")
+    }
+
+    @Test func `lifetime parses --detach`() throws {
+        let cmd = try LifetimeCommand.parse(["--detach"])
+        #expect(cmd.detach == true)
+        #expect(cmd.shutdown == false)
+    }
+
+    @Test func `lifetime parses --shutdown`() throws {
+        let cmd = try LifetimeCommand.parse(["--shutdown"])
+        #expect(cmd.shutdown == true)
+        #expect(cmd.detach == false)
+    }
+
+    @Test func `lifetime rejects both directions at once`() {
+        // --detach and --shutdown are opposite ends of one policy;
+        // accepting both would silently pick one.
+        #expect(throws: (any Error).self) {
+            try LifetimeCommand.parse(["--detach", "--shutdown"])
+        }
+    }
+
+    @Test func `lifetime takes no udid because the policy is machine-wide`() {
+        // These are Simulator.app's preferences, not a device's, so a
+        // per-device flag would be a lie.
+        #expect(throws: (any Error).self) {
+            try LifetimeCommand.parse(["--udid", "ABC"])
+        }
     }
 
     // MARK: - input

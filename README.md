@@ -186,6 +186,9 @@ baguette <command> [options]
                                              --json emits {"running":[…],"available":[…]})
   boot     --udid <UDID>                     Boot headlessly
   shutdown --udid <UDID>                     Shutdown
+  lifetime [--detach | --shutdown]           Show/set whether Simulator.app
+                                             leaves devices booted when a
+                                             window closes (machine-wide)
   orientation --udid <UDID>                  Rotate the booted simulator
               <portrait|landscape-left|       (GSEvent over PurpleWorkspacePort —
                landscape-right|portrait-      no NSView, host stays headless)

@@ -25,6 +25,14 @@ struct ServeCommand: AsyncParsableCommand {
     var allowedHosts: [String] = []
 
     func run() async throws {
+        // A device driven over `serve` is lost the moment Simulator.app
+        // closes its window, which is easy to trigger by accident when
+        // another toolchain opened Simulator.app for you. Warn, don't
+        // rewrite Xcode's preferences behind the user's back.
+        if let advisory = SimulatorAppPreferences.lifetime().advisory {
+            log(advisory)
+        }
+
         let server = Server(
             simulators: CoreSimulators(deviceSetPath: deviceSet),
             chromes: LiveChromes(
