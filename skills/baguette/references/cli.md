@@ -32,6 +32,45 @@ Headless boot — the CoreSimulator framework spins the device up without
 opening Simulator.app. `boot` is idempotent: an already-booted device
 returns `{"ok":true}`.
 
+## Surviving Simulator.app — `lifetime`
+
+```bash
+baguette lifetime              # report the current policy
+baguette lifetime --detach     # leave devices booted on window close / quit
+baguette lifetime --shutdown   # restore Apple's default
+```
+
+Simulator.app shuts a device down when you close its window or quit the
+app, which kills devices baguette is driving. That bites even in a
+headless workflow, because other toolchains (Expo's `i`, `xcrun simctl`
+wrappers, Xcode) open Simulator.app for you — so a device you booted
+headlessly acquires a window somebody can close.
+
+The policy is two preferences in Simulator.app's own domain
+(`com.apple.iphonesimulator`), which Apple groups under "Simulator
+lifetime" and ships as `false`:
+
+| Key | Simulator.app's wording |
+|---|---|
+| `DetachOnWindowClose` | "When closing a simulator's window leave it running" |
+| `DetachOnAppQuit` | "When quitting leave simulators running" |
+
+Both must detach for a device to survive — closing the window and
+quitting the app are independent ways to lose it. The same toggles live
+in Simulator → Settings… if you'd rather flip them by hand.
+
+Two things worth knowing:
+
+- **It's machine-wide.** These are Simulator.app's settings, not a
+  device's, so there's no `--udid`. The change persists after baguette is
+  uninstalled — which is why nothing applies it automatically. `serve`
+  and `boot` only warn.
+- **Quit Simulator.app first if you can.** A running Simulator.app may
+  hold a cached copy of these keys and flush it back over the write when
+  it quits. `lifetime` writes anyway (refusing would block the common
+  case, since the device is often booted through Simulator.app) but tells
+  you to restart it.
+
 ## Screen geometry — `chrome layout`
 
 ```bash

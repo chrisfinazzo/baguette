@@ -12,6 +12,20 @@ For releases prior to this changelog, see the
 
 ### Added
 
+- **`baguette lifetime` — stop Simulator.app shutting devices down.** A device
+  booted headlessly dies the moment someone closes its window in Simulator.app,
+  which is easy to hit without meaning to: toolchains like Expo open
+  Simulator.app on your behalf, so a device baguette is driving ends up with a
+  window you can close. Simulator.app has had the fix all along — two
+  preferences it groups under "Simulator lifetime" — but they default to
+  shutdown and are buried. `baguette lifetime` reports the current policy,
+  `--detach` opts into leaving devices booted, and `--shutdown` restores
+  Apple's default. `serve` and `boot` now print a one-line warning when the
+  policy will lose devices, naming the command that fixes it. Nothing is
+  written unless you ask: the keys live in Xcode's preferences domain, the
+  change is machine-wide and outlives baguette, so it stays an explicit
+  opt-in rather than something first boot does behind your back.
+
 - **Boot a device from its own tab.** Opening `/simulators/<udid>` on a
   simulator that isn't running used to mount a bezel around a stream that
   would never carry a frame — a black rectangle with no explanation and no
