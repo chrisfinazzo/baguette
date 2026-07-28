@@ -74,6 +74,9 @@ private extension Plugin {
             },
         ]
         if let description = manifest.description { out["description"] = description }
+        // Resolved host-side so the page renders what it's told rather
+        // than re-deriving the fallback rule in JavaScript.
+        if let railIcon { out["icon"] = railIcon.rawValue }
         return out
     }
 }

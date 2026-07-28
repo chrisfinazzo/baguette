@@ -84,6 +84,12 @@
       this.openPanelID = null;
       this.rail = null;
       this.host = null;
+      // The hover flyout: at most one open, owned by one group button.
+      this.flyout = null;
+      this.flyoutGroup = null;
+      this.flyoutButton = null;
+      this.flyoutCloseTimer = null;
+      this.onFlyoutKeydown = (event) => { if (event.key === 'Escape') this.closeFlyout(); };
     }
 
     async load() {
@@ -99,14 +105,24 @@
       this.render();
     }
 
-    /** Flatten manifests to the panels that should show right now. */
-    visiblePanels() {
+    /**
+     * The plugins that have something to show right now, each with the
+     * panels it currently contributes.
+     *
+     * One plugin is one rail slot, however many tools it ships. A
+     * plugin with eight panels used to spend eight slots and nothing
+     * said the eight belonged together; grouping by the contributing
+     * plugin makes the rail's length a count of what you installed,
+     * not of what those things happen to contribute.
+     */
+    visibleGroups() {
       const out = [];
       for (const plugin of this.plugins) {
-        for (const panel of plugin.panels || []) {
-          if (panel.when === 'simulator.booted' && !this.isBooted()) continue;
-          out.push({ plugin: plugin.name, panel });
-        }
+        const panels = (plugin.panels || []).filter(
+          (panel) => !(panel.when === 'simulator.booted' && !this.isBooted())
+        );
+        if (!panels.length) continue;   // nothing to show ⇒ no slot
+        out.push({ name: plugin.name, icon: plugin.icon, panels });
       }
       return out;
     }
@@ -114,7 +130,7 @@
     render() {
       PluginPanels.injectCSS();
       this.buildRail();
-      for (const { plugin, panel } of this.visiblePanels()) this.addButton(plugin, panel);
+      for (const group of this.visibleGroups()) this.addGroup(group);
       // The "+ Add" entry point always shows, so a fresh user with no
       // plugins can still add their first bakery from the browser.
       this.addAddButton();
@@ -123,6 +139,7 @@
     /// Tear the rail down and re-fetch — used after an install so the
     /// new plugin's button appears without a page reload.
     async reload() {
+      this.closeFlyout();
       if (this.rail) this.rail.remove();
       if (this.host) this.host.remove();
       this.rail = null;
@@ -155,19 +172,144 @@
       this.host = host;
     }
 
-    addButton(pluginName, panel) {
+    /**
+     * One rail slot for one plugin.
+     *
+     * A plugin contributing a single panel keeps the old behaviour —
+     * click opens it. Making you hover, wait, and then pick the only
+     * item would be ceremony over a button. Only a plugin with more
+     * than one tool earns the flyout.
+     */
+    addGroup(group) {
       const button = document.createElement('button');
       button.className = 'plugin-rail-btn';
-      button.id = 'plugin-' + panel.id;
-      // title / setAttribute, never innerHTML, for manifest text. The
-      // tooltip names the plugin so two plugins' buttons stay legible.
-      button.title = panel.title + ' — ' + pluginName;
-      button.setAttribute('aria-label', panel.title + ' (' + pluginName + ')');
       // The icon is a host-owned constant chosen by name — the only
-      // markup here, and it never contains plugin input.
-      button.innerHTML = iconSVG(panel.icon);
-      button.addEventListener('click', () => this.toggle(pluginName, panel));
+      // markup here, and it never contains plugin input. The server
+      // resolves which glyph represents the plugin (`Plugin.railIcon`),
+      // so a plugin with no icon of its own already arrives wearing its
+      // first panel's; the puzzle piece is the last resort.
+      button.innerHTML = group.icon ? iconSVG(group.icon) : svgWrap(PUZZLE, 17);
+
+      const single = group.panels.length === 1 ? group.panels[0] : null;
+      // title / setAttribute, never innerHTML, for manifest text.
+      if (single) {
+        button.title = single.title + ' — ' + group.name;
+        button.setAttribute('aria-label', single.title + ' (' + group.name + ')');
+        button.addEventListener('click', () => this.toggle(group, single));
+      } else {
+        button.classList.add('plugin-rail-group');
+        button.title = group.name + ' — ' + group.panels.length + ' tools';
+        button.setAttribute('aria-label', group.name + ', ' + group.panels.length + ' tools');
+        button.setAttribute('aria-haspopup', 'menu');
+        button.setAttribute('aria-expanded', 'false');
+        // Hover opens it; click and keyboard focus do too, so the rail
+        // stays usable on a trackpad-less touch screen and by tab.
+        button.addEventListener('mouseenter', () => this.openFlyout(group, button));
+        button.addEventListener('mouseleave', () => this.scheduleFlyoutClose());
+        button.addEventListener('focus', () => this.openFlyout(group, button));
+        button.addEventListener('click', () => {
+          if (this.flyoutGroup === group.name) this.closeFlyout();
+          else this.openFlyout(group, button);
+        });
+      }
+
+      group.button = button;
       this.rail.appendChild(button);
+    }
+
+    // --- the flyout ---------------------------------------------------
+    //
+    // Opens to the LEFT of the rail, aligned to the group button, and
+    // lists each tool with its icon *and* its name. Icons alone stop
+    // telling a plugin's tools apart once there are more than two or
+    // three of them — the label is the point of the expansion.
+
+    openFlyout(group, button) {
+      this.cancelFlyoutClose();
+      if (this.flyoutGroup === group.name) return;   // already showing
+      this.closeFlyout();
+
+      const flyout = document.createElement('div');
+      flyout.className = 'plugin-flyout';
+      flyout.setAttribute('role', 'menu');
+      flyout.setAttribute('aria-label', group.name);
+
+      const head = document.createElement('div');
+      head.className = 'plugin-flyout-head';
+      head.textContent = group.name;   // manifest text → textContent, never markup
+      flyout.appendChild(head);
+
+      for (const panel of group.panels) {
+        const item = document.createElement('button');
+        item.className = 'plugin-flyout-item';
+        item.setAttribute('role', 'menuitem');
+        if (this.openPanelID === panel.id) item.classList.add('active');
+
+        const glyph = document.createElement('span');
+        glyph.className = 'plugin-flyout-glyph';
+        glyph.innerHTML = iconSVG(panel.icon);       // host constant
+        const label = document.createElement('span');
+        label.className = 'plugin-flyout-label';
+        label.textContent = panel.title;             // untrusted → textContent
+        item.appendChild(glyph);
+        item.appendChild(label);
+
+        item.addEventListener('click', () => {
+          this.toggle(group, panel);
+          this.closeFlyout();
+        });
+        flyout.appendChild(item);
+      }
+
+      flyout.addEventListener('mouseenter', () => this.cancelFlyoutClose());
+      flyout.addEventListener('mouseleave', () => this.scheduleFlyoutClose());
+      this.mount.appendChild(flyout);
+
+      this.flyout = flyout;
+      this.flyoutGroup = group.name;
+      this.flyoutButton = button;
+      button.setAttribute('aria-expanded', 'true');
+      button.classList.add('expanded');
+      document.addEventListener('keydown', this.onFlyoutKeydown);
+      this.positionFlyout(flyout, button);
+    }
+
+    /// Centre the flyout on its button, then keep it on screen — a
+    /// group near the top or bottom of a short window would otherwise
+    /// hang off the edge.
+    positionFlyout(flyout, button) {
+      const rail = this.rail.getBoundingClientRect();
+      const anchor = button.getBoundingClientRect();
+      flyout.style.right = (window.innerWidth - rail.left + 8) + 'px';
+      const height = flyout.offsetHeight;
+      const centred = anchor.top + anchor.height / 2 - height / 2;
+      const clamped = Math.max(12, Math.min(centred, window.innerHeight - height - 12));
+      flyout.style.top = clamped + 'px';
+    }
+
+    /// A grace period so travelling from the button to the flyout
+    /// across the 8px gap doesn't dismiss what you're reaching for.
+    scheduleFlyoutClose() {
+      this.cancelFlyoutClose();
+      this.flyoutCloseTimer = setTimeout(() => this.closeFlyout(), 160);
+    }
+
+    cancelFlyoutClose() {
+      if (this.flyoutCloseTimer) clearTimeout(this.flyoutCloseTimer);
+      this.flyoutCloseTimer = null;
+    }
+
+    closeFlyout() {
+      this.cancelFlyoutClose();
+      if (this.flyoutButton) {
+        this.flyoutButton.setAttribute('aria-expanded', 'false');
+        this.flyoutButton.classList.remove('expanded');
+      }
+      if (this.flyout) this.flyout.remove();
+      this.flyout = null;
+      this.flyoutGroup = null;
+      this.flyoutButton = null;
+      document.removeEventListener('keydown', this.onFlyoutKeydown);
     }
 
     /// A "+" at the foot of the rail that opens the add-a-bakery modal.
@@ -185,12 +327,14 @@
       this.rail.appendChild(button);
     }
 
-    toggle(pluginName, panel) {
-      for (const b of this.rail.querySelectorAll('.plugin-rail-btn')) {
-        b.classList.toggle('active', b.id === 'plugin-' + panel.id && this.openPanelID !== panel.id);
-      }
+    /// The rail highlights the *plugin* whose panel is open, not the
+    /// panel — the panel no longer has a slot of its own to light up.
+    toggle(group, panel) {
       if (this.openPanelID === panel.id) { this.close(); return; }
-      this.open(pluginName, panel);
+      for (const b of this.rail.querySelectorAll('.plugin-rail-btn')) {
+        b.classList.toggle('active', b === group.button);
+      }
+      this.open(group.name, panel);
     }
 
     close() {
@@ -403,7 +547,8 @@
                      width: 30px; height: 24px; color: var(--accent, #2563eb); opacity: 0.85; }
   .plugin-rail-divider { width: 20px; height: 1px; margin: 1px 0 3px;
                          background: var(--nv-divider, rgba(15,23,42,0.14)); }
-  .plugin-rail-btn { width: 34px; height: 34px; padding: 0; border: 0; cursor: pointer;
+  .plugin-rail-btn { position: relative; width: 34px; height: 34px; padding: 0; border: 0;
+                     cursor: pointer;
                      display: inline-flex; align-items: center; justify-content: center;
                      background: transparent; border-radius: 9px; color: var(--nv-text, #1d1d1f);
                      transition: background 0.12s ease, transform 0.12s ease; }
@@ -411,6 +556,48 @@
   .plugin-rail-btn:active { transform: scale(0.94); }
   .plugin-rail-btn.active { background: color-mix(in srgb, var(--accent, #2563eb) 16%, transparent);
                             color: var(--accent, #2563eb); }
+  .plugin-rail-btn.expanded { background: var(--nv-btn-hover, rgba(15,23,42,0.06)); }
+  /* A caret on plugins that hold more than one tool: says "there is
+     more here, and it opens leftward" before you hover to find out. */
+  .plugin-rail-group::after { content: ''; position: absolute; left: 3px; top: 50%;
+                              margin-top: -3px; border: 3px solid transparent;
+                              border-right-color: currentColor; opacity: 0.4;
+                              transition: opacity 0.12s ease; }
+  .plugin-rail-group:hover::after, .plugin-rail-group.expanded::after { opacity: 0.75; }
+
+  .plugin-flyout { position: fixed; z-index: 50; min-width: 172px; max-width: 260px;
+                   padding: 5px; display: flex; flex-direction: column; gap: 1px;
+                   background: var(--nv-bar-bg, rgba(255,255,255,0.96));
+                   border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.10));
+                   border-right: 2px solid var(--accent, #2563eb);
+                   border-radius: 12px;
+                   box-shadow: 0 10px 34px rgba(15,23,42,0.20);
+                   backdrop-filter: blur(18px) saturate(1.5);
+                   -webkit-backdrop-filter: blur(18px) saturate(1.5);
+                   animation: plugin-flyout-in 0.12s ease-out; }
+  @keyframes plugin-flyout-in { from { opacity: 0; transform: translateX(6px); }
+                                to   { opacity: 1; transform: translateX(0); } }
+  @media (prefers-reduced-motion: reduce) { .plugin-flyout { animation: none; } }
+  .plugin-flyout-head { padding: 5px 8px 6px; font: 600 10px/1 -apple-system, sans-serif;
+                        letter-spacing: 0.06em; text-transform: uppercase;
+                        color: var(--accent, #2563eb);
+                        border-bottom: 1px solid var(--nv-divider, rgba(15,23,42,0.10));
+                        margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis;
+                        white-space: nowrap; }
+  .plugin-flyout-item { display: flex; align-items: center; gap: 9px; width: 100%;
+                        padding: 7px 9px; border: 0; border-radius: 8px; cursor: pointer;
+                        background: transparent; text-align: left;
+                        font: 500 12px/1.2 -apple-system, sans-serif;
+                        color: var(--nv-text, #1d1d1f);
+                        transition: background 0.1s ease; }
+  .plugin-flyout-item:hover { background: var(--nv-btn-hover, rgba(15,23,42,0.06)); }
+  .plugin-flyout-item.active { background: color-mix(in srgb, var(--accent, #2563eb) 14%, transparent);
+                               color: var(--accent, #2563eb); }
+  .plugin-flyout-glyph { display: inline-flex; flex: 0 0 auto;
+                         color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
+  .plugin-flyout-item:hover .plugin-flyout-glyph,
+  .plugin-flyout-item.active .plugin-flyout-glyph { color: inherit; }
+  .plugin-flyout-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .plugin-host { position: fixed; right: 72px; top: 50%; transform: translateY(-50%);
                  width: 340px; max-height: 66vh; z-index: 44; }

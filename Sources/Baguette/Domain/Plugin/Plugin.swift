@@ -16,6 +16,17 @@ struct Plugin: Equatable, Sendable {
 
     var id: String { manifest.name }
 
+    /// The glyph the rail draws for this plugin, collapsed.
+    ///
+    /// A plugin that names its own icon wears it. One that doesn't —
+    /// every manifest written before the rail collapsed — borrows the
+    /// panel it leads with, which is nearly always the right face. A
+    /// plugin contributing no panels reaches the rail not at all, so
+    /// it has no icon and the host decides what that means.
+    var railIcon: PluginIcon? {
+        manifest.icon ?? manifest.panels.first?.icon
+    }
+
     init(root: URL, manifest: PluginManifest) {
         self.root = root
         self.manifest = manifest

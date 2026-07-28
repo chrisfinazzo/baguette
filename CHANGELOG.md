@@ -22,6 +22,10 @@ For releases prior to this changelog, see the
   into baguette's process or the served page. Plugins render in a dedicated
   **plugins rail** on the focus-mode screen, deliberately separate from the
   device toolbar so an installed plugin can't be mistaken for a core control.
+  Each plugin takes **one** rail slot however many tools it ships: a
+  multi-tool plugin collapses behind a single entry that expands on hover
+  into a flyout naming each tool. A manifest may declare a top-level
+  `icon` for that collapsed entry, defaulting to its first panel's.
   A bundled accessibility-audit plugin ships in the binary as a reference.
   CLI: `baguette plugin list | show | validate | run`. See
   [`docs/features/plugins.md`](docs/features/plugins.md).

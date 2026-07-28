@@ -32,6 +32,30 @@ struct PluginManifestTests {
         #expect(manifest.description == nil)
     }
 
+    // MARK: - the plugin's own icon
+
+    @Test func `parsing reads the icon that stands for the whole plugin`() throws {
+        // A plugin with several panels collapses to one rail entry, so
+        // it needs a glyph of its own rather than borrowing whichever
+        // panel happens to be listed first.
+        let manifest = try PluginManifest.parsing(json: Self.fixtureGroupIcon)
+        #expect(manifest.icon == .wrench)
+    }
+
+    @Test func `a manifest that names no icon of its own has none`() throws {
+        let manifest = try PluginManifest.parsing(json: Self.fixtureMinimal)
+        #expect(manifest.icon == nil)
+    }
+
+    @Test func `a plugin icon outside the shipped set is rejected`() throws {
+        // Same boundary as a panel icon: untrusted manifest text that
+        // reaches the DOM is resolved against the host's fixed set or
+        // refused — never escaped downstream.
+        #expect(throws: PluginManifestError.unknownIcon(name: "<img src=x onerror=alert(1)>")) {
+            try PluginManifest.parsing(json: Self.fixtureBadGroupIcon)
+        }
+    }
+
     // MARK: - commands
 
     @Test func `parsing reads one contributed command`() throws {
@@ -214,6 +238,20 @@ struct PluginManifestTests {
     {
       "name": "a11y", "version": "1.0.0", "apiVersion": 1,
       "capabilities": ["describe-ui", "screenshot"]
+    }
+    """.utf8)
+
+    static let fixtureGroupIcon = Data("""
+    {
+      "name": "expo", "version": "0.2.0", "apiVersion": 1,
+      "icon": "wrench"
+    }
+    """.utf8)
+
+    static let fixtureBadGroupIcon = Data("""
+    {
+      "name": "evil", "version": "1.0.0", "apiVersion": 1,
+      "icon": "<img src=x onerror=alert(1)>"
     }
     """.utf8)
 

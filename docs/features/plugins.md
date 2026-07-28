@@ -29,6 +29,7 @@ A plugin is a directory containing `baguette-plugin.json`:
   "version": "1.0.0",
   "apiVersion": 1,                    // baguette refuses a newer contract
   "description": "Accessibility audit for the current screen",
+  "icon": "accessibility",            // optional — the plugin's rail glyph
   "capabilities": ["describe-ui"],    // enforced — see below
   "contributes": {
     "commands": [
@@ -50,6 +51,9 @@ A plugin is a directory containing `baguette-plugin.json`:
   `link`, `list`, `bell`, `wrench`, `lock`, `globe`, `camera`, `clock`,
   `document`, `play`. Arbitrary markup is rejected — a manifest is
   untrusted text rendered into a protected page.
+- **Top-level `icon`** is the glyph for the plugin *as a whole* — the one
+  the rail shows when its tools are collapsed. Optional: omit it and the
+  plugin wears the icon of the first panel it contributes.
 - **`when`**: `simulator.booted`, or omit for "always".
 - **`body.kind`** is `list` (the only widget today). `rowAction` is
   `highlight` (draw a box on the device), `tap`, or `copy`.
@@ -95,6 +99,22 @@ The command prints **one JSON object** on stdout and exits:
 - `{ "ok": false, "message": "…" }` reports the plugin's own failure;
   baguette shows the message. Printing non-JSON is an error, not an
   empty result — a panel that renders nothing reads as "all clear".
+
+## The rail
+
+Plugins live in their own strip on the right edge of focus mode, apart
+from the device toolbar — baguette ships the toolbar, plugins are code
+you installed, and the split is a trust signal.
+
+**One plugin is one slot, however many tools it ships.** A plugin
+contributing a single panel opens it on click. A plugin contributing
+several collapses to one entry marked with a caret; hovering it (or
+clicking, or tabbing to it) expands a flyout listing each tool by icon
+**and** name. `Esc` closes it.
+
+So a plugin with eight panels costs one slot, not eight, and the rail's
+length tells you how much you installed rather than how much those
+things happen to contribute.
 
 ## Capabilities
 

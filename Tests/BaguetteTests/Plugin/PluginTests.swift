@@ -31,6 +31,29 @@ struct PluginTests {
         #expect(plugin.command(qualified: "a11y:nope") == nil)
     }
 
+    // MARK: - the rail icon
+
+    @Test func `a plugin is represented in the rail by the icon it names`() throws {
+        let plugin = Self.make(name: "expo", commandIDs: ["reload"], icon: .wrench,
+                               panelIcons: [.reload])
+        #expect(plugin.railIcon == .wrench)
+    }
+
+    @Test func `a plugin with no icon of its own falls back to its first panel's`() throws {
+        // Most existing manifests predate the group icon. Rather than
+        // leave them faceless in the collapsed rail, they wear the
+        // glyph of the panel they lead with.
+        let plugin = Self.make(name: "a11y", commandIDs: ["audit"], panelIcons: [.accessibility, .list])
+        #expect(plugin.railIcon == .accessibility)
+    }
+
+    @Test func `a plugin that ships neither an icon nor a panel has none`() throws {
+        // A command-only plugin contributes nothing to the rail, so the
+        // host has no glyph to draw — it decides what to show, not us.
+        let plugin = Self.make(name: "headless", commandIDs: ["run"])
+        #expect(plugin.railIcon == nil)
+    }
+
     // MARK: - the collection
 
     @Test func `the collection finds a plugin by name`() throws {
@@ -69,17 +92,50 @@ struct PluginTests {
         #expect(commands[0]["run"] == nil)
     }
 
+    @Test func `the projection carries the icon that represents each plugin`() throws {
+        // The rail collapses a plugin to one entry, and the browser
+        // must not have to re-derive which glyph that is — the host
+        // resolves the fallback and states the answer.
+        let plugins = MockPlugins()
+        given(plugins).all().willReturn([
+            Self.make(name: "expo", commandIDs: ["reload"], icon: .wrench, panelIcons: [.reload]),
+            Self.make(name: "a11y", commandIDs: ["audit"], panelIcons: [.accessibility]),
+            Self.make(name: "headless", commandIDs: ["run"]),
+        ])
+
+        let parsed = try JSONSerialization.jsonObject(with: Data(try plugins.listJSON.utf8))
+        let list = try #require((parsed as? [String: Any])?["plugins"] as? [[String: Any]])
+
+        #expect(list[0]["icon"] as? String == "wrench")
+        #expect(list[1]["icon"] as? String == "accessibility")
+        #expect(list[2]["icon"] == nil)
+    }
+
     // MARK: - helpers
 
-    static func make(name: String, commandIDs: [String]) -> Plugin {
+    static func make(
+        name: String,
+        commandIDs: [String],
+        icon: PluginIcon? = nil,
+        panelIcons: [PluginIcon] = []
+    ) -> Plugin {
         Plugin(
             root: URL(fileURLWithPath: "/tmp/plugins/\(name)"),
             manifest: PluginManifest(
                 name: name,
                 version: "1.0.0",
                 apiVersion: 1,
+                icon: icon,
                 commands: commandIDs.map {
                     PluginCommand(id: $0, title: "Run audit", run: ["node", "bin/\($0).js"])
+                },
+                panels: panelIcons.enumerated().map { index, panelIcon in
+                    PluginPanel(
+                        id: "panel\(index)",
+                        title: "Panel \(index)",
+                        icon: panelIcon,
+                        body: .list(source: commandIDs.first ?? "", rowAction: nil)
+                    )
                 }
             )
         )

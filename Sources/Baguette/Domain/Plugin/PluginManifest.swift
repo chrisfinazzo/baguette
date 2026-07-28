@@ -27,6 +27,12 @@ struct PluginManifest: Equatable, Sendable {
     /// One-line summary shown by `baguette plugin list` / `show`.
     /// `nil` when the manifest omits it.
     let description: String?
+    /// The glyph that stands for the plugin as a whole. A plugin owns
+    /// one rail entry no matter how many panels it contributes, so it
+    /// gets to name its own face rather than wearing an arbitrary
+    /// panel's. `nil` when the manifest omits it — see `Plugin.railIcon`
+    /// for what the host draws then.
+    let icon: PluginIcon?
     /// What this plugin may ask baguette to do. Empty means nothing —
     /// least privilege by default.
     let capabilities: [PluginCapability]
@@ -38,6 +44,7 @@ struct PluginManifest: Equatable, Sendable {
         version: String,
         apiVersion: Int,
         description: String? = nil,
+        icon: PluginIcon? = nil,
         capabilities: [PluginCapability] = [],
         commands: [PluginCommand] = [],
         panels: [PluginPanel] = []
@@ -46,6 +53,7 @@ struct PluginManifest: Equatable, Sendable {
         self.version = version
         self.apiVersion = apiVersion
         self.description = description
+        self.icon = icon
         self.capabilities = capabilities
         self.commands = commands
         self.panels = panels
@@ -85,6 +93,18 @@ struct PluginManifest: Equatable, Sendable {
             throw PluginManifestError.missingVersion
         }
 
+        // Resolved against the shipped set for the same reason panel
+        // icons are: this string ends up in the DOM of the very origin
+        // `isTrustedBrowserRequest` defends, so a name we don't know is
+        // refused here rather than escaped later.
+        var icon: PluginIcon?
+        if let rawIcon = dict["icon"] as? String {
+            guard let parsed = PluginIcon(rawValue: rawIcon) else {
+                throw PluginManifestError.unknownIcon(name: rawIcon)
+            }
+            icon = parsed
+        }
+
         let capabilities = try (dict["capabilities"] as? [String] ?? []).map { raw in
             guard let capability = PluginCapability(rawValue: raw) else {
                 throw PluginManifestError.unknownCapability(name: raw)
@@ -111,6 +131,7 @@ struct PluginManifest: Equatable, Sendable {
             version: version,
             apiVersion: apiVersion,
             description: dict["description"] as? String,
+            icon: icon,
             capabilities: capabilities,
             commands: commands,
             panels: panels
