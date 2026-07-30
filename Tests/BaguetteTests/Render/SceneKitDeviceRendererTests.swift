@@ -25,6 +25,7 @@ struct SceneKitDeviceRendererTests {
         )
         #expect(properties[kCGImagePropertyPixelWidth] as? Int == 320)
         #expect(properties[kCGImagePropertyPixelHeight] as? Int == 240)
+        #expect(try Self.opaqueHeight(png) > 160)
     }
 
     @Test func `reports the declared local asset when it is missing`() throws {
@@ -108,6 +109,35 @@ private extension SceneKitDeviceRendererTests {
             throw CocoaError(.fileReadCorruptFile)
         }
         return png
+    }
+
+    static func opaqueHeight(_ png: Data) throws -> Int {
+        let imageSource = try #require(
+            CGImageSourceCreateWithData(png as CFData, nil)
+        )
+        let image = try #require(CGImageSourceCreateImageAtIndex(imageSource, 0, nil))
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try #require(CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let occupiedRows = (0..<height).filter { row in
+            (0..<width).contains { column in
+                pixels[(row * width + column) * 4 + 3] > 8
+            }
+        }
+        guard let first = occupiedRows.first, let last = occupiedRows.last else {
+            return 0
+        }
+        return last - first + 1
     }
 
     static func plan(

@@ -92,7 +92,7 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
         let aspect = Double(plan.outputSize.width) / Double(plan.outputSize.height)
         let camera = SCNCamera()
         camera.usesOrthographicProjection = true
-        camera.orthographicScale = max(height, width / aspect) * 1.18
+        camera.orthographicScale = max(height, width / aspect) * 0.59
         camera.zNear = 0.001
         camera.zFar = max(1000, depth * 100)
         let cameraNode = SCNNode()
