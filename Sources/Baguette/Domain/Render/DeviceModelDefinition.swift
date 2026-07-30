@@ -57,6 +57,21 @@ struct DeviceVariantChoice: Equatable, Sendable, Codable {
     let displayName: String
     let usdValue: String
     let previewColor: String?
+    let materialColors: [String: String]?
+
+    init(
+        id: String,
+        displayName: String,
+        usdValue: String,
+        previewColor: String?,
+        materialColors: [String: String]? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.usdValue = usdValue
+        self.previewColor = previewColor
+        self.materialColors = materialColors
+    }
 }
 
 struct DeviceVariantSet: Equatable, Sendable, Codable {
@@ -73,6 +88,21 @@ struct DeviceVariantSelection: Equatable, Sendable {
     let primPath: String
     let usdName: String
     let usdValue: String
+    let materialColors: [String: String]
+
+    init(
+        setID: String,
+        primPath: String,
+        usdName: String,
+        usdValue: String,
+        materialColors: [String: String] = [:]
+    ) {
+        self.setID = setID
+        self.primPath = primPath
+        self.usdName = usdName
+        self.usdValue = usdValue
+        self.materialColors = materialColors
+    }
 }
 
 struct DeviceModelDefinition: Equatable, Sendable, Codable {
@@ -119,7 +149,8 @@ struct DeviceModelDefinition: Equatable, Sendable, Codable {
                 setID: set.id,
                 primPath: set.primPath,
                 usdName: set.usdName,
-                usdValue: choice.usdValue
+                usdValue: choice.usdValue,
+                materialColors: choice.materialColors ?? [:]
             )
         }
     }
@@ -160,6 +191,17 @@ struct DeviceModelDefinition: Equatable, Sendable, Codable {
             for choice in set.choices {
                 guard choiceIDs.insert(choice.id).inserted else {
                     throw DeviceModelError.duplicateVariantChoice(set: set.id, choice: choice.id)
+                }
+                for (material, color) in choice.materialColors ?? [:] {
+                    guard !material.isEmpty,
+                          color.count == 7,
+                          color.first == "#",
+                          color.dropFirst().allSatisfy(\.isHexDigit) else {
+                        throw DeviceModelError.invalidMaterialColor(
+                            material: material,
+                            color: color
+                        )
+                    }
                 }
             }
             guard choiceIDs.contains(set.default) else {
@@ -204,6 +246,7 @@ enum DeviceModelError: Error, Equatable {
     case assetDownloadFailed(String)
     case assetHashMismatch
     case assetCacheWriteFailed(String)
+    case invalidMaterialColor(material: String, color: String)
     case invalidVariantDefault(set: String, choice: String)
     case unknownVariantSet(String)
     case unknownVariantChoice(set: String, choice: String, allowed: [String])

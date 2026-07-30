@@ -51,6 +51,27 @@ struct DeviceModelDefinitionTests {
         #expect(selections.map(\.usdValue) == ["Silver"])
     }
 
+    @Test func `resolves declared material appearance for a public variant`() throws {
+        let json = Self.macBookJSON.replacingOccurrences(
+            of: ##""previewColor": "#d3d4d5""##,
+            with: ##"""
+            "previewColor": "#d3d4d5",
+            "materialColors": {
+              "DeviceBody": "#5B627C",
+              "CameraRing": "#252938"
+            }
+            """##
+        )
+        let model = try DeviceModelDefinition.parsing(json: Data(json.utf8))
+        let selections = try model.resolveVariants(["finish": "silver"])
+        let selection = try #require(selections.first)
+
+        #expect(selection.materialColors == [
+            "DeviceBody": "#5B627C",
+            "CameraRing": "#252938",
+        ])
+    }
+
     @Test func `rejects an unknown public variant set`() throws {
         let model = try DeviceModelDefinition.parsing(json: Self.macBook)
 
