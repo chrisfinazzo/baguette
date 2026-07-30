@@ -2,6 +2,7 @@ import Foundation
 import HTTPTypes
 import Hummingbird
 import HummingbirdWebSocket
+import ImageIO
 import NIOCore
 @_spi(WSInternal) import WSCore
 
@@ -35,6 +36,8 @@ import NIOCore
 struct Server: Sendable {
     let simulators: any Simulators
     let chromes: any Chromes
+    let models: any DeviceModels
+    let deviceRenderer: any DeviceRenderer
     let host: String
     let port: Int
     let allowedHosts: Set<String>
@@ -42,12 +45,16 @@ struct Server: Sendable {
     init(
         simulators: any Simulators,
         chromes: any Chromes,
+        models: any DeviceModels = DeviceModelCatalog.empty,
+        deviceRenderer: any DeviceRenderer = SceneKitDeviceRenderer(),
         host: String = "127.0.0.1",
         port: Int = 8421,
         allowedHosts: [String] = []
     ) {
         self.simulators = simulators
         self.chromes = chromes
+        self.models = models
+        self.deviceRenderer = deviceRenderer
         self.host = host
         self.port = port
         self.allowedHosts = Set(allowedHosts.map { $0.lowercased() })
@@ -403,6 +410,81 @@ struct Server: Sendable {
                 scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
                 simulators: simulators
             )
+        }
+
+        // Data-driven 3D model metadata for the focus-mode inspector.
+        // Only public IDs / labels / preview colors cross this boundary;
+        // raw USD paths and variant names remain server-side.
+        router.get("/simulators/:udid/3d-model.json") { [simulators, models] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let udid = Self.udidParam(r)
+            guard let json = Self.model3DJSONString(
+                udid: udid,
+                simulators: simulators,
+                models: models
+            ) else {
+                return errorJSON("no 3D model for udid \(udid)", status: .notFound)
+            }
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(string: json))
+            )
+        }
+
+        // One-shot 3D preview. Capture one current frame and run the
+        // same DeviceRenderPlan + DeviceRenderer pipeline as the CLI.
+        router.post("/simulators/:udid/render-3d.png") {
+            [simulators, models, deviceRenderer] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let udid = Self.udidParam(r)
+            guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
+                return errorJSON("unknown udid: \(udid)", status: .notFound)
+            }
+            let buffer = try? await r.body.collect(upTo: 64 * 1024)
+            let body = buffer.map { Data(buffer: $0) } ?? Data("{}".utf8)
+            let options: DeviceRenderOptions
+            do {
+                options = try DeviceRenderOptions.parsing(
+                    json: body.isEmpty ? Data("{}".utf8) : body
+                )
+            } catch {
+                return errorJSON("invalid 3D render options", status: .badRequest)
+            }
+            let screenImage: Data
+            do {
+                screenImage = try await ScreenSnapshot.capture(
+                    screen: simulator.screen(),
+                    quality: 0.95
+                )
+            } catch {
+                return errorJSON("screen capture failed: \(error)", status: .internalServerError)
+            }
+            guard let sourceSize = Self.imageDimensions(screenImage) else {
+                return errorJSON("captured screen image is invalid", status: .internalServerError)
+            }
+            switch Self.render3D(
+                udid: udid,
+                options: options,
+                screenImage: screenImage,
+                sourceSize: sourceSize,
+                simulators: simulators,
+                models: models,
+                renderer: deviceRenderer
+            ) {
+            case .rendered(let png):
+                return Response(
+                    status: .ok,
+                    headers: [.contentType: "image/png", .cacheControl: "no-cache"],
+                    body: .init(byteBuffer: ByteBuffer(data: png))
+                )
+            case .unknownDevice, .noModel:
+                return errorJSON("no 3D model for udid \(udid)", status: .notFound)
+            case .invalidConfiguration:
+                return errorJSON("invalid model variant or render configuration", status: .badRequest)
+            case .failed:
+                return errorJSON("3D rendering failed", status: .internalServerError)
+            }
         }
 
         // Device-farm UI — multi-device dashboard. The HTML at /farm
@@ -953,6 +1035,112 @@ struct Server: Sendable {
             urlPrefix: "/simulators/\(udid)"
         )
         return def.toJSON()
+    }
+
+    enum Render3DOutcome: Equatable {
+        case rendered(Data)
+        case unknownDevice
+        case noModel
+        case invalidConfiguration
+        case failed
+    }
+
+    static func render3D(
+        udid: String,
+        options: DeviceRenderOptions,
+        screenImage: Data,
+        sourceSize: RenderDimensions,
+        simulators: any Simulators,
+        models: any DeviceModels,
+        renderer: any DeviceRenderer
+    ) -> Render3DOutcome {
+        guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        let installed: InstalledDeviceModel
+        do {
+            guard let model = try simulator.deviceModel(in: models) else {
+                return .noModel
+            }
+            installed = model
+        } catch {
+            return .noModel
+        }
+        let plan: DeviceRenderPlan
+        do {
+            plan = try DeviceRenderPlan.build(
+                model: installed,
+                variants: options.variants,
+                rotation: options.rotation,
+                outputSize: options.size ?? sourceSize,
+                fit: options.fit,
+                background: options.background
+            )
+        } catch {
+            return .invalidConfiguration
+        }
+        do {
+            return .rendered(try renderer.render(
+                plan: plan,
+                screenImage: screenImage
+            ))
+        } catch {
+            return .failed
+        }
+    }
+
+    static func model3DJSONString(
+        udid: String,
+        simulators: any Simulators,
+        models: any DeviceModels
+    ) -> String? {
+        guard !udid.isEmpty, let simulator = simulators.find(udid: udid),
+              let installed = try? simulator.deviceModel(in: models) else {
+            return nil
+        }
+        guard let installed else { return nil }
+        let definition = installed.definition
+        let sets: [[String: Any]] = definition.variantSets.map { set in
+            [
+                "id": set.id,
+                "displayName": set.displayName,
+                "default": set.default,
+                "choices": set.choices.map { choice -> [String: Any] in
+                    var value: [String: Any] = [
+                        "id": choice.id,
+                        "displayName": choice.displayName,
+                    ]
+                    if let previewColor = choice.previewColor {
+                        value["previewColor"] = previewColor
+                    }
+                    return value
+                },
+            ]
+        }
+        let object: [String: Any] = [
+            "id": definition.id.rawValue,
+            "displayName": definition.displayName,
+            "variantSets": sets,
+        ]
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: object,
+            options: [.sortedKeys]
+        ) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func imageDimensions(_ image: Data) -> RenderDimensions? {
+        guard let source = CGImageSourceCreateWithData(image as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(
+                  source, 0, nil
+              ) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+            return nil
+        }
+        return RenderDimensions(width: width, height: height)
     }
 
     private static func screenshotJPEG(

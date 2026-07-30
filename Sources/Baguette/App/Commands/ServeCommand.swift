@@ -33,12 +33,15 @@ struct ServeCommand: AsyncParsableCommand {
             warn(advisory)
         }
 
+        let models = try LiveDeviceModels(rootURLs: DeviceModelRoots.standard())
         let server = Server(
             simulators: CoreSimulators(deviceSetPath: deviceSet),
             chromes: LiveChromes(
                 store: FileSystemChromeStore(),
                 rasterizer: CoreGraphicsPDFRasterizer()
             ),
+            models: models,
+            deviceRenderer: SceneKitDeviceRenderer(),
             host: host,
             port: port,
             allowedHosts: allowedHosts

@@ -33,6 +33,8 @@ protocol DeviceModels: Sendable {
 }
 
 struct DeviceModelCatalog: DeviceModels, Equatable, Sendable {
+    static let empty = try! DeviceModelCatalog(layers: [])
+
     private let layers: [[InstalledDeviceModel]]
 
     init(layers: [[InstalledDeviceModel]]) throws {
