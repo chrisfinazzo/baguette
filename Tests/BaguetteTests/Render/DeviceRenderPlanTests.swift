@@ -12,13 +12,17 @@ struct DeviceRenderPlanTests {
             model: model,
             variants: ["finish": "silver"],
             rotation: DeviceRotation(x: 18, y: -24, z: 0),
-            outputSize: RenderDimensions(width: 1200, height: 900)
+            outputSize: RenderDimensions(width: 1200, height: 900),
+            fit: .contain,
+            background: .color("#112233")
         )
 
         #expect(plan.model == model)
         #expect(plan.variants.map(\.usdValue) == ["Silver"])
         #expect(plan.rotation == DeviceRotation(x: 18, y: -24, z: 0))
         #expect(plan.outputSize == RenderDimensions(width: 1200, height: 900))
+        #expect(plan.fit == .contain)
+        #expect(plan.background == .color("#112233"))
     }
 
     @Test func `rejects non-positive output dimensions`() {
@@ -39,6 +43,18 @@ struct DeviceRenderPlanTests {
                 variants: [:],
                 rotation: DeviceRotation(x: .infinity, y: 0, z: 0),
                 outputSize: RenderDimensions(width: 1200, height: 900)
+            )
+        }
+    }
+
+    @Test func `rejects an invalid background color`() {
+        #expect(throws: DeviceModelError.invalidBackground("blue")) {
+            _ = try DeviceRenderPlan.build(
+                model: Self.installed(),
+                variants: [:],
+                rotation: .zero,
+                outputSize: RenderDimensions(width: 1200, height: 900),
+                background: .color("blue")
             )
         }
     }

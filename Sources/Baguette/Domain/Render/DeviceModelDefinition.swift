@@ -185,6 +185,8 @@ enum DeviceModelError: Error, Equatable {
     case localAssetNotFound(String)
     case invalidOutputSize
     case invalidRotation
+    case invalidUSDIdentifier(String)
+    case invalidAssetReference
     case invalidVariantDefault(set: String, choice: String)
     case unknownVariantSet(String)
     case unknownVariantChoice(set: String, choice: String, allowed: [String])
