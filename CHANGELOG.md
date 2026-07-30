@@ -10,6 +10,19 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **Data-driven 3D device rendering.** `baguette render-3d` and
+  `POST /simulators/:udid/render-3d.png` place a screenshot onto a SceneKit
+  device model; the focused simulator UI exposes the same one-shot preview.
+  Model bundles contain `definition.json` plus a local USDZ or a SHA-256
+  verified download. Bundled models cover iPhone 17/Air/Pro/Pro Max, iPad Pro
+  11/13-inch M4, Apple Watch Series 11 42/46mm, Apple Watch Ultra 3, and a
+  downloadable MacBook Pro 14-inch example. Variants support native USD sets
+  and named material appearances, including Cosmic Orange, Deep Blue, and
+  Silver on iPhone 17 Pro/Pro Max. See
+  [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
+
 ---
 
 ## [0.1.85] - 2026-07-29

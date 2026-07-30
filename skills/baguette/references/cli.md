@@ -230,6 +230,26 @@ Same defaults, same bytes — the route and the CLI share `ScreenSnapshot.captur
 **Limits:** JPEG only (no PNG / WebP / AVIF yet); raw framebuffer (no
 bezel composite — that's a browser-side concern via `bezel.png`).
 
+## 3D presentation render — `render-3d`
+
+```bash
+baguette render-3d --udid <UDID> \
+  --variant finish=deep-blue --rotation=-8,18,0 \
+  --size 1200x1200 --output device.png
+
+baguette render-3d --screen screenshot.png --device iphone-17-pro \
+  --variant finish=cosmic-orange --output device.png
+```
+
+Exactly one of `--udid` and `--screen` is required. With `--screen`, select an
+installed model using `--device`. `--variant <set>=<choice>` is repeatable.
+Model bundles are discovered from `BAGUETTE_3D_MODEL_DIR`, Application
+Support, then bundled `Resources/Models3D`.
+
+HTTP uses `GET /simulators/<UDID>/3d-model.json` for public metadata and
+`POST /simulators/<UDID>/render-3d.png` with JSON render options for the PNG.
+The focused web UI uses these routes for its one-shot 3D preview.
+
 ## Add a file to the device — `install` / `add-media`
 
 ```bash

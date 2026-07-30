@@ -200,6 +200,11 @@ baguette <command> [options]
                                              Stream frames on stdout
   screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
                                              One-shot JPEG (defaults to stdout)
+  render-3d  (--udid <UDID> | --screen <image> --device <model-id>)
+             [--variant <set>=<choice>] [--rotation X,Y,Z]
+             [--size WIDTHxHEIGHT] [--output <path>]
+                                             Render a screenshot on a 3D device
+                                             model as PNG
 
   # Accessibility + logs
   describe-ui --udid <UDID> [--x <px> --y <px>] [--output <path>]
