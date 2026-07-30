@@ -23,8 +23,10 @@ struct VerifiedDeviceAssets: @unchecked Sendable {
         if model.definition.asset.file != nil {
             do {
                 return try model.localAssetURL()
-            } catch DeviceModelError.localAssetNotFound {
-                if model.definition.asset.downloadURL == nil { throw error }
+            } catch DeviceModelError.localAssetNotFound(let file) {
+                guard model.definition.asset.downloadURL != nil else {
+                    throw DeviceModelError.localAssetNotFound(file)
+                }
             }
         }
 
