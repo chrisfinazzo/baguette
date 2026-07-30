@@ -38,6 +38,7 @@
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let locationPanel = null;  // LocationPanel — simctl location map picker
+  let render3DPanel = null;  // Sim3DPanel — one-shot SceneKit preview
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
   let powerCard = null;      // boot affordance shown on an unbooted device's screen
@@ -800,6 +801,7 @@
     window.__nativeToggleCamera = () => toggleCamera();
     window.__nativeToggleStatusBar = () => toggleStatusBar();
     window.__nativeToggleLocation = () => toggleLocation();
+    window.__nativeToggle3D = () => toggle3D();
     window.__nativeToggleAx = () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
@@ -972,6 +974,28 @@
     }
   }
 
+  // 3D preview card — lazy-mounted because model discovery and the
+  // first SceneKit render are meaningful work. Closing preserves the
+  // selected variants and current preview; unload revokes its blob URL.
+  function toggle3D() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('native3DHost');
+    const btn = document.getElementById('native3DToggle');
+    const open = view && view.getAttribute('data-render3d') === 'open';
+    if (!view || !host) return;
+    if (open) {
+      view.removeAttribute('data-render3d');
+      if (btn) btn.classList.remove('active');
+    } else {
+      view.setAttribute('data-render3d', 'open');
+      if (btn) btn.classList.add('active');
+      if (!render3DPanel && window.Sim3DPanel && udid) {
+        render3DPanel = new window.Sim3DPanel();
+        render3DPanel.attach(host, udid);
+      }
+    }
+  }
+
   function wireUnload() {
     window.addEventListener('beforeunload', () => {
       try { hidePowerCard(); } catch (_) { /* ignore */ }
@@ -981,6 +1005,7 @@
       try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
       try { if (statusBarPanel) statusBarPanel.detach(); } catch (_) { /* ignore */ }
       try { if (locationPanel) locationPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (render3DPanel) render3DPanel.detach(); } catch (_) { /* ignore */ }
     });
   }
 

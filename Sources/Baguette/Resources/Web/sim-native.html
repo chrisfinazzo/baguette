@@ -839,6 +839,141 @@
     color: var(--nv-text-muted);
   }
 
+  /* One-shot 3D preview card. It follows the same glass language as
+     status/location controls but carries a larger image stage. Static
+     previews never intercept simulator input; live interaction remains
+     on the 2D device in the centre. */
+  #simNativeView .render3d-host {
+    position: fixed; top: 68px; left: 20px; z-index: 45;
+    width: min(330px, calc(100vw - 40px));
+    max-height: calc(100dvh - 92px);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 16px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(22px) saturate(1.55);
+    -webkit-backdrop-filter: blur(22px) saturate(1.55);
+    color: var(--nv-text);
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transform: translateY(-5px) scale(0.985);
+    transition: opacity .16s ease, transform .16s ease, visibility .16s;
+  }
+  #simNativeView[data-render3d="open"] .render3d-host {
+    opacity: 1; visibility: visible; pointer-events: auto;
+    transform: translateY(0) scale(1);
+  }
+  #simNativeView .render3d-host-head {
+    height: 42px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 10px 0 14px;
+    border-bottom: 1px solid var(--nv-divider);
+    font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .render3d-host-title {
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  #simNativeView .render3d-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView #native3DHost {
+    min-height: 170px; overflow-y: auto; padding: 12px;
+  }
+  #simNativeView .r3d-preview {
+    position: relative; height: 190px; overflow: hidden;
+    display: grid; place-items: center;
+    border: 1px solid var(--nv-divider); border-radius: 12px;
+    background:
+      radial-gradient(circle at 50% 42%, var(--nv-btn-active), transparent 64%),
+      var(--nv-fmt-track-bg);
+  }
+  #simNativeView .r3d-preview img {
+    display: block; width: 100%; height: 100%; object-fit: contain;
+  }
+  #simNativeView .r3d-preview[data-error]::after {
+    content: attr(data-error); position: absolute; inset: auto 10px 10px;
+    padding: 6px 8px; border-radius: 7px;
+    color: #fecaca; background: rgba(127,29,29,.82);
+    font: 500 10px/1.3 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-progress {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; gap: 8px;
+    background: rgba(18,18,22,.46); color: #fff;
+    font: 600 11px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-progress[hidden] { display: none; }
+  #simNativeView .r3d-spinner {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid currentColor; border-right-color: transparent;
+    animation: nv-power-spin .8s linear infinite;
+  }
+  #simNativeView .r3d-model-name {
+    margin: 10px 2px 2px;
+    font: 600 12px/1.3 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-section {
+    padding: 10px 2px; border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .r3d-section > label {
+    display: block; margin-bottom: 8px; color: var(--nv-text-faint);
+    font: 700 9px/1 -apple-system, sans-serif;
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  #simNativeView .r3d-choices,
+  #simNativeView .r3d-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  #simNativeView .r3d-choice,
+  #simNativeView .r3d-presets button {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 28px; padding: 0 9px;
+    border: 1px solid var(--nv-divider); border-radius: 8px;
+    background: var(--nv-fmt-track-bg); color: var(--nv-text-muted);
+    font: 600 10.5px/1 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .r3d-choice:hover,
+  #simNativeView .r3d-presets button:hover { color: var(--nv-text); background: var(--nv-btn-hover); }
+  #simNativeView .r3d-choice.active {
+    color: var(--nv-accent-text); background: var(--nv-accent);
+    border-color: transparent;
+  }
+  #simNativeView .r3d-choice i {
+    width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--swatch); border: 1px solid rgba(255,255,255,.38);
+  }
+  #simNativeView .r3d-range-row {
+    display: grid; grid-template-columns: 34px 1fr 34px;
+    align-items: center; gap: 8px; margin-top: 8px;
+    color: var(--nv-text-muted); font: 500 10px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-range-row input { width: 100%; accent-color: var(--nv-accent); }
+  #simNativeView .r3d-range-row output {
+    text-align: right; color: var(--nv-text);
+    font: 500 9.5px/1 ui-monospace, Menlo, monospace;
+  }
+  #simNativeView .r3d-footer {
+    display: flex; justify-content: flex-end; gap: 7px; padding-top: 11px;
+  }
+  #simNativeView .r3d-footer button,
+  #simNativeView .r3d-empty button {
+    min-height: 30px; padding: 0 11px; border-radius: 8px; cursor: pointer;
+    font: 600 11px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-download {
+    border: 1px solid var(--nv-divider); background: transparent; color: var(--nv-text);
+  }
+  #simNativeView .r3d-render,
+  #simNativeView .r3d-empty button {
+    border: 0; background: var(--nv-accent); color: var(--nv-accent-text);
+  }
+  #simNativeView .r3d-render:disabled { opacity: .5; cursor: default; }
+  #simNativeView .r3d-empty {
+    min-height: 150px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+    color: var(--nv-text-muted); text-align: center;
+    font: 500 11px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-empty strong { color: var(--nv-text); }
+  #simNativeView .r3d-error > svg { width: 28px; height: 28px; }
+
   #simNativeView .status-bar-host .sb-section {
     padding: 10px 0; border-bottom: 1px solid var(--nv-divider);
   }
@@ -1047,6 +1182,19 @@
         </svg>
       </button>
 
+      <!-- Static SceneKit preview. The cube opens a glass card whose
+           controls are generated from /3d-model.json. -->
+      <button class="ico-btn" id="native3DToggle"
+              title="3D device preview"
+              aria-label="Toggle 3D device preview"
+              onclick="window.__nativeToggle3D && window.__nativeToggle3D()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.6" stroke-linejoin="round" width="17" height="17">
+          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/>
+          <path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>
+        </svg>
+      </button>
+
 <!-- Accessibility-inspector toggle. When active, a translucent
            overlay tracks the AX node under the cursor; clicking an
            element opens the AX sheet (slides up from the bottom)
@@ -1176,6 +1324,28 @@
        AXInspector into this element after the surface is ready;
        the inspector renders its own toggle + selection info here. -->
   <div id="nativeAxHost" class="ax-host"></div>
+
+  <aside id="native3DSheet" class="render3d-host" aria-hidden="true">
+    <header class="render3d-host-head">
+      <span class="render3d-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.6" stroke-linejoin="round" width="15" height="15">
+          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/>
+          <path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>
+        </svg>
+        3D Preview
+      </span>
+      <button class="ico-btn" title="Close 3D preview"
+              aria-label="Close 3D preview"
+              onclick="window.__nativeToggle3D && window.__nativeToggle3D()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="native3DHost"></div>
+  </aside>
 
   <button class="sidebar-view-toggle" id="nativeSidebarViewToggle"
           title="Open sidebar view"
