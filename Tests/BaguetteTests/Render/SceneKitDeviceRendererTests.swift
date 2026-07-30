@@ -152,7 +152,8 @@ private extension SceneKitDeviceRendererTests {
                                 previewColor: "#334477",
                                 materialColors: ["DeviceBody": "#334477"]
                             ),
-                        ]
+                        ],
+                        kind: .materials
                     ),
                 ]
             ),
