@@ -53,6 +53,7 @@ let package = Package(
                 .linkedFramework("IOSurface"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreVideo"),
+                .linkedFramework("SceneKit"),
                 .linkedFramework("ImageIO"),
                 .linkedFramework("VideoToolbox"),
             ]
