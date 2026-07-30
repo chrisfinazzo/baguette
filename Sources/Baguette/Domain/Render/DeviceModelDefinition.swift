@@ -183,6 +183,8 @@ enum DeviceModelError: Error, Equatable {
     case malformedDefinition(String)
     case assetOutsideBundle(String)
     case localAssetNotFound(String)
+    case invalidOutputSize
+    case invalidRotation
     case invalidVariantDefault(set: String, choice: String)
     case unknownVariantSet(String)
     case unknownVariantChoice(set: String, choice: String, allowed: [String])
