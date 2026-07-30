@@ -53,6 +53,12 @@ struct DeviceModelDefinitionTests {
 
     @Test func `resolves declared material appearance for a public variant`() throws {
         let json = Self.macBookJSON.replacingOccurrences(
+            of: #""displayName": "Device finish""#,
+            with: #"""
+            "displayName": "Device finish",
+            "kind": "materials"
+            """#
+        ).replacingOccurrences(
             of: ##""previewColor": "#d3d4d5""##,
             with: ##"""
             "previewColor": "#d3d4d5",
@@ -70,6 +76,7 @@ struct DeviceModelDefinitionTests {
             "DeviceBody": "#5B627C",
             "CameraRing": "#252938",
         ])
+        #expect(selection.kind == .materials)
     }
 
     @Test func `rejects an unknown public variant set`() throws {

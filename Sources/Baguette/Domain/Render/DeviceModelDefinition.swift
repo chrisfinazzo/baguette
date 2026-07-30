@@ -74,6 +74,11 @@ struct DeviceVariantChoice: Equatable, Sendable, Codable {
     }
 }
 
+enum DeviceVariantKind: String, Equatable, Sendable, Codable {
+    case usd
+    case materials
+}
+
 struct DeviceVariantSet: Equatable, Sendable, Codable {
     let id: String
     let displayName: String
@@ -81,6 +86,25 @@ struct DeviceVariantSet: Equatable, Sendable, Codable {
     let usdName: String
     let `default`: String
     let choices: [DeviceVariantChoice]
+    let kind: DeviceVariantKind?
+
+    init(
+        id: String,
+        displayName: String,
+        primPath: String,
+        usdName: String,
+        default: String,
+        choices: [DeviceVariantChoice],
+        kind: DeviceVariantKind? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.primPath = primPath
+        self.usdName = usdName
+        self.default = `default`
+        self.choices = choices
+        self.kind = kind
+    }
 }
 
 struct DeviceVariantSelection: Equatable, Sendable {
@@ -89,19 +113,22 @@ struct DeviceVariantSelection: Equatable, Sendable {
     let usdName: String
     let usdValue: String
     let materialColors: [String: String]
+    let kind: DeviceVariantKind
 
     init(
         setID: String,
         primPath: String,
         usdName: String,
         usdValue: String,
-        materialColors: [String: String] = [:]
+        materialColors: [String: String] = [:],
+        kind: DeviceVariantKind = .usd
     ) {
         self.setID = setID
         self.primPath = primPath
         self.usdName = usdName
         self.usdValue = usdValue
         self.materialColors = materialColors
+        self.kind = kind
     }
 }
 
@@ -150,7 +177,8 @@ struct DeviceModelDefinition: Equatable, Sendable, Codable {
                 primPath: set.primPath,
                 usdName: set.usdName,
                 usdValue: choice.usdValue,
-                materialColors: choice.materialColors ?? [:]
+                materialColors: choice.materialColors ?? [:],
+                kind: set.kind ?? .usd
             )
         }
     }

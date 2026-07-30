@@ -122,7 +122,7 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
         selections: [DeviceVariantSelection],
         scratch: URL
     ) throws -> URL {
-        let usdSelections = selections.filter(\.materialColors.isEmpty)
+        let usdSelections = selections.filter { $0.kind == .usd }
         guard !usdSelections.isEmpty else { return assetURL }
         let stagedName = "device.\(assetURL.pathExtension)"
         let stagedAsset = scratch.appending(path: stagedName)
