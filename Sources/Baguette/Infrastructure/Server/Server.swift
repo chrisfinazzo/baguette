@@ -1098,7 +1098,6 @@ struct Server: Sendable {
               let installed = try? simulator.deviceModel(in: models) else {
             return nil
         }
-        guard let installed else { return nil }
         let definition = installed.definition
         let sets: [[String: Any]] = definition.variantSets.map { set in
             [
