@@ -20,7 +20,7 @@ struct Render3DCommand: AsyncParsableCommand {
     @Option(help: "Custom CoreSimulator device-set path")
     var deviceSet: String?
 
-    @Option(help: "Model variant as SET=CHOICE (repeatable)")
+    @Option(name: .customLong("variant"), help: "Model variant as SET=CHOICE (repeatable)")
     var variants: [String] = []
 
     @Option(help: "Device rotation as X,Y,Z degrees")
