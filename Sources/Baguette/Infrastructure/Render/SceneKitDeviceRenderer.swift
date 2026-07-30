@@ -61,7 +61,10 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
             radians(plan.rotation.z)
         )
 
-        guard let (minimum, maximum) = wrapper.boundingBox else {
+        let bounds = wrapper.boundingBox
+        let minimum = bounds.min
+        let maximum = bounds.max
+        guard maximum.x > minimum.x || maximum.y > minimum.y || maximum.z > minimum.z else {
             throw DeviceModelError.sceneHasNoGeometry
         }
         let center = SCNVector3(
