@@ -3,8 +3,14 @@ import Foundation
 import SceneKit
 
 struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
+    private let assets: VerifiedDeviceAssets
+
+    init(assets: VerifiedDeviceAssets = VerifiedDeviceAssets()) {
+        self.assets = assets
+    }
+
     func render(plan: DeviceRenderPlan, screenImage: Data) throws -> Data {
-        let assetURL = try plan.model.localAssetURL()
+        let assetURL = try assets.resolve(plan.model)
         let scratch = FileManager.default.temporaryDirectory
             .appending(path: "baguette-render-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)

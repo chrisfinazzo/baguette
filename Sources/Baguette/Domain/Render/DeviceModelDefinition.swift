@@ -200,6 +200,10 @@ enum DeviceModelError: Error, Equatable {
     case modelNotFound(String)
     case noModelForDevice(String)
     case invalidRenderOptions
+    case invalidDownloadURL(String)
+    case assetDownloadFailed(String)
+    case assetHashMismatch
+    case assetCacheWriteFailed(String)
     case invalidVariantDefault(set: String, choice: String)
     case unknownVariantSet(String)
     case unknownVariantChoice(set: String, choice: String, allowed: [String])
