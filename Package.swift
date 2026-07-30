@@ -39,6 +39,9 @@ let package = Package(
                 // self-contained — open in a browser via file:// for a
                 // design preview without booting the server.
                 .copy("Resources/Web"),
+                // Data-driven 3D device definitions. Large USDZ assets are
+                // downloaded from their declared source and SHA-256 verified.
+                .copy("Resources/Models3D"),
                 // iOS-Simulator dylib (vendored under `VirtualCamera/`,
                 // built by `VirtualCamera/build.sh` and staged here by
                 // the top-level `build.sh`). `VirtualCameraInstaller`
@@ -53,7 +56,7 @@ let package = Package(
                 .linkedFramework("IOSurface"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreVideo"),
-                .linkedFramework("SceneKit"),
+                    .linkedFramework("SceneKit"),
                 .linkedFramework("ImageIO"),
                 .linkedFramework("VideoToolbox"),
             ]
