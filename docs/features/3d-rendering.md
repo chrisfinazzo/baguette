@@ -203,15 +203,24 @@ A definition is rejected when:
 
 ## Variants
 
-Variants are generic USD variant sets, not an iPhone-only color field. One
-model may expose independent finish, keyboard, stand, Pencil, or other sets.
-Each set identifies the USD prim on which its selection is authored.
+Variants use one public set/choice vocabulary with two definition strategies:
+`"kind": "usd"` (the default) authors a native USD variant selection, while
+`"kind": "materials"` applies a declared map of SceneKit material names to
+hex colors. The latter supports models such as Matte's iPhone 17 Pro, whose
+Cosmic Orange, Deep Blue, and Silver appearances are material adjustments
+rather than native USD variants. One model may expose independent finish,
+keyboard, stand, Pencil, or other sets.
 
-When a request omits a set, its declared default is applied. The renderer
-creates a temporary USDA overlay that sublayers the USDZ and pins every
-selection before SceneKit loads the scene. Changing a variant therefore reloads
-that model; the UI renders on control commit rather than on every pointer-move
-event.
+When a request omits a set, its declared default is applied. For a USD set, the
+renderer creates a temporary USDA overlay that sublayers the USDZ and pins the
+selection before SceneKit loads the scene. Material selections are applied to
+the loaded node tree. Changing a variant reloads that model; the UI renders on
+control commit rather than on every pointer-move event.
+
+Bundled local models currently cover iPhone 17, iPhone Air, iPhone 17 Pro,
+iPhone 17 Pro Max, iPad Pro 11/13-inch M4, Apple Watch Series 11 42/46mm, and
+Apple Watch Ultra 3. The MacBook Pro 14-inch definition demonstrates a
+downloaded, SHA-256-verified model with a native USD finish variant.
 
 ## Pipeline
 
@@ -285,4 +294,3 @@ image for every live farm tile is too expensive and adds no control value.
 - Models without a declared and measurable screen surface cannot be used.
 - USD variants are chosen before SceneKit loads the scene; changing them
   requires a model reload.
-
