@@ -193,6 +193,10 @@ enum DeviceModelError: Error, Equatable {
     case sceneHasNoGeometry
     case screenImageInvalid
     case renderFailed
+    case invalidRotationArgument(String)
+    case invalidSizeArgument(String)
+    case invalidVariantArgument(String)
+    case duplicateVariantSelection(String)
     case invalidVariantDefault(set: String, choice: String)
     case unknownVariantSet(String)
     case unknownVariantChoice(set: String, choice: String, allowed: [String])
