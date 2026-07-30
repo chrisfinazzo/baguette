@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "macbook-pro-14-inch",
+  "displayName": "MacBook Pro 14-inch",
+  "matches": {
+    "simulatorDeviceTypes": [],
+    "deviceNames": [
+      "MacBook Pro 14-inch"
+    ]
+  },
+  "asset": {
+    "file": "macbook-pro-14-in-space-black-variant.usdz",
+    "downloadURL": "https://www.apple.com/105/media/us/macbook-pro/2025/785e1bc4-d1bd-4cf4-b1b3-94b9411c9e74/ar/macbook-pro-14-in-space-black-variant.usdz",
+    "sha256": "fc5855222e774b3a4bb085a6354ea598fbacf24513eebce71576a048bdaa259b"
+  },
+  "scene": {
+    "rootNode": "XCnTRSzLPcVVRyt",
+    "screenNode": "tfTbkkzhxqpKRgC",
+    "screenMaterial": "HlQwFCAPWzetDQy",
+    "nativeOrientation": "landscape",
+    "textureSize": {
+      "width": 3024,
+      "height": 1964
+    },
+    "usesScreenOverlay": false
+  },
+  "variantSets": [
+    {
+      "id": "finish",
+      "displayName": "Device finish",
+      "primPath": "/XCnTRSzLPcVVRyt",
+      "usdName": "Color",
+      "default": "space-black",
+      "choices": [
+        {
+          "id": "space-black",
+          "displayName": "Space Black",
+          "usdValue": "Space_Black",
+          "previewColor": "#2f3033"
+        },
+        {
+          "id": "silver",
+          "displayName": "Silver",
+          "usdValue": "Silver",
+          "previewColor": "#d3d4d5"
+        }
+      ]
+    }
+  ]
+}
