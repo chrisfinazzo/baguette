@@ -31,6 +31,12 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
         ) else {
             throw DeviceModelError.sceneNodeNotFound(definition.scene.rootNode)
         }
+        applyMaterialColors(
+            plan.variants.reduce(into: [:]) { colors, selection in
+                colors.merge(selection.materialColors) { _, requested in requested }
+            },
+            under: subject
+        )
         guard let screenNode = findScreenNode(
             under: subject,
             explicitName: definition.scene.screenNode,
@@ -116,7 +122,8 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
         selections: [DeviceVariantSelection],
         scratch: URL
     ) throws -> URL {
-        guard !selections.isEmpty else { return assetURL }
+        let usdSelections = selections.filter(\.materialColors.isEmpty)
+        guard !usdSelections.isEmpty else { return assetURL }
         let stagedName = "device.\(assetURL.pathExtension)"
         let stagedAsset = scratch.appending(path: stagedName)
         try FileManager.default.createSymbolicLink(
@@ -125,11 +132,32 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
         )
         let overlay = try USDVariantOverlay.make(
             assetReference: stagedName,
-            selections: selections
+            selections: usdSelections
         )
         let overlayURL = scratch.appending(path: "variants.usda")
         try overlay.write(to: overlayURL, atomically: true, encoding: .utf8)
         return overlayURL
+    }
+
+    private func applyMaterialColors(
+        _ colors: [String: String],
+        under node: SCNNode
+    ) {
+        if let geometry = node.geometry {
+            geometry.materials = geometry.materials.map { existing in
+                guard let name = existing.name,
+                      let hex = colors[name] else {
+                    return existing
+                }
+                let material = existing.copy() as? SCNMaterial ?? SCNMaterial()
+                material.name = name
+                material.diffuse.contents = color(hex)
+                return material
+            }
+        }
+        node.childNodes.forEach {
+            applyMaterialColors(colors, under: $0)
+        }
     }
 
     private func findScreenNode(
@@ -224,6 +252,16 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
                 alpha: 1
             )
         }
+    }
+
+    private func color(_ hex: String) -> NSColor {
+        let value = UInt32(hex.dropFirst(), radix: 16) ?? 0
+        return NSColor(
+            red: CGFloat((value >> 16) & 0xff) / 255,
+            green: CGFloat((value >> 8) & 0xff) / 255,
+            blue: CGFloat(value & 0xff) / 255,
+            alpha: 1
+        )
     }
 
     private func addLights(to scene: SCNScene) {

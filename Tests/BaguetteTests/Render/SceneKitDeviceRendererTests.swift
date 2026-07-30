@@ -39,6 +39,29 @@ struct SceneKitDeviceRendererTests {
             )
         }
     }
+
+    @Test func `material appearance variant changes rendered device finish`() throws {
+        let scratch = try Self.makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let sceneURL = scratch.appending(path: "device.scn")
+        try Self.writeScene(to: sceneURL)
+        let orange = try Self.plan(
+            directory: scratch, file: "device.scn", finish: "orange"
+        )
+        let blue = try Self.plan(
+            directory: scratch, file: "device.scn", finish: "blue"
+        )
+        let screen = try Self.screenPNG()
+
+        let orangePNG = try SceneKitDeviceRenderer().render(
+            plan: orange, screenImage: screen
+        )
+        let bluePNG = try SceneKitDeviceRenderer().render(
+            plan: blue, screenImage: screen
+        )
+
+        #expect(orangePNG != bluePNG)
+    }
 }
 
 private extension SceneKitDeviceRendererTests {
@@ -55,6 +78,7 @@ private extension SceneKitDeviceRendererTests {
             width: 2.2, height: 4.4, length: 0.2, chamferRadius: 0.15
         ))
         device.name = "Device"
+        device.geometry?.firstMaterial?.name = "DeviceBody"
         device.geometry?.firstMaterial?.diffuse.contents = NSColor.darkGray
 
         let screenMaterial = SCNMaterial()
@@ -86,7 +110,11 @@ private extension SceneKitDeviceRendererTests {
         return png
     }
 
-    static func plan(directory: URL, file: String) throws -> DeviceRenderPlan {
+    static func plan(
+        directory: URL,
+        file: String,
+        finish: String? = nil
+    ) throws -> DeviceRenderPlan {
         let model = InstalledDeviceModel(
             definition: DeviceModelDefinition(
                 schemaVersion: 1,
@@ -102,13 +130,37 @@ private extension SceneKitDeviceRendererTests {
                     textureSize: RenderDimensions(width: 100, height: 200),
                     usesScreenOverlay: false
                 ),
-                variantSets: []
+                variantSets: finish == nil ? [] : [
+                    DeviceVariantSet(
+                        id: "finish",
+                        displayName: "Finish",
+                        primPath: "/Device",
+                        usdName: "Finish",
+                        default: "orange",
+                        choices: [
+                            DeviceVariantChoice(
+                                id: "orange",
+                                displayName: "Orange",
+                                usdValue: "Orange",
+                                previewColor: "#ff6600",
+                                materialColors: ["DeviceBody": "#ff6600"]
+                            ),
+                            DeviceVariantChoice(
+                                id: "blue",
+                                displayName: "Blue",
+                                usdValue: "Blue",
+                                previewColor: "#334477",
+                                materialColors: ["DeviceBody": "#334477"]
+                            ),
+                        ]
+                    ),
+                ]
             ),
             directoryURL: directory
         )
         return try DeviceRenderPlan.build(
             model: model,
-            variants: [:],
+            variants: finish.map { ["finish": $0] } ?? [:],
             rotation: DeviceRotation(x: -8, y: 18, z: 0),
             outputSize: RenderDimensions(width: 320, height: 240)
         )
