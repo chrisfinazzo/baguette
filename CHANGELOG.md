@@ -33,6 +33,9 @@ For releases prior to this changelog, see the
 - **Unified 2D/3D focus stage.** The 3D view now fills the same available
   viewport as the 2D simulator without a separate rounded card, and its opaque
   MJPEG/H.264 frame background follows the active page theme.
+- **Reliable 3D stage input.** Pose, Interact, and Reset no longer enter the
+  canvas gesture path, while guarded canvas pointer capture makes rotation
+  consistent across mouse, pen, and touch browsers.
 
 ---
 

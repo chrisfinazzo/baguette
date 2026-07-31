@@ -77,12 +77,13 @@
         '</div>';
     this.canvas = this.stage.querySelector('canvas');
     this.context = this.canvas.getContext('2d', { alpha: false });
-    this.stage.addEventListener('pointerdown', (event) => this.pointerDown(event));
-    this.stage.addEventListener('pointermove', (event) => this.pointerMove(event));
-    this.stage.addEventListener('pointerup', (event) => this.pointerUp(event));
-    this.stage.addEventListener('pointercancel', () => { this.pointer = null; });
-    this.stage.addEventListener('dblclick', () => this.resetCamera());
-    this.stage.addEventListener('wheel', (event) => this.zoomCamera(event), {
+    this.canvas.addEventListener('pointerdown', (event) => this.pointerDown(event));
+    this.canvas.addEventListener('pointermove', (event) => this.pointerMove(event));
+    this.canvas.addEventListener('pointerup', (event) => this.pointerUp(event));
+    this.canvas.addEventListener('pointercancel', () => { this.pointer = null; });
+    this.canvas.addEventListener('lostpointercapture', () => { this.pointer = null; });
+    this.canvas.addEventListener('dblclick', () => this.resetCamera());
+    this.canvas.addEventListener('wheel', (event) => this.zoomCamera(event), {
       passive: false,
     });
     this.stage.querySelectorAll('[data-stage-mode]').forEach((button) => {
@@ -376,7 +377,10 @@
 
   Sim3DPanel.prototype.pointerDown = function (event) {
     if (!this.canvas || !this.canvas.hasAttribute('data-painted')) return;
-    this.stage.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    if (typeof this.canvas.setPointerCapture === 'function') {
+      try { this.canvas.setPointerCapture(event.pointerId); } catch (_) {}
+    }
     this.pointer = {
       x: event.clientX, y: event.clientY, time: performance.now(),
       rotation: { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z },
@@ -385,6 +389,7 @@
 
   Sim3DPanel.prototype.pointerMove = function (event) {
     if (!this.pointer || this.mode !== 'pose') return;
+    event.preventDefault();
     this.rotation.x = Math.max(-80, Math.min(80,
         this.pointer.rotation.x + (event.clientY - this.pointer.y) * 0.35));
     this.rotation.y = Math.max(-180, Math.min(180,
@@ -395,6 +400,7 @@
 
   Sim3DPanel.prototype.pointerUp = function (event) {
     if (!this.pointer) return;
+    event.preventDefault();
     const start = this.pointer;
     this.pointer = null;
     if (this.mode === 'pose') return;

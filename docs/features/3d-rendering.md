@@ -325,8 +325,11 @@ The 3D stage follows an explicit two-mode interaction model:
   accurate input until screen-mesh ray casting is implemented.
 
 Pose/Interact and Reset live on the stage so direct manipulation remains
-available with the inspector hidden. Exact Tilt/Turn/Roll controls are
-collapsed under Advanced rotation.
+available with the inspector hidden. Their controls sit outside the canvas
+gesture target, so clicking a control is never captured as a pose or simulator
+gesture. Canvas pointer capture keeps mouse, pen, and touch drags rotating after
+the pointer leaves the model. Exact Tilt/Turn/Roll controls are collapsed under
+Advanced rotation.
 
 The socket accepts the same input envelopes as the normal stream, so toolbar,
 keyboard, pasteboard, and programmatic controls do not require a second
