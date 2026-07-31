@@ -45,6 +45,9 @@ For releases prior to this changelog, see the
   rendered 3D surfaces are never dropped, and completed Metal writes are
   published before encoding for Safari/WebKit compatibility. A persistent
   triple-buffered Metal target set replaces per-frame IOSurface allocation.
+  Live dimensions are chroma-aligned for VideoToolbox, and scaled GPU copies
+  stay aligned after runtime scaling and are published before asynchronous
+  H.264 encoding.
 
 ---
 
