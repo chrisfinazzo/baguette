@@ -387,6 +387,15 @@
         ? 'light' : 'dark';
   }
 
+  function live3DBackground() {
+    const root = document.getElementById('simNativeView');
+    const computed = root
+        ? getComputedStyle(root).getPropertyValue('--nv-page-bg').trim()
+        : '';
+    if (/^#[0-9a-f]{6}$/i.test(computed)) return computed;
+    return currentTheme() === 'light' ? '#f1f3f6' : '#1a1a1f';
+  }
+
   function setTheme(theme) {
     const root = document.getElementById('simNativeView');
     if (!root) return;
@@ -396,6 +405,9 @@
     } else {
       root.removeAttribute('data-theme');
       localStorage.removeItem(THEME_KEY);
+    }
+    if (render3DPanel && root.getAttribute('data-render3d') === 'open') {
+      render3DPanel.setBackground(live3DBackground());
     }
   }
 
@@ -1006,9 +1018,12 @@
         session = null;
       }
       view.setAttribute('data-render3d', 'open');
-      if (localStorage.getItem('asc.3dInspector') !== 'closed') {
+      const inspectorOpen = localStorage.getItem('asc.3dInspector') !== 'closed';
+      if (inspectorOpen) {
         view.setAttribute('data-render3d-inspector', 'open');
       }
+      const sheet = document.getElementById('native3DSheet');
+      if (sheet) sheet.setAttribute('aria-hidden', inspectorOpen ? 'false' : 'true');
       if (btn) btn.classList.add('active');
       const status = document.getElementById('nativeStatus');
       if (status) status.textContent = '3D live';
@@ -1017,12 +1032,14 @@
         render3DPanel.attach(host, stage, udid, {
           deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
           format: localStorage.getItem('asc.simFormat') || pickFormat(),
+          background: live3DBackground(),
           onFps: (fps) => {
             const status = document.getElementById('nativeStatus');
             if (status) status.textContent = fps + ' fps · 3D';
           },
         });
       } else if (render3DPanel) {
+        render3DPanel.setBackground(live3DBackground());
         render3DPanel.start();
       }
     }

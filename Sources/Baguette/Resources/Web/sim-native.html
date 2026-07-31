@@ -879,15 +879,11 @@
   #simNativeView .r3d-live-stage {
     position: relative;
     display: none;
-    width: min(900px, calc(100vw - 32px), calc(100dvh - 68px));
-    aspect-ratio: 1;
+    width: min(100%, calc(100vw - 24px));
+    height: calc(100vh - 68px);
+    height: calc(100dvh - 68px);
     overflow: hidden;
-    border: 1px solid var(--nv-bar-border);
-    border-radius: 24px;
-    background:
-      radial-gradient(circle at 50% 40%, rgba(255,255,255,.1), transparent 55%),
-      #eef1f5;
-    box-shadow: 0 28px 80px rgba(0,0,0,.3);
+    background: transparent;
     touch-action: none;
   }
   #simNativeView[data-render3d="open"] #nativeDeviceFrame { display: none; }
@@ -1074,7 +1070,7 @@
       transform: translateX(-150px);
     }
     #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .r3d-live-stage {
-      width: min(900px, calc(100vw - 356px), calc(100dvh - 68px));
+      width: min(100%, calc(100vw - 356px));
     }
   }
   @media (max-width: 900px) {

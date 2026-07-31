@@ -12,6 +12,7 @@
     this.socket = null;
     this.decoder = null;
     this.format = 'mjpeg';
+    this.background = '#f1f3f6';
     this.rotation = { x: -8, y: 18, z: 0 };
     this.zoom = 1;
     this.mode = 'pose';
@@ -34,6 +35,7 @@
     this.deviceSize = options.deviceSize || this.deviceSize;
     this.onFps = options.onFps || null;
     this.format = options.format === 'avcc' ? 'avcc' : 'mjpeg';
+    this.background = options.background || this.background;
     this.renderLoading('Loading 3D model…');
     try {
       const response = await fetch(
@@ -103,7 +105,7 @@
       width: String(size.width),
       height: String(size.height),
       fit: 'cover',
-      background: '#eef1f5',
+      background: this.background,
     });
     Object.keys(this.variants).forEach((set) => {
       params.append('variant', set + ':' + this.variants[set]);
@@ -186,6 +188,13 @@
     this.format = next;
     this.renderControls();
     this.start();
+  };
+
+  Sim3DPanel.prototype.setBackground = function (background) {
+    if (!/^#[0-9a-f]{6}$/i.test(background || '') ||
+        background.toLowerCase() === this.background.toLowerCase()) return;
+    this.background = background;
+    this.scheduleRestart(0);
   };
 
   Sim3DPanel.prototype.detach = function () {
