@@ -13,8 +13,8 @@ enum ScreenSnapshot {
         case encodeFailed
     }
 
-    /// Capture one JPEG. `scale = 1` skips the downscaler; `scale ≥ 2`
-    /// routes through `Scaler` so the encoded bytes are smaller.
+    /// Capture one JPEG. `scale = 1` skips frame scaling; `scale ≥ 2`
+    /// routes through `VideoFrameScaler` so the encoded bytes are smaller.
     static func capture(
         screen: any Screen,
         quality: Double = 0.85,

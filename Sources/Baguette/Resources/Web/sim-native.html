@@ -895,12 +895,17 @@
     max-width: none !important;
     max-height: none !important;
     object-fit: contain;
-    cursor: grab;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
-  #simNativeView .r3d-live-canvas:active { cursor: grabbing; }
+  #simNativeView .r3d-live-stage[data-mode="pose"] .r3d-live-canvas { cursor: grab; }
+  #simNativeView .r3d-live-stage[data-mode="pose"] .r3d-live-canvas:active {
+    cursor: grabbing;
+  }
+  #simNativeView .r3d-live-stage[data-mode="interact"] .r3d-live-canvas {
+    cursor: crosshair;
+  }
   #simNativeView .r3d-stage-tools {
     position: absolute; left: 14px; bottom: 14px; z-index: 3;
     display: flex; gap: 4px; padding: 4px;

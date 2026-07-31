@@ -18,6 +18,7 @@
     this.deviceSize = { width: 1, height: 1 };
     this.onFps = null;
     this.pointer = null;
+    this.interactiveScreen = null;
     this.restartTimer = null;
     this.cameraFrame = 0;
     this.generation = 0;
@@ -80,11 +81,12 @@
         '</div>';
     this.canvas = this.stage.querySelector('canvas');
     this.canvas.addEventListener('mousedown', (event) => {
-      if (event.button === 0) {
+      if (event.button === 0 && this.mode === 'pose') {
         this.pointerDown('mouse', event.clientX, event.clientY, event);
       }
     });
     this.canvas.addEventListener('touchstart', (event) => {
+      if (this.mode !== 'pose') return;
       if (event.changedTouches.length !== 1) return;
       const touch = event.changedTouches[0];
       this.pointerDown(touch.identifier, touch.clientX, touch.clientY, event);
@@ -99,6 +101,13 @@
     this.stage.querySelector('[data-stage-reset]').addEventListener(
         'click', () => this.resetCamera()
     );
+    const transport = new window.Baguette._Transport({
+      send: (payload) => this.send(payload),
+    });
+    this.interactiveScreen = new window.Baguette._Screen({
+      rect: { width: this.deviceSize.width, height: this.deviceSize.height },
+    }, transport);
+    this.setMode(this.mode);
   };
 
   Sim3DPanel.prototype.start = function () {
@@ -193,6 +202,8 @@
 
   Sim3DPanel.prototype.detach = function () {
     this.stop();
+    if (this.interactiveScreen) this.interactiveScreen.detach();
+    this.interactiveScreen = null;
     if (this.host) this.host.innerHTML = '';
     if (this.stage) this.stage.innerHTML = '';
     this.host = null;
@@ -317,6 +328,18 @@
 
   Sim3DPanel.prototype.setMode = function (mode) {
     this.mode = mode === 'interact' ? 'interact' : 'pose';
+    this.cancelPointer();
+    if (this.stage) this.stage.dataset.mode = this.mode;
+    if (this.interactiveScreen && this.canvas) {
+      if (this.mode === 'interact') {
+        this.interactiveScreen.bindInteraction({
+          element: this.canvas,
+          overlayHost: this.stage,
+        });
+      } else {
+        this.interactiveScreen.unbindInteraction();
+      }
+    }
     const selector = '[data-mode], [data-stage-mode]';
     document.querySelectorAll(selector).forEach((candidate) => {
       const value = candidate.dataset.mode || candidate.dataset.stageMode;
@@ -347,11 +370,14 @@
   };
 
   Sim3DPanel.prototype.pointerDown = function (id, clientX, clientY, event) {
-    if (!this.canvas || !this.canvas.hasAttribute('data-painted')) return;
+    if (this.mode !== 'pose' || !this.canvas ||
+        !this.canvas.hasAttribute('data-painted')) return;
     event.preventDefault();
     this.cancelPointer();
     this.pointer = {
       id: id, x: clientX, y: clientY, time: performance.now(),
+      action: event.altKey ? 'zoom' : 'orbit',
+      zoom: this.zoom,
       rotation: { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z },
     };
     if (id === 'mouse') {
@@ -367,6 +393,12 @@
   Sim3DPanel.prototype.pointerMove = function (id, clientX, clientY, event) {
     if (!this.pointer || id !== this.pointer.id || this.mode !== 'pose') return;
     event.preventDefault();
+    if (this.pointer.action === 'zoom') {
+      this.zoom = Math.max(0.5, Math.min(3,
+          this.pointer.zoom * Math.exp((this.pointer.y - clientY) * 0.008)));
+      this.sendCamera();
+      return;
+    }
     this.rotation.x = Math.max(-80, Math.min(80,
         this.pointer.rotation.x + (clientY - this.pointer.y) * 0.35));
     this.rotation.y = Math.max(-180, Math.min(180,
@@ -378,32 +410,7 @@
   Sim3DPanel.prototype.pointerUp = function (id, clientX, clientY, event) {
     if (!this.pointer || id !== this.pointer.id) return;
     event.preventDefault();
-    const start = this.pointer;
     this.cancelPointer();
-    if (this.mode === 'pose') return;
-    const rect = this.canvas.getBoundingClientRect();
-    const point = (x, y) => ({
-      x: Math.max(0, Math.min(this.deviceSize.width,
-          (x - rect.left) / rect.width * this.deviceSize.width)),
-      y: Math.max(0, Math.min(this.deviceSize.height,
-          (y - rect.top) / rect.height * this.deviceSize.height)),
-    });
-    const a = point(start.x, start.y);
-    const b = point(clientX, clientY);
-    const distance = Math.hypot(b.x - a.x, b.y - a.y);
-    if (distance < 8) {
-      this.send({
-        type: 'tap', x: b.x, y: b.y,
-        width: this.deviceSize.width, height: this.deviceSize.height,
-      });
-    } else {
-      this.send({
-        type: 'swipe',
-        startX: a.x, startY: a.y, endX: b.x, endY: b.y,
-        width: this.deviceSize.width, height: this.deviceSize.height,
-        duration: Math.max(0.1, (performance.now() - start.time) / 1000),
-      });
-    }
   };
 
   Sim3DPanel.prototype.touchMove = function (event) {

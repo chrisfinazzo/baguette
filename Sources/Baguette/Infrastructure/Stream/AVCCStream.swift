@@ -94,7 +94,7 @@ final class AVCCStream: Stream, @unchecked Sendable {
     }
 
     private func encode(_ surface: IOSurface) {
-        // Always copy via Scaler before handing to VT: VT encodes async on
+        // Always copy via VideoFrameScaler before handing to VT: VT encodes async on
         // its own thread and SimulatorKit recycles the framebuffer
         // IOSurface in place — the bare ref races. At scale=1 the scaler
         // produces a 1:1 GPU copy, the stable buffer VT needs.

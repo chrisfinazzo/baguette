@@ -27,7 +27,7 @@ struct JPEGEncoder {
         return encode(pixelBuffer)
     }
 
-    /// Encode an arbitrary CVPixelBuffer (e.g. one produced by `Scaler`).
+    /// Encode an arbitrary CVPixelBuffer (e.g. produced by `VideoFrameScaler`).
     func encode(_ pixelBuffer: CVPixelBuffer) -> Data? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }

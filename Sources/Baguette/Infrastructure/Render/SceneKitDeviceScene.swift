@@ -135,6 +135,10 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             )
             depthDescriptor.storageMode = .private
             depthDescriptor.usage = .renderTarget
+            depthDescriptor.textureType = renderTargets.sampleCount > 1
+                ? .type2DMultisample
+                : .type2D
+            depthDescriptor.sampleCount = renderTargets.sampleCount
             guard let depthTexture = device.makeTexture(descriptor: depthDescriptor) else {
                 throw DeviceModelError.renderFailed
             }
@@ -206,9 +210,14 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             throw DeviceModelError.renderFailed
         }
         let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = target.texture
+        pass.colorAttachments[0].texture = target.renderTexture
         pass.colorAttachments[0].loadAction = .clear
-        pass.colorAttachments[0].storeAction = .store
+        if renderTargets.sampleCount > 1 {
+            pass.colorAttachments[0].resolveTexture = target.texture
+            pass.colorAttachments[0].storeAction = .multisampleResolve
+        } else {
+            pass.colorAttachments[0].storeAction = .store
+        }
         pass.colorAttachments[0].clearColor = Self.clearColor(plan.background)
         pass.depthAttachment.texture = depthTexture
         pass.depthAttachment.loadAction = .clear

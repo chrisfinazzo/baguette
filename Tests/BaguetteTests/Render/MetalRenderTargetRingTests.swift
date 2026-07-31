@@ -5,6 +5,21 @@ import Testing
 
 @Suite("MetalRenderTargetRing")
 struct MetalRenderTargetRingTests {
+    @Test func `renders with four samples before resolving into the codec surface`() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let ring = try MetalRenderTargetRing(
+            width: 320,
+            height: 240,
+            device: device
+        )
+
+        let target = ring.next()
+
+        #expect(ring.sampleCount == (device.supportsTextureSampleCount(4) ? 4 : 1))
+        #expect(target.renderTexture.sampleCount == ring.sampleCount)
+        #expect(target.texture.sampleCount == 1)
+    }
+
     @Test func `cycles through three stable codec surfaces`() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let ring = try MetalRenderTargetRing(
