@@ -93,17 +93,20 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
         let camera = SCNCamera()
         camera.usesOrthographicProjection = true
         camera.orthographicScale = max(height, width / aspect) * 0.59
+        camera.wantsHDR = true
+        camera.wantsExposureAdaptation = false
         camera.zNear = 0.001
         camera.zFar = max(1000, depth * 100)
         let cameraNode = SCNNode()
         cameraNode.camera = camera
         cameraNode.position = SCNVector3(0, 0, Float(max(width, height) + depth + 10))
         scene.rootNode.addChildNode(cameraNode)
-        addLights(to: scene)
+        DeviceStudioLighting.apply(to: scene)
 
         let renderer = SCNRenderer(device: nil, options: nil)
         renderer.scene = scene
         renderer.pointOfView = cameraNode
+        renderer.autoenablesDefaultLighting = false
         let image = renderer.snapshot(
             atTime: 0,
             with: CGSize(width: plan.outputSize.width, height: plan.outputSize.height),
@@ -265,24 +268,6 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
             blue: CGFloat(value & 0xff) / 255,
             alpha: 1
         )
-    }
-
-    private func addLights(to scene: SCNScene) {
-        let ambient = SCNLight()
-        ambient.type = .ambient
-        ambient.intensity = 700
-        ambient.color = NSColor.white
-        let ambientNode = SCNNode()
-        ambientNode.light = ambient
-        scene.rootNode.addChildNode(ambientNode)
-
-        let key = SCNLight()
-        key.type = .omni
-        key.intensity = 900
-        let keyNode = SCNNode()
-        keyNode.light = key
-        keyNode.position = SCNVector3(4, 6, 8)
-        scene.rootNode.addChildNode(keyNode)
     }
 
     private func radians(_ degrees: Double) -> Float {

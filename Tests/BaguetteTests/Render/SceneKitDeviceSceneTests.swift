@@ -66,6 +66,31 @@ struct SceneKitDeviceSceneTests {
         #expect(abs(Int(pixel.red) - Int(pixel.green)) <= 2)
         #expect(abs(Int(pixel.green) - Int(pixel.blue)) <= 2)
     }
+
+    @Test func `live render preserves the authored cosmic orange color space`() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let models = try LiveDeviceModels(rootURLs: [
+            repository.appending(path: "Sources/Baguette/Resources/Models3D")
+        ])
+        let model = try #require(try models.find(id: "iphone-17-pro-max"))
+        let scene = try SceneKitDeviceScene(plan: DeviceRenderPlan.build(
+            model: model,
+            variants: ["finish": "cosmic-orange"],
+            rotation: DeviceRotation(x: -8, y: 158, z: 0),
+            outputSize: RenderDimensions(width: 480, height: 480),
+            background: .color("#EEF1F5")
+        ))
+
+        let frame = try scene.render(screen: try #require(Self.surface(
+            red: 0, green: 0, blue: 0
+        )))
+
+        #expect(Self.saturatedRedPixelCount(frame) < 250)
+    }
 }
 
 private extension SceneKitDeviceSceneTests {
@@ -163,5 +188,29 @@ private extension SceneKitDeviceSceneTests {
             .assumingMemoryBound(to: UInt8.self)
         let offset = y * IOSurfaceGetBytesPerRow(surface) + x * 4
         return (address[offset + 2], address[offset + 1], address[offset])
+    }
+
+    static func saturatedRedPixelCount(_ surface: IOSurface) -> Int {
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let bytes = IOSurfaceGetBaseAddress(surface)
+            .assumingMemoryBound(to: UInt8.self)
+        let width = IOSurfaceGetWidth(surface)
+        let height = IOSurfaceGetHeight(surface)
+        let rowBytes = IOSurfaceGetBytesPerRow(surface)
+        var count = 0
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = y * rowBytes + x * 4
+                let blue = bytes[offset]
+                let green = bytes[offset + 1]
+                let red = bytes[offset + 2]
+                if red >= 252 && Int(red) - Int(green) > 45
+                    && Int(red) - Int(blue) > 45 {
+                    count += 1
+                }
+            }
+        }
+        return count
     }
 }

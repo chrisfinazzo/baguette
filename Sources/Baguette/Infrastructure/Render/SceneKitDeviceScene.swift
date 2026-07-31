@@ -100,6 +100,8 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             let camera = SCNCamera()
             camera.usesOrthographicProjection = true
             camera.orthographicScale = max(height, width / aspect) * 0.59
+            camera.wantsHDR = true
+            camera.wantsExposureAdaptation = false
             baseCameraScale = camera.orthographicScale
             self.camera = camera
             camera.zNear = 0.001
@@ -110,7 +112,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
                 0, 0, Float(max(width, height) + depth + 10)
             )
             output.rootNode.addChildNode(cameraNode)
-            Self.addLights(to: output)
+            DeviceStudioLighting.apply(to: output)
             scene = output
 
             guard let device = MTLCreateSystemDefaultDevice(),
@@ -169,7 +171,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
         let width = IOSurfaceGetWidth(surface)
         let height = IOSurfaceGetHeight(surface)
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm,
+            pixelFormat: .bgra8Unorm_srgb,
             width: width,
             height: height,
             mipmapped: false
@@ -205,7 +207,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             throw DeviceModelError.renderFailed
         }
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm,
+            pixelFormat: .bgra8Unorm_srgb,
             width: width,
             height: height,
             mipmapped: false
@@ -398,23 +400,6 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             blue: CGFloat(value & 0xff) / 255,
             alpha: 1
         )
-    }
-
-    private static func addLights(to scene: SCNScene) {
-        let ambient = SCNLight()
-        ambient.type = .ambient
-        ambient.intensity = 700
-        ambient.color = NSColor.white
-        let ambientNode = SCNNode()
-        ambientNode.light = ambient
-        scene.rootNode.addChildNode(ambientNode)
-        let key = SCNLight()
-        key.type = .omni
-        key.intensity = 900
-        let keyNode = SCNNode()
-        keyNode.light = key
-        keyNode.position = SCNVector3(4, 6, 8)
-        scene.rootNode.addChildNode(keyNode)
     }
 
     private static func radians(_ degrees: Double) -> Float {
