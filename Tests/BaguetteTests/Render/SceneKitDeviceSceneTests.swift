@@ -46,6 +46,26 @@ struct SceneKitDeviceSceneTests {
 
         #expect(Self.bytes(after) != Self.bytes(before))
     }
+
+    @Test func `screen material preserves simulator midtones without additive clipping`() throws {
+        let scratch = FileManager.default.temporaryDirectory
+            .appending(path: "baguette-live-color-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        try Self.writeScene(to: scratch.appending(path: "device.scn"))
+        let scene = try SceneKitDeviceScene(plan: Self.plan(
+            directory: scratch,
+            rotation: .zero
+        ))
+        let gray = try #require(Self.surface(red: 96, green: 96, blue: 96))
+
+        let frame = try scene.render(screen: gray)
+        let pixel = Self.pixel(frame, x: 160, y: 120)
+
+        #expect((75...125).contains(Int(pixel.red)))
+        #expect(abs(Int(pixel.red) - Int(pixel.green)) <= 2)
+        #expect(abs(Int(pixel.green) - Int(pixel.blue)) <= 2)
+    }
 }
 
 private extension SceneKitDeviceSceneTests {
@@ -70,7 +90,10 @@ private extension SceneKitDeviceSceneTests {
         }
     }
 
-    static func plan(directory: URL) throws -> DeviceRenderPlan {
+    static func plan(
+        directory: URL,
+        rotation: DeviceRotation = DeviceRotation(x: -8, y: 18, z: 0)
+    ) throws -> DeviceRenderPlan {
         let model = InstalledDeviceModel(
             definition: DeviceModelDefinition(
                 schemaVersion: 1,
@@ -93,7 +116,7 @@ private extension SceneKitDeviceSceneTests {
         return try DeviceRenderPlan.build(
             model: model,
             variants: [:],
-            rotation: DeviceRotation(x: -8, y: 18, z: 0),
+            rotation: rotation,
             outputSize: RenderDimensions(width: 320, height: 240),
             background: .color("#eef1f5")
         )
@@ -127,5 +150,18 @@ private extension SceneKitDeviceSceneTests {
             bytes: IOSurfaceGetBaseAddress(surface),
             count: IOSurfaceGetAllocSize(surface)
         )
+    }
+
+    static func pixel(
+        _ surface: IOSurface,
+        x: Int,
+        y: Int
+    ) -> (red: UInt8, green: UInt8, blue: UInt8) {
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let address = IOSurfaceGetBaseAddress(surface)
+            .assumingMemoryBound(to: UInt8.self)
+        let offset = y * IOSurfaceGetBytesPerRow(surface) + x * 4
+        return (address[offset + 2], address[offset + 1], address[offset])
     }
 }

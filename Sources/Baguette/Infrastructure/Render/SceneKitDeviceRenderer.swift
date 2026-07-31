@@ -191,8 +191,11 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
             let material = existing.copy() as? SCNMaterial ?? SCNMaterial()
             material.name = existing.name
             material.diffuse.contents = texture
-            material.emission.contents = texture
-            material.emission.intensity = 1
+            material.diffuse.magnificationFilter = .linear
+            material.diffuse.minificationFilter = .linear
+            material.diffuse.mipFilter = .linear
+            material.emission.contents = NSColor.black
+            material.emission.intensity = 0
             material.lightingModel = .constant
             return material
         }

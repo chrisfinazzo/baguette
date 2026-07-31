@@ -331,15 +331,15 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             let material = existing.copy() as? SCNMaterial ?? SCNMaterial()
             material.name = existing.name
             material.diffuse.contents = texture
-            material.emission.contents = texture
             let transform = textureTransform(source: source, target: target, fit: fit)
             material.diffuse.contentsTransform = transform
-            material.emission.contentsTransform = transform
             material.diffuse.wrapS = .clamp
             material.diffuse.wrapT = .clamp
-            material.emission.wrapS = .clamp
-            material.emission.wrapT = .clamp
-            material.emission.intensity = 1
+            material.diffuse.magnificationFilter = .linear
+            material.diffuse.minificationFilter = .linear
+            material.diffuse.mipFilter = .linear
+            material.emission.contents = NSColor.black
+            material.emission.intensity = 0
             material.lightingModel = .constant
             return material
         }
