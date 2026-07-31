@@ -84,6 +84,42 @@ struct Render3DRoutesTests {
         #expect(json.contains("usdName") == false)
         #expect(json.contains("usdValue") == false)
     }
+
+    @Test func `live 3D connection resolves its simulator model and render plan`() throws {
+        let (simulators, _, models, installed) = Self.fixture()
+        let options = try Device3DStreamOptions.parse([
+            "rotation": ["-8,18,0"],
+            "variant": ["finish:silver"],
+            "width": ["960"],
+            "height": ["720"],
+        ])
+
+        let plan = try Server.live3DPlan(
+            udid: "U",
+            options: options,
+            simulators: simulators,
+            models: models
+        )
+
+        #expect(plan.model == installed)
+        #expect(plan.outputSize == RenderDimensions(width: 960, height: 720))
+        #expect(plan.variants.map(\.usdValue) == ["Silver"])
+    }
+
+    @Test func `live 3D connection rejects an unknown simulator`() throws {
+        let simulators = MockSimulators()
+        let models = MockDeviceModels()
+        given(simulators).find(udid: .value("ghost")).willReturn(nil)
+
+        #expect(throws: DeviceModelError.modelNotFound("ghost")) {
+            _ = try Server.live3DPlan(
+                udid: "ghost",
+                options: .default,
+                simulators: simulators,
+                models: models
+            )
+        }
+    }
 }
 
 private extension Render3DRoutesTests {

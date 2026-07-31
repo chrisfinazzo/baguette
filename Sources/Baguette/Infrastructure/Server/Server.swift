@@ -27,6 +27,7 @@ import NIOCore
 ///   POST /simulators/:udid/input            → gesture     (TODO)
 ///   GET  /simulators/:udid/screenshot.jpg   → JPEG (?quality=&scale=)
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
+///   WS   /simulators/:udid/stream.3d.mjpeg  → live 3D JPEG frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///
 /// Static UI siblings live at the *root* (e.g. `GET /sim-list.js`)
@@ -548,6 +549,32 @@ struct Server: Sendable {
                 format: context.request.uri.queryParameters.get("format")
                     .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
                 simulators: simulators,
+                inbound: inbound,
+                outbound: outbound
+            )
+        }
+
+        // Live 3D stream — the simulator screen is mapped onto a persistent
+        // SceneKit model and emitted as one JPEG per binary WS message.
+        router.ws(
+            "/simulators/:udid/stream.3d.mjpeg",
+            shouldUpgrade: trustedWebSocketUpgrade
+        ) { [simulators, models] inbound, outbound, context in
+            var query: [String: [String]] = [:]
+            for pair in context.request.uri.queryParameters {
+                query[String(pair.key), default: []].append(String(pair.value))
+            }
+            guard let options = try? Device3DStreamOptions.parse(query) else {
+                try? await outbound.write(.text(
+                    #"{"ok":false,"error":"invalid live 3D stream options"}"#
+                ))
+                return
+            }
+            await Self.live3DStreamWS(
+                udid: Self.udidParam(context.request),
+                options: options,
+                simulators: simulators,
+                models: models,
                 inbound: inbound,
                 outbound: outbound
             )
@@ -1089,6 +1116,28 @@ struct Server: Sendable {
         }
     }
 
+    static func live3DPlan(
+        udid: String,
+        options: Device3DStreamOptions,
+        simulators: any Simulators,
+        models: any DeviceModels
+    ) throws -> DeviceRenderPlan {
+        guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
+            throw DeviceModelError.modelNotFound(udid)
+        }
+        guard let installed = try simulator.deviceModel(in: models) else {
+            throw DeviceModelError.noModelForDevice(simulator.deviceTypeName)
+        }
+        return try DeviceRenderPlan.build(
+            model: installed,
+            variants: options.variants,
+            rotation: options.rotation,
+            outputSize: options.outputSize,
+            fit: options.fit,
+            background: options.background
+        )
+    }
+
     static func model3DJSONString(
         udid: String,
         simulators: any Simulators,
@@ -1276,6 +1325,84 @@ struct Server: Sendable {
     ///      button / scroll / pinch / pan / key / type
     /// Lines not matched by any of the above are ignored — same
     /// graceful behaviour the stdin control channel has.
+    private static func live3DStreamWS(
+        udid: String,
+        options: Device3DStreamOptions,
+        simulators: any Simulators,
+        models: any DeviceModels,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            try? await outbound.write(.text(#"{"ok":false,"error":"unknown udid"}"#))
+            return
+        }
+        let plan: DeviceRenderPlan
+        let scene: SceneKitDeviceScene
+        do {
+            plan = try live3DPlan(
+                udid: udid,
+                options: options,
+                simulators: simulators,
+                models: models
+            )
+            scene = try SceneKitDeviceScene(plan: plan, quality: 0.7)
+        } catch {
+            try? await outbound.write(.text(
+                #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return
+        }
+
+        let sink = WebSocketFrameSink(outbound: outbound, format: .mjpeg)
+        let stream = Live3DStream(
+            config: .default.with(fps: 20),
+            sink: sink,
+            scene: scene
+        )
+        let screen = sim.screen()
+        let input = sim.input()
+        let pasteboard = sim.pasteboard()
+        let dispatcher = GestureDispatcher(input: input)
+        do {
+            try stream.start(on: screen)
+        } catch {
+            try? await outbound.write(.text(
+                #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return
+        }
+        defer {
+            stream.stop()
+            screen.stop()
+        }
+
+        do {
+            for try await frame in inbound {
+                guard frame.opcode == .text else { continue }
+                let line = String(buffer: frame.data)
+                if await handleDescribeUI(line: line, sim: sim, outbound: outbound) {
+                    continue
+                }
+                if let frame = await PasteDispatch.dispatch(
+                    line: line, pasteboard: pasteboard, input: input
+                ).resultFrame {
+                    try? await outbound.write(.text(frame))
+                    continue
+                }
+                if let frame = await CopyDispatch.dispatch(
+                    line: line, pasteboard: pasteboard, input: input
+                ).resultFrame {
+                    try? await outbound.write(.text(frame))
+                    continue
+                }
+                handleInbound(line: line, stream: stream, dispatcher: dispatcher)
+            }
+        } catch {
+            // socket closed; defer cleans up
+        }
+    }
+
     private static func streamWS(
         udid: String,
         format: StreamFormat,
