@@ -327,9 +327,30 @@ The 3D stage follows an explicit two-mode interaction model:
 Pose/Interact and Reset live on the stage so direct manipulation remains
 available with the inspector hidden. Their controls sit outside the canvas
 gesture target, so clicking a control is never captured as a pose or simulator
-gesture. Canvas pointer capture keeps mouse, pen, and touch drags rotating after
-the pointer leaves the model. Exact Tilt/Turn/Roll controls are collapsed under
-Advanced rotation.
+gesture. As on the 2D screen surface, explicit mouse and touch listeners with
+document-level drag continuation keep drags active after leaving the model; the
+implementation does not rely on Pointer Events or element capture in
+Safari/WebKit. Exact Tilt/Turn/Roll controls are collapsed under Advanced
+rotation.
+
+Decoded 3D frames follow the same paint discipline as the stable 2D
+`StreamSession`: decoding replaces one pending frame, and the browser
+compositor loop paints the latest frame. The panel does not draw directly from
+the decoder callback because Safari/WebKit can retain the previous canvas
+backing image even while new frames are decoded.
+
+The implementation also shares that session directly: `Sim3DPanel` supplies
+the `/stream.3d.<format>` URL and 3D control callbacks to `StreamSession`; it
+does not own a second WebSocket, decoder, FPS counter, or paint loop. Thus 2D
+and 3D have identical AVCC/MJPEG lifecycle and browser compatibility behavior.
+
+The stream deduplicates frames by IOSurface identity and seed together. A 3D
+render rotates through three persistent IOSurface-backed Metal targets. This
+triple buffer bounds allocation while keeping the GPU producer and codec
+consumer off the same target during normal real-time operation. Separate
+targets can have the same seed, so identity and seed must both participate in
+frame deduplication. After Metal finishes rendering, the scene publishes the
+write through IOSurface before the shared JPEG or VideoToolbox encoder reads it.
 
 The socket accepts the same input envelopes as the normal stream, so toolbar,
 keyboard, pasteboard, and programmatic controls do not require a second

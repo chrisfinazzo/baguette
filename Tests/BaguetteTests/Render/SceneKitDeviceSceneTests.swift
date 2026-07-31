@@ -45,6 +45,29 @@ struct SceneKitDeviceSceneTests {
         )))
 
         #expect(Self.bytes(after) != Self.bytes(before))
+        #expect(Self.seed(after) > 1)
+    }
+
+    @Test func `live rendering reuses a bounded triple buffer`() throws {
+        let scratch = FileManager.default.temporaryDirectory
+            .appending(path: "baguette-live-buffer-pool-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        try Self.writeScene(to: scratch.appending(path: "device.scn"))
+        let scene = try SceneKitDeviceScene(plan: Self.plan(directory: scratch))
+        let screen = try #require(Self.surface(red: 24, green: 48, blue: 96))
+
+        var surfaceIDs: [IOSurfaceID] = []
+        for turn in 0..<9 {
+            scene.update(camera: Device3DCamera(
+                rotation: DeviceRotation(x: 0, y: Double(turn * 5), z: 0),
+                zoom: 1
+            ))
+            surfaceIDs.append(IOSurfaceGetID(try scene.render(screen: screen)))
+        }
+
+        #expect(Set(surfaceIDs.prefix(3)).count == 3)
+        #expect(Set(surfaceIDs).count == 3)
     }
 
     @Test func `screen material preserves simulator midtones without additive clipping`() throws {
@@ -193,6 +216,13 @@ private extension SceneKitDeviceSceneTests {
             bytes: IOSurfaceGetBaseAddress(surface),
             count: IOSurfaceGetAllocSize(surface)
         )
+    }
+
+    static func seed(_ surface: IOSurface) -> UInt32 {
+        var seed: UInt32 = 0
+        IOSurfaceLock(surface, .readOnly, &seed)
+        IOSurfaceUnlock(surface, .readOnly, nil)
+        return seed
     }
 
     static func pixel(

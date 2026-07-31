@@ -34,13 +34,17 @@ For releases prior to this changelog, see the
   viewport as the 2D simulator without a separate rounded card, and its opaque
   MJPEG/H.264 frame background follows the active page theme.
 - **Reliable 3D stage input.** Pose, Interact, and Reset no longer enter the
-  canvas gesture path, while guarded canvas pointer capture keeps model and
-  simulator gestures separate from stage controls.
+  canvas gesture path. Matching the mature 2D surface, 3D uses explicit
+  mouse/touch listeners with document-level drag continuation instead of
+  Pointer Events and element capture.
 - **One 2D/3D browser stream pipeline.** Live 3D now supplies its custom URL and
   controls to the same `StreamSession` as 2D, removing its duplicate WebSocket,
   decoder, FPS, and canvas-paint implementation. AVCC and MJPEG now have one
   lifecycle and latest-frame compositor path across Chrome, Safari, and
-  embedded browsers.
+  embedded browsers. Frame deduplication uses IOSurface identity plus seed so newly
+  rendered 3D surfaces are never dropped, and completed Metal writes are
+  published before encoding for Safari/WebKit compatibility. A persistent
+  triple-buffered Metal target set replaces per-frame IOSurface allocation.
 
 ---
 

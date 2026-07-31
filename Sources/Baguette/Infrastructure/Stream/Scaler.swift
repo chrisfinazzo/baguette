@@ -47,6 +47,10 @@ final class Scaler {
         let sx = CGFloat(dstW) / CGFloat(srcW)
         let sy = CGFloat(dstH) / CGFloat(srcH)
         context.render(src.transformed(by: CGAffineTransform(scaleX: sx, y: sy)), to: dst)
+        // Core Image writes through the GPU. Publish that completed write
+        // before VideoToolbox retains the buffer for asynchronous encoding.
+        CVPixelBufferLockBaseAddress(dst, [])
+        CVPixelBufferUnlockBaseAddress(dst, [])
         return dst
     }
 }

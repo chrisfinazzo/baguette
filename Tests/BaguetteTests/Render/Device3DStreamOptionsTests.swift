@@ -33,6 +33,15 @@ struct Device3DStreamOptionsTests {
         #expect(options.background == .transparent)
     }
 
+    @Test func `aligns live output dimensions for hardware video codecs`() throws {
+        let options = try Device3DStreamOptions.parse([
+            "width": ["669"],
+            "height": ["1047"],
+        ])
+
+        #expect(options.outputSize == RenderDimensions(width: 670, height: 1048))
+    }
+
     @Test func `rejects duplicate variant set selection`() {
         #expect(throws: DeviceModelError.duplicateVariantSelection("finish")) {
             _ = try Device3DStreamOptions.parse([
