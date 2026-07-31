@@ -26,6 +26,12 @@ For releases prior to this changelog, see the
 
 ### Changed
 
+- **Perspective, Retina-quality 3D rendering.** Live and one-shot 3D now share
+  the reference renderer's 32° perspective lens, aspect-aware bounds fit, and
+  distance-based zoom instead of an orthographic camera that visibly squashed
+  devices at steep poses. The live viewport requests up to 2× CSS-pixel
+  resolution and resolves 4× Metal MSAA before the common H.264/MJPEG pipeline.
+  See [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
 - **Stage-first 3D controls.** The live model now remains mounted and streaming
   when its responsive right-inspector/bottom-sheet is hidden. Pose, Interact,
   and Reset stay directly on the stage; exact rotation is grouped under

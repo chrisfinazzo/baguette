@@ -131,8 +131,8 @@ size, fit, and background before subscribing to the simulator screen.
 `RenderedScreen` produces codec-ready BGRA IOSurfaces, then the selected
 existing stream emits either raw JPEG messages or AVCC description/key/delta
 messages. The first frame can take longer because the model and asset are
-loaded; later frames reuse the same SceneKit scene, camera, materials, and
-renderer.
+loaded; later frames reuse the same SceneKit scene, camera, materials, Metal
+targets, and renderer.
 
 Client-to-server text frames reuse the ordinary stream channel:
 
@@ -142,10 +142,11 @@ Client-to-server text frames reuse the ordinary stream channel:
 {"type":"set_scale","scale":1}
 ```
 
-Camera or variant changes reconnect the 3D socket with a new validated render
-configuration. Gestures remain in simulator device points and are dispatched
-through the existing `GestureDispatcher` and `Input`; no new HID dialect is
-introduced.
+Variant changes reconnect the 3D socket with a new validated render
+configuration. Camera changes update the retained scene and immediately
+re-render the latest simulator surface without reconnecting. Gestures remain
+in simulator device points and are dispatched through the existing
+`GestureDispatcher` and `Input`; no new HID dialect is introduced.
 
 ## Model bundles
 
@@ -272,9 +273,14 @@ SimulatorKit Screen
 RenderedScreen (Screen decorator)
   1. resolve model + verified asset once
   2. author variant overlay and load scene once
-  3. build camera, light, material and renderer once
-  4. update screen material for each IOSurface
-  5. render a BGRA IOSurface using latest-frame delivery
+  3. fit a 32° perspective camera to the complete model once
+  4. build studio lighting, materials and renderer once
+  5. update the screen material for each IOSurface
+  6. render through 4× MSAA into a bounded Metal target ring
+  7. resolve and publish a codec-ready BGRA IOSurface
+      │
+      ▼
+VideoFrameDimensions + VideoFrameScaler
       │
       ├──▶ MJPEGStream ─▶ JPEG messages ─┐
       └──▶ AVCCStream  ─▶ H.264 messages ├──▶ Focus-mode 3D viewport
@@ -287,8 +293,13 @@ SceneKitDeviceRenderer
   uses the same definition, variant and camera vocabulary for one frame
 ```
 
-`DeviceRenderPlan`, live-stream option parsing, definition parsing, device
-matching, defaults, and variant validation live in Domain and are unit-covered.
+`DeviceRenderPlan`, `DeviceCameraFraming`, `VideoFrameDimensions`, live-stream
+option parsing, definition parsing, device matching, defaults, and variant
+validation live in Domain and are unit-covered. `DeviceCameraFraming` shares
+the 32° perspective lens, 15% bounds padding, aspect fit, and distance-based
+zoom between the live and one-shot renderers. This matches the camera model
+used by the reference ThreeDSGCore renderer and avoids the severe
+foreshortening produced by the former orthographic projection.
 `LiveDeviceModels` implements the `DeviceModels` aggregate collection.
 `RenderedScreen` owns the conversational frame/render lifecycle while the
 existing `MJPEGStream` and `AVCCStream` retain codec responsibility. The
@@ -317,12 +328,15 @@ as the render background and reconnects the 3D stream when the theme changes.
 
 The 3D stage follows an explicit two-mode interaction model:
 
-- **Pose** (default): drag rotates the persistent model, wheel/pinch zooms,
-  and double-click returns to Front at 100%. Camera changes re-render the
-  retained simulator frame on the existing WebSocket; they never reload the
-  model or restart MJPEG/AVCC.
-- **Interact**: pointer gestures are sent to the simulator. Use Front for
-  accurate input until screen-mesh ray casting is implemented.
+- **Pose** (default): drag rotates the persistent model, Option-drag or the
+  wheel dollies the perspective camera, and double-click returns to Front at
+  100%. Camera changes re-render the retained simulator frame on the existing
+  WebSocket; they never reload the model or restart MJPEG/AVCC.
+- **Interact**: the canvas binds the same `Screen` and `PointerInterpreter` as
+  the 2D simulator. Normal drag, long press, edge gestures, Option-drag pinch,
+  Option-Shift-drag two-finger pan, and wheel gestures therefore share one
+  browser and wire implementation. Use Front for accurate input until
+  screen-mesh ray casting is implemented.
 
 Pose/Interact and Reset live on the stage so direct manipulation remains
 available with the inspector hidden. Their controls sit outside the canvas
@@ -338,6 +352,11 @@ Decoded 3D frames follow the same paint discipline as the stable 2D
 compositor loop paints the latest frame. The panel does not draw directly from
 the decoder callback because Safari/WebKit can retain the previous canvas
 backing image even while new frames are decoded.
+
+The browser requests up to 2× CSS-pixel resolution (capped at 1600 pixels per
+side) so Retina displays retain authored model and screen detail. SceneKit
+resolves 4× multisampling before either codec sees the frame; H.264 and MJPEG
+therefore receive identical geometry and antialiased edges.
 
 The implementation also shares that session directly: `Sim3DPanel` supplies
 the `/stream.3d.<format>` URL and 3D control callbacks to `StreamSession`; it
