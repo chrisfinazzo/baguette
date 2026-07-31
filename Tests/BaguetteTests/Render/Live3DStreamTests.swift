@@ -25,6 +25,7 @@ struct Live3DStreamTests {
 
         try stream.start(on: screen)
         delivery?(surface)
+        #expect(Self.waitUntil { sink.chunks.count == 2 })
         stream.stop()
 
         #expect(sink.chunks.first == MJPEGEnvelope.header)
@@ -39,18 +40,48 @@ struct Live3DStreamTests {
         let scene = MockDeviceScene()
         let sink = Recording3DFrameSink()
         let surface = try #require(Self.surface())
+        let renderAttempted = DispatchSemaphore(value: 0)
         var delivery: (@Sendable (IOSurface) -> Void)?
         given(screen).start(onFrame: .any).willProduce { onFrame in
             delivery = onFrame
         }
-        given(scene).render(screen: .any)
-            .willThrow(DeviceModelError.renderFailed)
+        given(scene).render(screen: .any).willProduce { _ in
+            renderAttempted.signal()
+            throw DeviceModelError.renderFailed
+        }
         let stream = Live3DStream(config: .default, sink: sink, scene: scene)
 
         try stream.start(on: screen)
         delivery?(surface)
+        #expect(renderAttempted.wait(timeout: .now() + 1) == .success)
 
         #expect(sink.chunks == [MJPEGEnvelope.header])
+        verify(scene).render(screen: .any).called(1)
+    }
+
+    @Test func `slow scene rendering does not block simulator frame delivery`() throws {
+        let screen = MockScreen()
+        let scene = MockDeviceScene()
+        let sink = Recording3DFrameSink()
+        let surface = try #require(Self.surface())
+        let releaseRender = DispatchSemaphore(value: 0)
+        var delivery: (@Sendable (IOSurface) -> Void)?
+        given(screen).start(onFrame: .any).willProduce { onFrame in
+            delivery = onFrame
+        }
+        given(scene).render(screen: .any).willProduce { _ in
+            _ = releaseRender.wait(timeout: .now() + 0.15)
+            return Data([0xff, 0xd8, 0xff, 0xd9])
+        }
+        let stream = Live3DStream(config: .default, sink: sink, scene: scene)
+        try stream.start(on: screen)
+
+        let started = ContinuousClock.now
+        delivery?(surface)
+        let elapsed = started.duration(to: .now)
+        releaseRender.signal()
+
+        #expect(elapsed < .milliseconds(50))
     }
 }
 
@@ -77,5 +108,17 @@ private extension Live3DStreamTests {
             kIOSurfaceAllocSize: 16,
             kIOSurfacePixelFormat: UInt32(0x42475241),
         ] as CFDictionary)
+    }
+
+    static func waitUntil(
+        timeout: TimeInterval = 1,
+        _ condition: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+            Thread.sleep(forTimeInterval: 0.005)
+        }
+        return condition()
     }
 }

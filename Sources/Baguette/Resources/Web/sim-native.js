@@ -38,7 +38,7 @@
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let locationPanel = null;  // LocationPanel — simctl location map picker
-  let render3DPanel = null;  // Sim3DPanel — one-shot SceneKit preview
+  let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
   let powerCard = null;      // boot affordance shown on an unbooted device's screen
@@ -301,11 +301,13 @@
         host: location.origin,
         udid,
         send: (payload) => {
-          if (!session) return;
           const out = currentOrientation === 'portrait'
             ? payload
             : remapEnvelopeToPortrait(payload);
-          session.send(out);
+          const view = document.getElementById('simNativeView');
+          if (view && view.getAttribute('data-render3d') === 'open' &&
+              render3DPanel && render3DPanel.send(out)) return;
+          if (session) session.send(out);
         },
         getOrientation: () => currentOrientation,
         log: (msg) => console.log('[native]', msg),
@@ -790,9 +792,11 @@
     window.__nativeSetFormat = (next) => {
       if (next !== 'avcc' && next !== 'mjpeg') return;
       const current = localStorage.getItem('asc.simFormat') || pickFormat();
-      if (current === next && session) return;
+      const view = document.getElementById('simNativeView');
+      if (current === next && (session ||
+          (view && view.getAttribute('data-render3d') === 'open'))) return;
       localStorage.setItem('asc.simFormat', next);
-      startSession(next);
+      if (!view || view.getAttribute('data-render3d') !== 'open') startSession(next);
     };
     window.__nativeToggleTheme = () => {
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
@@ -974,24 +978,39 @@
     }
   }
 
-  // 3D preview card — lazy-mounted because model discovery and the
-  // first SceneKit render are meaningful work. Closing preserves the
-  // selected variants and current preview; unload revokes its blob URL.
+  // Live 3D is a main-view mode, not a duplicate preview. Its WebSocket
+  // replaces the 2D StreamSession while open and carries both MJPEG
+  // frames and the same inbound input/control envelopes.
   function toggle3D() {
     const view = document.getElementById('simNativeView');
     const host = document.getElementById('native3DHost');
+    const stage = document.getElementById('native3DStage');
     const btn = document.getElementById('native3DToggle');
     const open = view && view.getAttribute('data-render3d') === 'open';
-    if (!view || !host) return;
+    if (!view || !host || !stage || !sim) return;
     if (open) {
       view.removeAttribute('data-render3d');
       if (btn) btn.classList.remove('active');
+      if (render3DPanel) render3DPanel.stop();
+      startSession(localStorage.getItem('asc.simFormat') || pickFormat());
     } else {
+      if (session) {
+        session.stop();
+        session = null;
+      }
       view.setAttribute('data-render3d', 'open');
       if (btn) btn.classList.add('active');
       if (!render3DPanel && window.Sim3DPanel && udid) {
         render3DPanel = new window.Sim3DPanel();
-        render3DPanel.attach(host, udid);
+        render3DPanel.attach(host, stage, udid, {
+          deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
+          onFps: (fps) => {
+            const status = document.getElementById('nativeStatus');
+            if (status) status.textContent = fps + ' fps · 3D';
+          },
+        });
+      } else if (render3DPanel) {
+        render3DPanel.start();
       }
     }
   }
@@ -1013,6 +1032,11 @@
   // skip CaptureGallery here — the focus chrome has nowhere to put a
   // thumbnail strip, and the user just wants the file.
   function downloadSnapshot() {
+    const view = document.getElementById('simNativeView');
+    if (view && view.getAttribute('data-render3d') === 'open' && render3DPanel) {
+      render3DPanel.download();
+      return;
+    }
     if (!sim || !sim.canvas) return;
     const w = lastPaintedSize.w || sim.canvas.width;
     const h = lastPaintedSize.h || sim.canvas.height;

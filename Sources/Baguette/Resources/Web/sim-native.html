@@ -839,10 +839,9 @@
     color: var(--nv-text-muted);
   }
 
-  /* One-shot 3D preview card. It follows the same glass language as
-     status/location controls but carries a larger image stage. Static
-     previews never intercept simulator input; live interaction remains
-     on the 2D device in the centre. */
+  /* Live 3D inspector. The rendered device occupies the main stage;
+     this compact glass card only carries model, variant, and camera
+     controls. */
   #simNativeView .render3d-host {
     position: fixed; top: 68px; left: 20px; z-index: 45;
     width: min(330px, calc(100vw - 40px));
@@ -877,6 +876,57 @@
   #simNativeView .render3d-host-title svg { color: var(--nv-text-muted); }
   #simNativeView #native3DHost {
     min-height: 170px; overflow-y: auto; padding: 12px;
+  }
+  #simNativeView .r3d-live-stage {
+    position: relative;
+    display: none;
+    width: min(900px, calc(100vw - 32px), calc(100dvh - 68px));
+    aspect-ratio: 1;
+    overflow: hidden;
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 50% 40%, rgba(255,255,255,.1), transparent 55%),
+      #eef1f5;
+    box-shadow: 0 28px 80px rgba(0,0,0,.3);
+    touch-action: none;
+  }
+  #simNativeView[data-render3d="open"] #nativeDeviceFrame { display: none; }
+  #simNativeView[data-render3d="open"] .r3d-live-stage { display: grid; place-items: center; }
+  #simNativeView .r3d-live-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain;
+    cursor: crosshair;
+  }
+  #simNativeView .r3d-live-state {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    padding: 20px;
+    color: #374151;
+    background: rgba(238,241,245,.78);
+    font: 600 12px/1.4 -apple-system, sans-serif;
+    text-align: center;
+  }
+  #simNativeView .r3d-live-state[hidden] { display: none; }
+  #simNativeView .r3d-live-state[data-error] { color: #991b1b; }
+  #simNativeView .r3d-live-summary {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 2px 2px 10px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .r3d-live-summary strong {
+    overflow: hidden; color: var(--nv-text);
+    font: 600 12px/1.3 -apple-system, sans-serif;
+    white-space: nowrap; text-overflow: ellipsis;
+  }
+  #simNativeView .r3d-live-summary span {
+    flex: 0 0 auto; color: #34d399;
+    font: 700 9px/1 ui-monospace, monospace;
+    letter-spacing: .05em; text-transform: uppercase;
   }
   #simNativeView .r3d-preview {
     position: relative; height: 190px; overflow: hidden;
@@ -1182,11 +1232,11 @@
         </svg>
       </button>
 
-      <!-- Static SceneKit preview. The cube opens a glass card whose
-           controls are generated from /3d-model.json. -->
+      <!-- Live SceneKit view. The cube swaps the central 2D framebuffer
+           for a server-rendered 3D device carrying that framebuffer. -->
       <button class="ico-btn" id="native3DToggle"
-              title="3D device preview"
-              aria-label="Toggle 3D device preview"
+              title="Toggle live 3D simulator"
+              aria-label="Toggle live 3D simulator"
               onclick="window.__nativeToggle3D && window.__nativeToggle3D()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.6" stroke-linejoin="round" width="17" height="17">
@@ -1318,6 +1368,7 @@
   </div>
 
     <div id="nativeDeviceFrame"></div>
+    <div id="native3DStage" class="r3d-live-stage" aria-label="Live 3D simulator"></div>
   </div>
 
   <!-- Accessibility-inspector host. sim-native.js mounts an
@@ -1333,10 +1384,10 @@
           <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/>
           <path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>
         </svg>
-        3D Preview
+        Live 3D
       </span>
-      <button class="ico-btn" title="Close 3D preview"
-              aria-label="Close 3D preview"
+      <button class="ico-btn" title="Close live 3D"
+              aria-label="Close live 3D"
               onclick="window.__nativeToggle3D && window.__nativeToggle3D()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" width="12" height="12">
