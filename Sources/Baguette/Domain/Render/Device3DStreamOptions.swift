@@ -51,7 +51,9 @@ struct Device3DStreamOptions: Equatable, Sendable {
         return Device3DStreamOptions(
             rotation: rotation,
             variants: variants,
-            outputSize: RenderDimensions(width: width, height: height).alignedFor420,
+            outputSize: VideoFrameDimensions(
+                requested: RenderDimensions(width: width, height: height)
+            ).renderDimensions,
             fit: fit,
             background: background
         )

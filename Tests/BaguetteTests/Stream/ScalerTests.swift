@@ -3,11 +3,11 @@ import IOSurface
 import Testing
 @testable import Baguette
 
-@Suite("Scaler")
-struct ScalerTests {
+@Suite("VideoFrameScaler")
+struct VideoFrameScalerTests {
     @Test func `publishes the copied frame before asynchronous codec consumption`() throws {
         let source = try #require(Self.surface())
-        let frame = try #require(Scaler().downscale(source, scale: 1))
+        let frame = try #require(VideoFrameScaler().scale(source, by: 1))
         let output = try #require(CVPixelBufferGetIOSurface(frame)?.takeUnretainedValue())
         var seed: UInt32 = 0
 
@@ -19,7 +19,7 @@ struct ScalerTests {
 
     @Test func `keeps scaled frames aligned for 4 2 0 codecs`() throws {
         let source = try #require(Self.surface(width: 670, height: 1048))
-        let frame = try #require(Scaler().downscale(source, scale: 2))
+        let frame = try #require(VideoFrameScaler().scale(source, by: 2))
 
         #expect(CVPixelBufferGetWidth(frame) == 336)
         #expect(CVPixelBufferGetHeight(frame) == 524)

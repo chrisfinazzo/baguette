@@ -5,17 +5,6 @@ import Testing
 @Suite("DeviceModelDefinition")
 struct DeviceModelDefinitionTests {
 
-    @Test func `aligns dimensions for 4 2 0 codec planes`() {
-        #expect(
-            RenderDimensions(width: 669, height: 1047).alignedFor420
-                == RenderDimensions(width: 670, height: 1048)
-        )
-        #expect(
-            RenderDimensions(width: 1280, height: 720).alignedFor420
-                == RenderDimensions(width: 1280, height: 720)
-        )
-    }
-
     @Test func `parses model identity scene and local asset`() throws {
         let model = try DeviceModelDefinition.parsing(json: Self.macBook)
 

@@ -53,22 +53,22 @@ enum ScreenSnapshot {
     }
 }
 
-/// Owns the per-capture encoder + scaler and the single-shot guard.
-/// `Scaler` is a class without `Sendable`, so wrapping it in an
+/// Owns the per-capture encoder + frame scaler and the single-shot guard.
+/// `VideoFrameScaler` is a class without `Sendable`, so wrapping it in an
 /// `@unchecked Sendable` holder lets the screen-callback closure
 /// capture it without tripping strict concurrency. Safe because each
 /// `capture(...)` call instantiates its own session and `encode` runs
 /// at most once.
 private final class SnapshotSession: @unchecked Sendable {
     private let jpeg: JPEGEncoder
-    private let scaler: Scaler?
+    private let scaler: VideoFrameScaler?
     private let scale: Int
     private let lock = NSLock()
     private var taken = false
 
     init(quality: Double, scale: Int) {
         self.jpeg = JPEGEncoder(quality: quality)
-        self.scaler = scale > 1 ? Scaler() : nil
+        self.scaler = scale > 1 ? VideoFrameScaler() : nil
         self.scale = scale
     }
 
@@ -80,7 +80,7 @@ private final class SnapshotSession: @unchecked Sendable {
     }
 
     func encode(_ surface: IOSurface) -> Data? {
-        if let scaler, let pb = scaler.downscale(surface, scale: scale) {
+        if let scaler, let pb = scaler.scale(surface, by: scale) {
             return jpeg.encode(pb)
         }
         return jpeg.encode(surface)

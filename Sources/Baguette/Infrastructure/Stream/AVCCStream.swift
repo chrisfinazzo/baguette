@@ -15,7 +15,7 @@ final class AVCCStream: Stream, @unchecked Sendable {
     private let sink: any FrameSink
     private let jpeg: JPEGEncoder
     private let h264: H264Encoder
-    private let scaler = Scaler()
+    private let scaler = VideoFrameScaler()
     private let queue = DispatchQueue(label: "baguette.avcc", qos: .userInteractive)
 
     private var screen: (any Screen)?
@@ -98,7 +98,7 @@ final class AVCCStream: Stream, @unchecked Sendable {
         // its own thread and SimulatorKit recycles the framebuffer
         // IOSurface in place — the bare ref races. At scale=1 the scaler
         // produces a 1:1 GPU copy, the stable buffer VT needs.
-        guard let pb = scaler.downscale(surface, scale: config.scale) else { return }
+        guard let pb = scaler.scale(surface, by: config.scale) else { return }
         if pendingSeedSnapshot {
             pendingSeedSnapshot = false
             if let bytes = jpeg.encode(pb) {
