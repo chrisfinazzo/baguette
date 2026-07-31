@@ -24,6 +24,13 @@ For releases prior to this changelog, see the
   Silver on iPhone 17 Pro/Pro Max. See
   [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
 
+### Changed
+
+- **Stage-first 3D controls.** The live model now remains mounted and streaming
+  when its responsive right-inspector/bottom-sheet is hidden. Pose, Interact,
+  and Reset stay directly on the stage; exact rotation is grouped under
+  Advanced, and the cube toolbar button alone exits 3D mode.
+
 ---
 
 ## [0.1.85] - 2026-07-29
