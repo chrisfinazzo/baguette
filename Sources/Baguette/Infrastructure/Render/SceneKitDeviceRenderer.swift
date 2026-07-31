@@ -89,17 +89,21 @@ struct SceneKitDeviceRenderer: DeviceRenderer, Sendable {
         let width = max(Double(maximum.x - minimum.x), 0.001)
         let height = max(Double(maximum.y - minimum.y), 0.001)
         let depth = max(Double(maximum.z - minimum.z), 0.001)
-        let aspect = Double(plan.outputSize.width) / Double(plan.outputSize.height)
+        let framing = DeviceCameraFraming.fit(
+            subjectWidth: width,
+            subjectHeight: height,
+            subjectDepth: depth,
+            viewport: plan.outputSize
+        )
         let camera = SCNCamera()
-        camera.usesOrthographicProjection = true
-        camera.orthographicScale = max(height, width / aspect) * 0.59
+        camera.fieldOfView = framing.fieldOfViewDegrees
         camera.wantsHDR = true
         camera.wantsExposureAdaptation = false
-        camera.zNear = 0.001
-        camera.zFar = max(1000, depth * 100)
+        camera.zNear = 0.01
+        camera.zFar = 10_000
         let cameraNode = SCNNode()
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 0, Float(max(width, height) + depth + 10))
+        cameraNode.position = SCNVector3(0, 0, Float(framing.distance(at: 1)))
         scene.rootNode.addChildNode(cameraNode)
         DeviceStudioLighting.apply(to: scene)
 

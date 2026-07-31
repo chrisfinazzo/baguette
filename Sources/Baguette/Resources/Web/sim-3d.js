@@ -349,7 +349,7 @@
 
   Sim3DPanel.prototype.outputSize = function () {
     const rect = this.stage ? this.stage.getBoundingClientRect() : null;
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
     return {
       width: Math.max(480, Math.min(1600, Math.round((rect && rect.width || 960) * ratio))),
       height: Math.max(480, Math.min(1600, Math.round((rect && rect.height || 960) * ratio))),

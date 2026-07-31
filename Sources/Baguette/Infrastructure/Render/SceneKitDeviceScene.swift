@@ -14,8 +14,8 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
     private let scene: SCNScene
     private let screenNode: SCNNode
     private let wrapperNode: SCNNode
-    private let camera: SCNCamera
-    private let baseCameraScale: Double
+    private let cameraNode: SCNNode
+    private let cameraFraming: DeviceCameraFraming
     private let renderer: SCNRenderer
     private let metalDevice: any MTLDevice
     private let commandQueue: any MTLCommandQueue
@@ -97,22 +97,24 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             let width = max(Double(maximum.x - minimum.x), 0.001)
             let height = max(Double(maximum.y - minimum.y), 0.001)
             let depth = max(Double(maximum.z - minimum.z), 0.001)
-            let aspect = Double(plan.outputSize.width) / Double(plan.outputSize.height)
+            let framing = DeviceCameraFraming.fit(
+                subjectWidth: width,
+                subjectHeight: height,
+                subjectDepth: depth,
+                viewport: plan.outputSize
+            )
             let camera = SCNCamera()
-            camera.usesOrthographicProjection = true
-            camera.orthographicScale = max(height, width / aspect) * 0.59
+            camera.fieldOfView = framing.fieldOfViewDegrees
             camera.wantsHDR = true
             camera.wantsExposureAdaptation = false
-            baseCameraScale = camera.orthographicScale
-            self.camera = camera
-            camera.zNear = 0.001
-            camera.zFar = max(1000, depth * 100)
+            camera.zNear = 0.01
+            camera.zFar = 10_000
             let cameraNode = SCNNode()
             cameraNode.camera = camera
-            cameraNode.position = SCNVector3(
-                0, 0, Float(max(width, height) + depth + 10)
-            )
+            cameraNode.position = SCNVector3(0, 0, Float(framing.distance(at: 1)))
             output.rootNode.addChildNode(cameraNode)
+            self.cameraNode = cameraNode
+            cameraFraming = framing
             DeviceStudioLighting.apply(to: output)
             scene = output
 
@@ -245,7 +247,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
                 Self.radians(requested.rotation.y),
                 Self.radians(requested.rotation.z)
             )
-            camera.orthographicScale = baseCameraScale / requested.zoom
+            cameraNode.position.z = CGFloat(cameraFraming.distance(at: requested.zoom))
         }
     }
 
