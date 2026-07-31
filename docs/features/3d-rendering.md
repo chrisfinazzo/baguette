@@ -351,6 +351,12 @@ consumer off the same target during normal real-time operation. Separate
 targets can have the same seed, so identity and seed must both participate in
 frame deduplication. After Metal finishes rendering, the scene publishes the
 write through IOSurface before the shared JPEG or VideoToolbox encoder reads it.
+Live output dimensions are rounded up to even values for the H.264 4:2:0
+hardware path; MJPEG uses the same aligned dimensions so switching codecs does
+not resize the stage. Reconfigured scale output is aligned again after division
+so downscaling cannot produce an odd codec dimension. The scaler also publishes
+its Core Image GPU copy before VideoToolbox retains the pixel buffer for
+asynchronous encoding.
 
 The socket accepts the same input envelopes as the normal stream, so toolbar,
 keyboard, pasteboard, and programmatic controls do not require a second
