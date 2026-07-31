@@ -1,18 +1,20 @@
 # 3D device rendering
 
-One-shot PNG rendering of a simulator screenshot on a real Apple device
-model. The first release has two entry points backed by the same rendering
-pipeline:
+Live rendering of the simulator screen on a real Apple device model. The
+primary surface is an interactive 3D stream in the focused simulator view;
+one-shot PNG rendering remains available for automation and export:
 
+- `WS /simulators/:udid/stream.3d.mjpeg` loads the matched model once and
+  continuously maps SimulatorKit frames onto its screen material.
 - `baguette render-3d` captures a booted simulator, or accepts an existing
   screenshot, and writes a PNG.
 - `POST /simulators/:udid/render-3d.png` captures the current simulator frame
-  and returns a PNG for the focus-mode 3D preview.
+  and returns a PNG using the same model/render-plan vocabulary.
 
-The 3D preview is a presentation surface, not a second live simulator stream.
-Input continues through the existing 2D simulator view. A continuously
-interactive 3D stream would require a separate WebGL or SceneKit streaming
-design and is not part of this feature.
+The cube toolbar button switches the main device viewport between the existing
+low-latency 2D stream and the live server-rendered 3D stream. It does not open
+a duplicate preview card. The 3D socket remains bidirectional: gestures and
+stream controls use the same JSON envelopes as the ordinary stream.
 
 The rendering approach is based on
 [`benmcdowell/3dsg`](https://github.com/benmcdowell/3dsg), but device support is
@@ -105,6 +107,43 @@ GET /simulators/:udid/3d-model.json
 It returns the resolved model ID, display name, and public variant-set metadata.
 USD prim paths, raw scene-node names, and asset URLs are not accepted from the
 browser.
+
+## Live 3D WebSocket
+
+```http
+GET /simulators/:udid/stream.3d.mjpeg
+Upgrade: websocket
+```
+
+Initial render configuration is supplied as public query parameters:
+
+```text
+?rotation=-8,18,0
+&variant=finish:deep-blue
+&width=1200
+&height=1200
+&fit=cover
+&background=%23eef1f5
+```
+
+`variant` is repeatable. The server validates model, variant, rotation, output
+size, fit, and background before subscribing to the simulator screen. It emits
+one raw JPEG per binary WebSocket message, matching the existing MJPEG decoder.
+The first frame can take longer because the model and asset are loaded; later
+frames reuse the same SceneKit scene, camera, materials, and renderer.
+
+Client-to-server text frames reuse the ordinary stream channel:
+
+```json
+{"type":"tap","x":219,"y":478,"width":438,"height":954}
+{"type":"set_fps","fps":20}
+{"type":"set_scale","scale":1}
+```
+
+Camera or variant changes reconnect the 3D socket with a new validated render
+configuration. Gestures remain in simulator device points and are dispatched
+through the existing `GestureDispatcher` and `Input`; no new HID dialect is
+introduced.
 
 ## Model bundles
 
@@ -225,50 +264,45 @@ downloaded, SHA-256-verified model with a native USD finish variant.
 ## Pipeline
 
 ```text
-CLI render-3d                     Focus-mode 3D card
-      │                                  │
-      │                    POST /simulators/:udid/render-3d.png
-      └──────────────────┬───────────────┘
-                         ▼
-                 DeviceRender options
-                         │
-             DeviceModels resolves definition
-                         │
-              ScreenSnapshot captures frame
-                         │
-                         ▼
-              SceneKitDeviceRenderer
-                1. resolve/cache USDZ
-                2. write temporary screen image
-                3. author variant overlay
-                4. load and select scene nodes
-                5. replace/overlay screen texture
-                6. orient, light, frame, render
-                7. return PNG and clean temporary files
+SimulatorKit Screen                    Focus-mode 3D viewport
+      │ IOSurface frames                         ▲
+      ▼                                          │ raw JPEG messages
+SceneKit3DStream ────────────────────────────────┘
+  1. resolve model + verified asset once
+  2. author variant overlay and load scene once
+  3. build camera, light, material and renderer once
+  4. update screen material for each IOSurface
+  5. render and JPEG-encode the configured output
+
+CLI / PNG export
+      │
+      ▼
+SceneKitDeviceRenderer
+  uses the same definition, variant and camera vocabulary for one frame
 ```
 
-`DeviceRender`, definition parsing, device matching, defaults, and variant
-validation live in Domain and are unit-covered. `LiveDeviceModels` implements
-the `DeviceModels` aggregate collection. The irreducible URL download,
-filesystem, USD, and SceneKit calls remain in Infrastructure.
+`DeviceRenderPlan`, live-stream option parsing, definition parsing, device
+matching, defaults, and variant validation live in Domain and are unit-covered.
+`LiveDeviceModels` implements the `DeviceModels` aggregate collection.
+The persistent SceneKit stream owns the conversational frame/render lifecycle;
+the irreducible URL download, filesystem, USD, IOSurface, and SceneKit calls
+remain in Infrastructure.
 
-This feature does not touch `Input`, `IndigoHIDInput`, SimulatorKit HID
-symbols, `GestureRegistry`, or the stream-control WebSocket.
+This feature does not change `Input`, `IndigoHIDInput`, SimulatorKit HID
+symbols, or `GestureRegistry`. It reuses the existing bidirectional stream
+control WebSocket behavior.
 
 ## Browser behavior
 
-The focus-mode toolbar gains a 3D cube toggle using the same glass toolbar and
-floating-card language as the status-bar, location, camera, and network
-controls.
+The focus-mode cube button changes the main viewport itself. In 3D mode the
+live rendered device occupies the same central stage as the normal device,
+while a compact inspector carries camera presets, rotation, variants, and PNG
+export. Closing 3D returns immediately to the already-mounted 2D stream.
 
-Opening the card resolves model metadata and requests a Hero preview. Camera
-drag updates local control values; a new PNG is requested on pointer release.
-Variant changes request a new preview after the control commits. “Render PNG”
-requests the selected output size and downloads the response.
-
-The existing live 2D simulator remains mounted. Switching back to Live makes
-it visible immediately and restores normal input. The first version does not
-project taps through a static 3D render.
+The browser sends pointer gestures over the same WebSocket using simulator
+device points. The first implementation maps the full rendered viewport to the
+screen plane for front/hero camera angles; camera presets whose screen is
+occluded disable input rather than dispatching a misleading coordinate.
 
 The farm view is intentionally out of scope: rendering a separate SceneKit
 image for every live farm tile is too expensive and adds no control value.
@@ -285,8 +319,10 @@ image for every live farm tile is too expensive and adds no control value.
 
 ## Known limits
 
-- Rendering is one-shot, not a live 3D stream.
-- The initial UI preview cannot receive simulator taps.
+- The first live format is MJPEG. H.264 encoding of SceneKit output is a
+  separate optimization.
+- Input projection is supported only while the screen plane is visible;
+  back/edge-on camera angles intentionally disable it.
 - Model definitions depend on opaque node/material names that Apple may change
   when replacing an asset at the same URL; SHA-256 verification prevents an
   unnoticed replacement.
