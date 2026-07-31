@@ -299,10 +299,10 @@ live rendered device occupies the same central stage as the normal device,
 while a compact inspector carries camera presets, rotation, variants, and PNG
 export. Closing 3D returns immediately to the already-mounted 2D stream.
 
-The browser sends pointer gestures over the same WebSocket using simulator
-device points. The first implementation maps the full rendered viewport to the
-screen plane for front/hero camera angles; camera presets whose screen is
-occluded disable input rather than dispatching a misleading coordinate.
+The socket accepts the same input envelopes as the normal stream, so toolbar,
+keyboard, pasteboard, and programmatic controls do not require a second
+connection. Direct pointer gestures are currently an approximation over the
+rendered canvas; exact ray-to-screen-plane projection is follow-up work.
 
 The farm view is intentionally out of scope: rendering a separate SceneKit
 image for every live farm tile is too expensive and adds no control value.
@@ -321,8 +321,8 @@ image for every live farm tile is too expensive and adds no control value.
 
 - The first live format is MJPEG. H.264 encoding of SceneKit output is a
   separate optimization.
-- Input projection is supported only while the screen plane is visible;
-  back/edge-on camera angles intentionally disable it.
+- Direct pointer input does not yet ray-cast onto the model's screen mesh, so
+  clicks near the device edges can be inaccurate at rotated camera angles.
 - Model definitions depend on opaque node/material names that Apple may change
   when replacing an asset at the same URL; SHA-256 verification prevents an
   unnoticed replacement.

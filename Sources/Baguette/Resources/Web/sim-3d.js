@@ -68,6 +68,8 @@
   Sim3DPanel.prototype.start = function () {
     this.stop();
     if (!this.canvas || !this.model) return;
+    this.frames = 0;
+    this.fpsStarted = 0;
     const generation = ++this.generation;
     const size = this.outputSize();
     const params = new URLSearchParams({
@@ -278,12 +280,16 @@
 
   Sim3DPanel.prototype.countFrame = function () {
     const now = performance.now();
-    if (!this.fpsStarted) this.fpsStarted = now;
+    if (!this.fpsStarted || now - this.fpsStarted > 2000) {
+      this.fpsStarted = now;
+      this.frames = 1;
+      return;
+    }
     this.frames += 1;
     const elapsed = now - this.fpsStarted;
     if (elapsed >= 1000) {
       const fps = Math.round(this.frames * 1000 / elapsed);
-      if (this.onFps) this.onFps(fps);
+      if (this.onFps && fps > 0) this.onFps(fps);
       this.frames = 0;
       this.fpsStarted = now;
     }

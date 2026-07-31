@@ -1000,6 +1000,8 @@
       }
       view.setAttribute('data-render3d', 'open');
       if (btn) btn.classList.add('active');
+      const status = document.getElementById('nativeStatus');
+      if (status) status.textContent = '3D live';
       if (!render3DPanel && window.Sim3DPanel && udid) {
         render3DPanel = new window.Sim3DPanel();
         render3DPanel.attach(host, stage, udid, {
