@@ -14,7 +14,8 @@ For releases prior to this changelog, see the
 
 - **Data-driven 3D device rendering.** `baguette render-3d` and
   `POST /simulators/:udid/render-3d.png` place a screenshot onto a SceneKit
-  device model; the focused simulator UI exposes the same one-shot preview.
+  device model; the focused simulator UI exposes a live 3D viewport over both
+  existing MJPEG and H.264/AVCC codecs.
   Model bundles contain `definition.json` plus a local USDZ or a SHA-256
   verified download. Bundled models cover iPhone 17/Air/Pro/Pro Max, iPad Pro
   11/13-inch M4, Apple Watch Series 11 42/46mm, Apple Watch Ultra 3, and a

@@ -4,8 +4,8 @@ Live rendering of the simulator screen on a real Apple device model. The
 primary surface is an interactive 3D stream in the focused simulator view;
 one-shot PNG rendering remains available for automation and export:
 
-- `WS /simulators/:udid/stream.3d.mjpeg` loads the matched model once and
-  continuously maps SimulatorKit frames onto its screen material.
+- `WS /simulators/:udid/stream.3d.mjpeg` and `.avcc` load the matched model
+  once and continuously map SimulatorKit frames onto its screen material.
 - `baguette render-3d` captures a booted simulator, or accepts an existing
   screenshot, and writes a PNG.
 - `POST /simulators/:udid/render-3d.png` captures the current simulator frame
@@ -111,7 +111,7 @@ browser.
 ## Live 3D WebSocket
 
 ```http
-GET /simulators/:udid/stream.3d.mjpeg
+GET /simulators/:udid/stream.3d.<mjpeg|avcc>
 Upgrade: websocket
 ```
 
@@ -127,10 +127,12 @@ Initial render configuration is supplied as public query parameters:
 ```
 
 `variant` is repeatable. The server validates model, variant, rotation, output
-size, fit, and background before subscribing to the simulator screen. It emits
-one raw JPEG per binary WebSocket message, matching the existing MJPEG decoder.
-The first frame can take longer because the model and asset are loaded; later
-frames reuse the same SceneKit scene, camera, materials, and renderer.
+size, fit, and background before subscribing to the simulator screen.
+`RenderedScreen` produces codec-ready BGRA IOSurfaces, then the selected
+existing stream emits either raw JPEG messages or AVCC description/key/delta
+messages. The first frame can take longer because the model and asset are
+loaded; later frames reuse the same SceneKit scene, camera, materials, and
+renderer.
 
 Client-to-server text frames reuse the ordinary stream channel:
 
@@ -264,15 +266,19 @@ downloaded, SHA-256-verified model with a native USD finish variant.
 ## Pipeline
 
 ```text
-SimulatorKit Screen                    Focus-mode 3D viewport
-      │ IOSurface frames                         ▲
-      ▼                                          │ raw JPEG messages
-SceneKit3DStream ────────────────────────────────┘
+SimulatorKit Screen
+      │ IOSurface frames
+      ▼
+RenderedScreen (Screen decorator)
   1. resolve model + verified asset once
   2. author variant overlay and load scene once
   3. build camera, light, material and renderer once
   4. update screen material for each IOSurface
-  5. render and JPEG-encode the configured output
+  5. render a BGRA IOSurface using latest-frame delivery
+      │
+      ├──▶ MJPEGStream ─▶ JPEG messages ─┐
+      └──▶ AVCCStream  ─▶ H.264 messages ├──▶ Focus-mode 3D viewport
+                                         ┘
 
 CLI / PNG export
       │
@@ -284,9 +290,10 @@ SceneKitDeviceRenderer
 `DeviceRenderPlan`, live-stream option parsing, definition parsing, device
 matching, defaults, and variant validation live in Domain and are unit-covered.
 `LiveDeviceModels` implements the `DeviceModels` aggregate collection.
-The persistent SceneKit stream owns the conversational frame/render lifecycle;
-the irreducible URL download, filesystem, USD, IOSurface, and SceneKit calls
-remain in Infrastructure.
+`RenderedScreen` owns the conversational frame/render lifecycle while the
+existing `MJPEGStream` and `AVCCStream` retain codec responsibility. The
+irreducible URL download, filesystem, USD, IOSurface, and SceneKit calls remain
+in Infrastructure.
 
 This feature does not change `Input`, `IndigoHIDInput`, SimulatorKit HID
 symbols, or `GestureRegistry`. It reuses the existing bidirectional stream
@@ -319,8 +326,8 @@ image for every live farm tile is too expensive and adds no control value.
 
 ## Known limits
 
-- The first live format is MJPEG. H.264 encoding of SceneKit output is a
-  separate optimization.
+- Live 3D supports the existing MJPEG and H.264/AVCC stream formats. AVCC
+  requires browser WebCodecs support, matching the normal focused stream.
 - Direct pointer input does not yet ray-cast onto the model's screen mesh, so
   clicks near the device edges can be inaccurate at rotated camera angles.
 - Model definitions depend on opaque node/material names that Apple may change
