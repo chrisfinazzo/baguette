@@ -17,17 +17,27 @@ struct ScalerTests {
         #expect(seed > 1)
     }
 
-    private static func surface() -> IOSurface? {
+    @Test func `keeps scaled frames aligned for 4 2 0 codecs`() throws {
+        let source = try #require(Self.surface(width: 670, height: 1048))
+        let frame = try #require(Scaler().downscale(source, scale: 2))
+
+        #expect(CVPixelBufferGetWidth(frame) == 336)
+        #expect(CVPixelBufferGetHeight(frame) == 524)
+    }
+
+    private static func surface(width: Int = 8, height: Int = 8) -> IOSurface? {
+        let bytesPerRow = width * 4
+        let allocationSize = bytesPerRow * height
         guard let surface = IOSurfaceCreate([
-            kIOSurfaceWidth: 8,
-            kIOSurfaceHeight: 8,
+            kIOSurfaceWidth: width,
+            kIOSurfaceHeight: height,
             kIOSurfaceBytesPerElement: 4,
-            kIOSurfaceBytesPerRow: 32,
-            kIOSurfaceAllocSize: 256,
+            kIOSurfaceBytesPerRow: bytesPerRow,
+            kIOSurfaceAllocSize: allocationSize,
             kIOSurfacePixelFormat: UInt32(0x42475241),
         ] as CFDictionary) else { return nil }
         IOSurfaceLock(surface, [], nil)
-        memset(IOSurfaceGetBaseAddress(surface), 0x7f, 256)
+        memset(IOSurfaceGetBaseAddress(surface), 0x7f, allocationSize)
         IOSurfaceUnlock(surface, [], nil)
         return surface
     }

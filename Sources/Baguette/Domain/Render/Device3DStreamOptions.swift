@@ -22,9 +22,9 @@ struct Device3DStreamOptions: Equatable, Sendable {
     static func parse(_ query: [String: [String]]) throws -> Device3DStreamOptions {
         let rotation = try query.single("rotation").map(parseRotation)
             ?? Self.default.rotation
-        let width = try query.single("width").map(parseCodecDimension)
+        let width = try query.single("width").map(parsePositiveInt)
             ?? Self.default.outputSize.width
-        let height = try query.single("height").map(parseCodecDimension)
+        let height = try query.single("height").map(parsePositiveInt)
             ?? Self.default.outputSize.height
         let fit = try query.single("fit").map { value in
             guard let fit = DeviceScreenFit(rawValue: value) else {
@@ -51,7 +51,7 @@ struct Device3DStreamOptions: Equatable, Sendable {
         return Device3DStreamOptions(
             rotation: rotation,
             variants: variants,
-            outputSize: RenderDimensions(width: width, height: height),
+            outputSize: RenderDimensions(width: width, height: height).alignedFor420,
             fit: fit,
             background: background
         )
@@ -70,11 +70,6 @@ struct Device3DStreamOptions: Equatable, Sendable {
             throw DeviceModelError.invalidRenderOptions
         }
         return result
-    }
-
-    private static func parseCodecDimension(_ value: String) throws -> Int {
-        let result = try parsePositiveInt(value)
-        return result.isMultiple(of: 2) ? result : result + 1
     }
 
     private static func parseBackground(_ value: String) throws -> DeviceRenderBackground {

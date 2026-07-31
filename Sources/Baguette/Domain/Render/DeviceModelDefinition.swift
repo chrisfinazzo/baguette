@@ -20,6 +20,16 @@ struct DeviceModelID: RawRepresentable, Equatable, Hashable, Sendable, Codable,
 struct RenderDimensions: Equatable, Sendable, Codable {
     let width: Int
     let height: Int
+
+    /// 4:2:0 video codecs store chroma at half resolution on both axes.
+    /// Round up so neither plane receives a fractional pixel dimension.
+    var alignedFor420: RenderDimensions {
+        RenderDimensions(width: width.alignedToEven, height: height.alignedToEven)
+    }
+}
+
+private extension Int {
+    var alignedToEven: Int { isMultiple(of: 2) ? self : self + 1 }
 }
 
 enum DeviceModelOrientation: String, Equatable, Sendable, Codable {

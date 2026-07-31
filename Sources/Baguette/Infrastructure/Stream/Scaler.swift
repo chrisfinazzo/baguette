@@ -3,39 +3,35 @@ import CoreImage
 import CoreVideo
 import IOSurface
 
-/// Downscales an `IOSurface` by an integer divisor into a smaller
-/// `CVPixelBuffer`. VT then encodes that smaller buffer, producing a
-/// smaller bitstream — the user-visible effect of `StreamConfig.scale`.
-///
-/// Scale 1 is a no-op for the caller (use the surface zero-copy via
-/// `CVPixelBufferCreateWithIOSurface` directly). Scale ≥ 2 routes through
-/// this helper.
+/// Copies an `IOSurface` into a pooled, codec-ready `CVPixelBuffer`, optionally
+/// downscaling it by an integer divisor. Output stays 4:2:0-aligned and the GPU
+/// write is published before synchronous JPEG or asynchronous VideoToolbox use.
 final class Scaler {
     private let context = CIContext(options: [.priorityRequestLow: false])
     private var pool: CVPixelBufferPool?
-    private var poolWidth: Int = 0
-    private var poolHeight: Int = 0
+    private var poolSize: RenderDimensions?
 
     /// Returns a fresh `CVPixelBuffer` with `surface` rendered into it at
     /// 1/`scale` size on each axis. Returns nil on allocation failure.
     func downscale(_ surface: IOSurface, scale: Int) -> CVPixelBuffer? {
         let srcW = IOSurfaceGetWidth(surface)
         let srcH = IOSurfaceGetHeight(surface)
-        let dstW = max(2, srcW / scale)
-        let dstH = max(2, srcH / scale)
+        let size = RenderDimensions(
+            width: max(2, srcW / scale),
+            height: max(2, srcH / scale)
+        ).alignedFor420
 
-        if pool == nil || dstW != poolWidth || dstH != poolHeight {
+        if pool == nil || size != poolSize {
             let attrs: [CFString: Any] = [
                 kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey: dstW,
-                kCVPixelBufferHeightKey: dstH,
+                kCVPixelBufferWidthKey: size.width,
+                kCVPixelBufferHeightKey: size.height,
                 kCVPixelBufferIOSurfacePropertiesKey: [:] as [CFString: Any],
             ]
             var p: CVPixelBufferPool?
             CVPixelBufferPoolCreate(nil, nil, attrs as CFDictionary, &p)
             pool = p
-            poolWidth = dstW
-            poolHeight = dstH
+            poolSize = size
         }
         guard let pool else { return nil }
 
@@ -44,8 +40,8 @@ final class Scaler {
         guard let dst = pbOut else { return nil }
 
         let src = CIImage(ioSurface: surface)
-        let sx = CGFloat(dstW) / CGFloat(srcW)
-        let sy = CGFloat(dstH) / CGFloat(srcH)
+        let sx = CGFloat(size.width) / CGFloat(srcW)
+        let sy = CGFloat(size.height) / CGFloat(srcH)
         context.render(src.transformed(by: CGAffineTransform(scaleX: sx, y: sy)), to: dst)
         // Core Image writes through the GPU. Publish that completed write
         // before VideoToolbox retains the buffer for asynchronous encoding.
