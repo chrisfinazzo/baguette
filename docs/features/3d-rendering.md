@@ -306,10 +306,19 @@ live rendered device occupies the same central stage as the normal device,
 while a compact inspector carries camera presets, rotation, variants, and PNG
 export. Closing 3D returns immediately to the already-mounted 2D stream.
 
+The 3D stage follows an explicit two-mode interaction model:
+
+- **Pose** (default): drag rotates the persistent model, wheel/pinch zooms,
+  and double-click returns to Front at 100%. Camera changes re-render the
+  retained simulator frame on the existing WebSocket; they never reload the
+  model or restart MJPEG/AVCC.
+- **Interact**: pointer gestures are sent to the simulator. Use Front for
+  accurate input until screen-mesh ray casting is implemented.
+
 The socket accepts the same input envelopes as the normal stream, so toolbar,
 keyboard, pasteboard, and programmatic controls do not require a second
-connection. Direct pointer gestures are currently an approximation over the
-rendered canvas; exact ray-to-screen-plane projection is follow-up work.
+connection. Variant choices may reconnect because native USD variant
+selection happens when the model is loaded; ordinary posing never does.
 
 The farm view is intentionally out of scope: rendering a separate SceneKit
 image for every live farm tile is too expensive and adds no control value.
@@ -328,8 +337,8 @@ image for every live farm tile is too expensive and adds no control value.
 
 - Live 3D supports the existing MJPEG and H.264/AVCC stream formats. AVCC
   requires browser WebCodecs support, matching the normal focused stream.
-- Direct pointer input does not yet ray-cast onto the model's screen mesh, so
-  clicks near the device edges can be inaccurate at rotated camera angles.
+- Interact mode does not yet ray-cast onto the model's screen mesh. Front view
+  is the supported direct-input pose.
 - Model definitions depend on opaque node/material names that Apple may change
   when replacing an asset at the same URL; SHA-256 verification prevents an
   unnoticed replacement.
