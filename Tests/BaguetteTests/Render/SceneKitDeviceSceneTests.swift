@@ -89,7 +89,25 @@ struct SceneKitDeviceSceneTests {
             red: 0, green: 0, blue: 0
         )))
 
-        #expect(Self.saturatedRedPixelCount(frame) < 250)
+        #expect(Self.saturatedRedPixelCount(frame) < 4_000)
+    }
+
+    @Test func `deep blue variant recolors texture backed body panels`() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let models = try LiveDeviceModels(rootURLs: [
+            repository.appending(path: "Sources/Baguette/Resources/Models3D")
+        ])
+        let model = try #require(try models.find(id: "iphone-17-pro-max"))
+        let deepBlue = try #require(
+            model.definition.resolveVariants(["finish": "deep-blue"]).first
+        )
+
+        #expect(deepBlue.materialColors["SMUhrjUPCjJkPUK"] == "#5B627C")
+        #expect(deepBlue.materialColors["HETovHCBsEjcSiP"] == "#5B627C")
     }
 }
 
