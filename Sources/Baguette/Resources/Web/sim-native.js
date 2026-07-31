@@ -811,6 +811,7 @@
     window.__nativeToggleStatusBar = () => toggleStatusBar();
     window.__nativeToggleLocation = () => toggleLocation();
     window.__nativeToggle3D = () => toggle3D();
+    window.__nativeToggle3DInspector = () => toggle3DInspector();
     window.__nativeToggleAx = () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
@@ -995,6 +996,7 @@
     if (!view || !host || !stage || !sim) return;
     if (open) {
       view.removeAttribute('data-render3d');
+      view.removeAttribute('data-render3d-inspector');
       if (btn) btn.classList.remove('active');
       if (render3DPanel) render3DPanel.stop();
       startSession(localStorage.getItem('asc.simFormat') || pickFormat());
@@ -1004,6 +1006,9 @@
         session = null;
       }
       view.setAttribute('data-render3d', 'open');
+      if (localStorage.getItem('asc.3dInspector') !== 'closed') {
+        view.setAttribute('data-render3d-inspector', 'open');
+      }
       if (btn) btn.classList.add('active');
       const status = document.getElementById('nativeStatus');
       if (status) status.textContent = '3D live';
@@ -1021,6 +1026,23 @@
         render3DPanel.start();
       }
     }
+  }
+
+  // The inspector is a tool surface, not the 3D session owner. Collapsing it
+  // must leave the model, decoder, socket, pose, zoom, and variant untouched.
+  function toggle3DInspector() {
+    const view = document.getElementById('simNativeView');
+    const sheet = document.getElementById('native3DSheet');
+    if (!view || view.getAttribute('data-render3d') !== 'open') return;
+    const open = view.getAttribute('data-render3d-inspector') === 'open';
+    if (open) {
+      view.removeAttribute('data-render3d-inspector');
+      localStorage.setItem('asc.3dInspector', 'closed');
+    } else {
+      view.setAttribute('data-render3d-inspector', 'open');
+      localStorage.setItem('asc.3dInspector', 'open');
+    }
+    if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
   }
 
   function wireUnload() {

@@ -61,6 +61,15 @@
     if (!this.stage) return;
     this.stage.innerHTML =
         '<canvas class="r3d-live-canvas" aria-label="Live 3D simulator"></canvas>' +
+        '<div class="r3d-stage-tools" aria-label="3D interaction mode">' +
+          '<button type="button" class="active" data-stage-mode="pose">Pose</button>' +
+          '<button type="button" data-stage-mode="interact">Interact</button>' +
+          '<button type="button" data-stage-reset title="Reset to front">Reset</button>' +
+        '</div>' +
+        '<button type="button" class="r3d-inspector-toggle" ' +
+          'title="Show 3D inspector" aria-label="Show 3D inspector" ' +
+          'onclick="window.__nativeToggle3DInspector && window.__nativeToggle3DInspector()">' +
+          '<span aria-hidden="true">☷</span></button>' +
         '<div class="r3d-live-state" data-role="live-state">' +
           '<span class="r3d-spinner"></span><span>Loading model…</span>' +
         '</div>';
@@ -74,6 +83,12 @@
     this.stage.addEventListener('wheel', (event) => this.zoomCamera(event), {
       passive: false,
     });
+    this.stage.querySelectorAll('[data-stage-mode]').forEach((button) => {
+      button.addEventListener('click', () => this.setMode(button.dataset.stageMode));
+    });
+    this.stage.querySelector('[data-stage-reset]').addEventListener(
+        'click', () => this.resetCamera()
+    );
   };
 
   Sim3DPanel.prototype.start = function () {
@@ -239,21 +254,20 @@
           escapeHTML(this.model.displayName) + '</strong><span>Live ' +
           escapeHTML(this.format.toUpperCase()) + '</span></div>' +
         variants +
-        '<section class="r3d-section"><label>Camera</label>' +
-          '<div class="r3d-presets">' +
-            '<button type="button" class="r3d-mode active" data-mode="pose">Pose</button>' +
-            '<button type="button" class="r3d-mode" data-mode="interact">Interact</button>' +
-          '</div>' +
+        '<section class="r3d-section"><label>View</label>' +
           '<div class="r3d-presets">' +
             '<button type="button" data-preset="-8,18,0">Hero</button>' +
             '<button type="button" data-preset="0,0,0">Front</button>' +
             '<button type="button" data-preset="0,38,0">Side</button>' +
             '<button type="button" data-preset="-28,28,0">Top</button>' +
           '</div>' +
-          rangeRow('x', 'Tilt', -45, 45, this.rotation.x) +
-          rangeRow('y', 'Turn', -80, 80, this.rotation.y) +
-          rangeRow('z', 'Roll', -45, 45, this.rotation.z) +
         '</section>' +
+        '<details class="r3d-advanced"><summary>Advanced rotation</summary>' +
+          '<div class="r3d-advanced-body">' +
+            rangeRow('x', 'Tilt', -45, 45, this.rotation.x) +
+            rangeRow('y', 'Turn', -80, 80, this.rotation.y) +
+            rangeRow('z', 'Roll', -45, 45, this.rotation.z) +
+          '</div></details>' +
         '<div class="r3d-footer">' +
           '<button type="button" class="r3d-download" data-role="download">Save Frame</button>' +
         '</div>';
@@ -296,16 +310,20 @@
       });
     });
     this.host.querySelectorAll('[data-mode]').forEach((button) => {
-      button.addEventListener('click', () => {
-        this.mode = button.dataset.mode;
-        this.host.querySelectorAll('[data-mode]').forEach((candidate) => {
-          candidate.classList.toggle('active', candidate.dataset.mode === this.mode);
-        });
-      });
+      button.addEventListener('click', () => this.setMode(button.dataset.mode));
     });
     this.host.querySelector('[data-role="download"]').addEventListener(
         'click', () => this.download()
     );
+  };
+
+  Sim3DPanel.prototype.setMode = function (mode) {
+    this.mode = mode === 'interact' ? 'interact' : 'pose';
+    const selector = '[data-mode], [data-stage-mode]';
+    document.querySelectorAll(selector).forEach((candidate) => {
+      const value = candidate.dataset.mode || candidate.dataset.stageMode;
+      candidate.classList.toggle('active', value === this.mode);
+    });
   };
 
   Sim3DPanel.prototype.outputSize = function () {

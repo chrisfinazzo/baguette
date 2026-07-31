@@ -843,9 +843,8 @@
      this compact glass card only carries model, variant, and camera
      controls. */
   #simNativeView .render3d-host {
-    position: fixed; top: 68px; left: 20px; z-index: 45;
-    width: min(330px, calc(100vw - 40px));
-    max-height: calc(100dvh - 92px);
+    position: fixed; top: 68px; right: 18px; bottom: 18px; z-index: 45;
+    width: 292px;
     overflow: hidden;
     display: flex; flex-direction: column;
     background: var(--nv-bar-bg);
@@ -856,12 +855,12 @@
     -webkit-backdrop-filter: blur(22px) saturate(1.55);
     color: var(--nv-text);
     opacity: 0; visibility: hidden; pointer-events: none;
-    transform: translateY(-5px) scale(0.985);
+    transform: translateX(12px);
     transition: opacity .16s ease, transform .16s ease, visibility .16s;
   }
-  #simNativeView[data-render3d="open"] .render3d-host {
+  #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .render3d-host {
     opacity: 1; visibility: visible; pointer-events: auto;
-    transform: translateY(0) scale(1);
+    transform: translateX(0);
   }
   #simNativeView .render3d-host-head {
     height: 42px; flex: 0 0 auto;
@@ -875,7 +874,7 @@
   }
   #simNativeView .render3d-host-title svg { color: var(--nv-text-muted); }
   #simNativeView #native3DHost {
-    min-height: 170px; overflow-y: auto; padding: 12px;
+    min-height: 170px; overflow-y: auto; padding: 12px 14px 14px;
   }
   #simNativeView .r3d-live-stage {
     position: relative;
@@ -900,8 +899,35 @@
     max-width: none !important;
     max-height: none !important;
     object-fit: contain;
-    cursor: crosshair;
+    cursor: grab;
   }
+  #simNativeView .r3d-live-canvas:active { cursor: grabbing; }
+  #simNativeView .r3d-stage-tools {
+    position: absolute; left: 14px; bottom: 14px; z-index: 3;
+    display: flex; gap: 4px; padding: 4px;
+    border: 1px solid rgba(15,23,42,.10); border-radius: 11px;
+    background: rgba(255,255,255,.78);
+    box-shadow: 0 8px 24px rgba(15,23,42,.12);
+    backdrop-filter: blur(18px) saturate(1.35);
+  }
+  #simNativeView .r3d-stage-tools button,
+  #simNativeView .r3d-inspector-toggle {
+    border: 0; border-radius: 8px; min-height: 30px; padding: 0 10px;
+    background: transparent; color: #667085;
+    font: 600 11px/1 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .r3d-stage-tools button.active {
+    background: #fff; color: #1d1d1f; box-shadow: 0 1px 4px rgba(15,23,42,.12);
+  }
+  #simNativeView .r3d-inspector-toggle {
+    position: absolute; top: 14px; right: 14px; z-index: 3;
+    display: inline-grid; place-items: center; width: 34px; padding: 0;
+    border: 1px solid rgba(15,23,42,.10);
+    background: rgba(255,255,255,.82); color: #344054;
+    box-shadow: 0 8px 24px rgba(15,23,42,.12);
+    backdrop-filter: blur(18px) saturate(1.35);
+  }
+  #simNativeView[data-render3d-inspector="open"] .r3d-inspector-toggle { display: none; }
   #simNativeView .r3d-live-state {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center; gap: 9px;
@@ -928,6 +954,18 @@
     font: 700 9px/1 ui-monospace, monospace;
     letter-spacing: .05em; text-transform: uppercase;
   }
+  #simNativeView .r3d-advanced {
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .r3d-advanced summary {
+    padding: 10px 2px; color: var(--nv-text-muted); cursor: pointer;
+    font: 600 10.5px/1 -apple-system, sans-serif; list-style: none;
+  }
+  #simNativeView .r3d-advanced summary::after {
+    content: "›"; float: right; transform: rotate(90deg);
+  }
+  #simNativeView .r3d-advanced[open] summary::after { transform: rotate(-90deg); }
+  #simNativeView .r3d-advanced .r3d-advanced-body { padding: 0 2px 11px; }
   #simNativeView .r3d-preview {
     position: relative; height: 190px; overflow: hidden;
     display: grid; place-items: center;
@@ -1029,6 +1067,28 @@
   }
   #simNativeView .r3d-empty strong { color: var(--nv-text); }
   #simNativeView .r3d-error > svg { width: 28px; height: 28px; }
+
+  @media (min-width: 901px) {
+    #simNativeView .device-column { transition: transform .2s ease; }
+    #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .device-column {
+      transform: translateX(-150px);
+    }
+    #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .r3d-live-stage {
+      width: min(900px, calc(100vw - 356px), calc(100dvh - 68px));
+    }
+  }
+  @media (max-width: 900px) {
+    #simNativeView .render3d-host {
+      top: auto; left: 12px; right: 12px; bottom: 12px; width: auto;
+      max-height: min(48dvh, 520px); border-radius: 18px;
+      transform: translateY(14px);
+    }
+    #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .render3d-host {
+      transform: translateY(0);
+    }
+    #simNativeView .render3d-host-head { height: 46px; }
+    #simNativeView #native3DHost { max-height: calc(48dvh - 47px); }
+  }
 
   #simNativeView .status-bar-host .sb-section {
     padding: 10px 0; border-bottom: 1px solid var(--nv-divider);
@@ -1392,12 +1452,13 @@
         </svg>
         Live 3D
       </span>
-      <button class="ico-btn" title="Close live 3D"
-              aria-label="Close live 3D"
-              onclick="window.__nativeToggle3D && window.__nativeToggle3D()">
+      <button class="ico-btn" title="Hide 3D inspector"
+              aria-label="Hide 3D inspector"
+              onclick="window.__nativeToggle3DInspector && window.__nativeToggle3DInspector()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" width="12" height="12">
-          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+             stroke-width="1.8" stroke-linecap="round" width="14" height="14">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
+          <path d="M14 4v16"/>
         </svg>
       </button>
     </header>
