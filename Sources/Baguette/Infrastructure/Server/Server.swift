@@ -27,7 +27,7 @@ import NIOCore
 ///   POST /simulators/:udid/input            → gesture     (TODO)
 ///   GET  /simulators/:udid/screenshot.jpg   → JPEG (?quality=&scale=)
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
-///   WS   /simulators/:udid/stream.3d.mjpeg  → live 3D JPEG frames
+///   WS   /simulators/:udid/stream.3d.:format → live 3D AVCC/MJPEG frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///
 /// Static UI siblings live at the *root* (e.g. `GET /sim-list.js`)
@@ -554,8 +554,8 @@ struct Server: Sendable {
             )
         }
 
-        // Live 3D stream — the simulator screen is mapped onto a persistent
-        // SceneKit model and emitted as one JPEG per binary WS message.
+        // Live 3D streams — SceneKit acts as a Screen decorator, so both
+        // existing codecs consume the same rendered IOSurfaces.
         router.ws(
             "/simulators/:udid/stream.3d.mjpeg",
             shouldUpgrade: trustedWebSocketUpgrade
@@ -572,6 +572,31 @@ struct Server: Sendable {
             }
             await Self.live3DStreamWS(
                 udid: Self.udidParam(context.request),
+                format: .mjpeg,
+                options: options,
+                simulators: simulators,
+                models: models,
+                inbound: inbound,
+                outbound: outbound
+            )
+        }
+        router.ws(
+            "/simulators/:udid/stream.3d.avcc",
+            shouldUpgrade: trustedWebSocketUpgrade
+        ) { [simulators, models] inbound, outbound, context in
+            var query: [String: [String]] = [:]
+            for pair in context.request.uri.queryParameters {
+                query[String(pair.key), default: []].append(String(pair.value))
+            }
+            guard let options = try? Device3DStreamOptions.parse(query) else {
+                try? await outbound.write(.text(
+                    #"{"ok":false,"error":"invalid live 3D stream options"}"#
+                ))
+                return
+            }
+            await Self.live3DStreamWS(
+                udid: Self.udidParam(context.request),
+                format: .avcc,
                 options: options,
                 simulators: simulators,
                 models: models,
@@ -1138,6 +1163,10 @@ struct Server: Sendable {
         )
     }
 
+    static func live3DFormat(pathExtension: String) -> StreamFormat? {
+        StreamFormat(rawValue: pathExtension)
+    }
+
     static func model3DJSONString(
         udid: String,
         simulators: any Simulators,
@@ -1327,6 +1356,7 @@ struct Server: Sendable {
     /// graceful behaviour the stdin control channel has.
     private static func live3DStreamWS(
         udid: String,
+        format: StreamFormat,
         options: Device3DStreamOptions,
         simulators: any Simulators,
         models: any DeviceModels,
@@ -1354,13 +1384,13 @@ struct Server: Sendable {
             return
         }
 
-        let sink = WebSocketFrameSink(outbound: outbound, format: .mjpeg)
-        let stream = Live3DStream(
+        let sink = WebSocketFrameSink(outbound: outbound, format: format)
+        let stream = format.makeStream(
             config: .default.with(fps: 20),
             sink: sink,
-            scene: scene
+            quality: 0.7
         )
-        let screen = sim.screen()
+        let screen = RenderedScreen(source: sim.screen(), scene: scene)
         let input = sim.input()
         let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
@@ -1374,7 +1404,6 @@ struct Server: Sendable {
         }
         defer {
             stream.stop()
-            screen.stop()
         }
 
         do {

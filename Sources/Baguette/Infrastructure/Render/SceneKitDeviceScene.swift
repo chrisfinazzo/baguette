@@ -11,7 +11,6 @@ import SceneKit
 /// updated.
 final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
     private let plan: DeviceRenderPlan
-    private let quality: Double
     private let scene: SCNScene
     private let screenNode: SCNNode
     private let renderer: SCNRenderer
@@ -21,11 +20,10 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
 
     init(
         plan: DeviceRenderPlan,
-        quality: Double,
+        quality _: Double = 0.7,
         assets: VerifiedDeviceAssets = VerifiedDeviceAssets()
     ) throws {
         self.plan = plan
-        self.quality = quality
         scratch = FileManager.default.temporaryDirectory
             .appending(path: "baguette-live-3d-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -121,7 +119,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
         try? FileManager.default.removeItem(at: scratch)
     }
 
-    func render(screen surface: IOSurface) throws -> Data {
+    func render(screen surface: IOSurface) throws -> IOSurface {
         try lock.withLock {
             let sourceImage = try image(from: surface)
             let texture = Self.fittedTexture(
@@ -142,16 +140,52 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
                 ),
                 antialiasingMode: .multisampling4X
             )
-            guard let tiff = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff),
-                  let jpeg = bitmap.representation(
-                    using: .jpeg,
-                    properties: [.compressionFactor: quality]
-                  ) else {
-                throw DeviceModelError.renderFailed
-            }
-            return jpeg
+            return try Self.surface(from: image, size: plan.outputSize)
         }
+    }
+
+    private static func surface(
+        from image: NSImage,
+        size: RenderDimensions
+    ) throws -> IOSurface {
+        var proposed = NSRect(
+            x: 0, y: 0,
+            width: size.width,
+            height: size.height
+        )
+        guard let cgImage = image.cgImage(
+            forProposedRect: &proposed,
+            context: nil,
+            hints: nil
+        ), let surface = IOSurfaceCreate([
+            kIOSurfaceWidth: size.width,
+            kIOSurfaceHeight: size.height,
+            kIOSurfaceBytesPerElement: 4,
+            kIOSurfaceBytesPerRow: size.width * 4,
+            kIOSurfaceAllocSize: size.width * size.height * 4,
+            kIOSurfacePixelFormat: UInt32(0x42475241),
+        ] as CFDictionary) else {
+            throw DeviceModelError.renderFailed
+        }
+        IOSurfaceLock(surface, [], nil)
+        defer { IOSurfaceUnlock(surface, [], nil) }
+        guard let context = CGContext(
+            data: IOSurfaceGetBaseAddress(surface),
+            width: size.width,
+            height: size.height,
+            bitsPerComponent: 8,
+            bytesPerRow: IOSurfaceGetBytesPerRow(surface),
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue
+                | CGImageAlphaInfo.premultipliedFirst.rawValue
+        ) else {
+            throw DeviceModelError.renderFailed
+        }
+        context.draw(
+            cgImage,
+            in: CGRect(x: 0, y: 0, width: size.width, height: size.height)
+        )
+        return surface
     }
 
     private func image(from surface: IOSurface) throws -> NSImage {

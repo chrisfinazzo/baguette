@@ -1,5 +1,4 @@
 import Foundation
-import ImageIO
 import IOSurface
 import SceneKit
 import Testing
@@ -7,7 +6,7 @@ import Testing
 
 @Suite("SceneKitDeviceScene")
 struct SceneKitDeviceSceneTests {
-    @Test func `successive simulator surfaces produce live JPEG frames`() throws {
+    @Test func `successive simulator surfaces produce codec-ready BGRA frames`() throws {
         let scratch = FileManager.default.temporaryDirectory
             .appending(path: "baguette-live-scene-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -18,12 +17,12 @@ struct SceneKitDeviceSceneTests {
         let red = try #require(Self.surface(red: 255, green: 0, blue: 0))
         let scene = try SceneKitDeviceScene(plan: plan, quality: 0.75)
 
-        let blueJPEG = try scene.render(screen: blue)
-        let redJPEG = try scene.render(screen: red)
+        let blueFrame = try scene.render(screen: blue)
+        let redFrame = try scene.render(screen: red)
 
-        #expect(Array(blueJPEG.prefix(2)) == [0xff, 0xd8])
-        #expect(blueJPEG != redJPEG)
-        #expect(try Self.dimensions(blueJPEG) == RenderDimensions(width: 320, height: 240))
+        #expect(IOSurfaceGetWidth(blueFrame) == 320)
+        #expect(IOSurfaceGetHeight(blueFrame) == 240)
+        #expect(Self.bytes(blueFrame) != Self.bytes(redFrame))
     }
 }
 
@@ -99,14 +98,12 @@ private extension SceneKitDeviceSceneTests {
         return surface
     }
 
-    static func dimensions(_ jpeg: Data) throws -> RenderDimensions {
-        let source = try #require(CGImageSourceCreateWithData(jpeg as CFData, nil))
-        let properties = try #require(
-            CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
-        )
-        return RenderDimensions(
-            width: try #require(properties[kCGImagePropertyPixelWidth] as? Int),
-            height: try #require(properties[kCGImagePropertyPixelHeight] as? Int)
+    static func bytes(_ surface: IOSurface) -> Data {
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        return Data(
+            bytes: IOSurfaceGetBaseAddress(surface),
+            count: IOSurfaceGetAllocSize(surface)
         )
     }
 }

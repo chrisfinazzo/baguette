@@ -120,6 +120,12 @@ struct Render3DRoutesTests {
             )
         }
     }
+
+    @Test func `live 3D route accepts both existing stream codecs`() {
+        #expect(Server.live3DFormat(pathExtension: "mjpeg") == .mjpeg)
+        #expect(Server.live3DFormat(pathExtension: "avcc") == .avcc)
+        #expect(Server.live3DFormat(pathExtension: "png") == nil)
+    }
 }
 
 private extension Render3DRoutesTests {

@@ -8,6 +8,7 @@ import Mockable
 @Mockable
 protocol DeviceScene: AnyObject, Sendable {
     /// Replace the device screen with the supplied simulator surface and
-    /// return one JPEG of the composed 3D scene.
-    func render(screen: IOSurface) throws -> Data
+    /// return the composed 3D scene as a BGRA surface. Keeping the result
+    /// unencoded lets any existing stream codec consume it.
+    func render(screen: IOSurface) throws -> IOSurface
 }
