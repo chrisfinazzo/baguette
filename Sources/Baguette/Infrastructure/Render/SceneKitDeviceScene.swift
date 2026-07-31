@@ -10,11 +10,6 @@ import SceneKit
 /// happen once. Per simulator frame only the screen texture and snapshot are
 /// updated.
 final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
-    private struct RenderTarget {
-        let surface: IOSurface
-        let texture: any MTLTexture
-    }
-
     private let plan: DeviceRenderPlan
     private let scene: SCNScene
     private let screenNode: SCNNode
@@ -25,8 +20,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
     private let metalDevice: any MTLDevice
     private let commandQueue: any MTLCommandQueue
     private let depthTexture: any MTLTexture
-    private let renderTargets: [RenderTarget]
-    private var nextRenderTarget = 0
+    private let renderTargets: MetalRenderTargetRing
     private let scratch: URL
     private let lock = NSLock()
 
@@ -128,8 +122,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             }
             metalDevice = device
             commandQueue = queue
-            renderTargets = try Self.makeRenderTargets(
-                count: 3,
+            renderTargets = try MetalRenderTargetRing(
                 width: plan.outputSize.width,
                 height: plan.outputSize.height,
                 device: device
@@ -208,8 +201,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
     private func renderSurface() throws -> IOSurface {
         let width = plan.outputSize.width
         let height = plan.outputSize.height
-        let target = renderTargets[nextRenderTarget]
-        nextRenderTarget = (nextRenderTarget + 1) % renderTargets.count
+        let target = renderTargets.next()
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             throw DeviceModelError.renderFailed
         }
@@ -233,46 +225,8 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
         guard commandBuffer.status == .completed else {
             throw DeviceModelError.renderFailed
         }
-        // Publish the completed Metal write before synchronous JPEG and
-        // asynchronous VideoToolbox consumers read this IOSurface.
-        IOSurfaceLock(target.surface, [], nil)
-        IOSurfaceUnlock(target.surface, [], nil)
+        target.publish()
         return target.surface
-    }
-
-    private static func makeRenderTargets(
-        count: Int,
-        width: Int,
-        height: Int,
-        device: any MTLDevice
-    ) throws -> [RenderTarget] {
-        let bytesPerRow = ((width * 4 + 63) / 64) * 64
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm_srgb,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        descriptor.storageMode = .shared
-        descriptor.usage = [.renderTarget, .shaderRead]
-        return try (0..<count).map { _ in
-            guard let surface = IOSurfaceCreate([
-                kIOSurfaceWidth: width,
-                kIOSurfaceHeight: height,
-                kIOSurfaceBytesPerElement: 4,
-                kIOSurfaceBytesPerRow: bytesPerRow,
-                kIOSurfaceAllocSize: bytesPerRow * height,
-                kIOSurfacePixelFormat: UInt32(0x42475241),
-            ] as CFDictionary),
-            let texture = device.makeTexture(
-                descriptor: descriptor,
-                iosurface: surface,
-                plane: 0
-            ) else {
-                throw DeviceModelError.renderFailed
-            }
-            return RenderTarget(surface: surface, texture: texture)
-        }
     }
 
     func update(camera requested: Device3DCamera) {
