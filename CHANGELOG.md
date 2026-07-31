@@ -34,8 +34,13 @@ For releases prior to this changelog, see the
   viewport as the 2D simulator without a separate rounded card, and its opaque
   MJPEG/H.264 frame background follows the active page theme.
 - **Reliable 3D stage input.** Pose, Interact, and Reset no longer enter the
-  canvas gesture path, while guarded canvas pointer capture makes rotation
-  consistent across mouse, pen, and touch browsers.
+  canvas gesture path, while guarded canvas pointer capture keeps model and
+  simulator gestures separate from stage controls.
+- **One 2D/3D browser stream pipeline.** Live 3D now supplies its custom URL and
+  controls to the same `StreamSession` as 2D, removing its duplicate WebSocket,
+  decoder, FPS, and canvas-paint implementation. AVCC and MJPEG now have one
+  lifecycle and latest-frame compositor path across Chrome, Safari, and
+  embedded browsers.
 
 ---
 

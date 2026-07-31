@@ -6,11 +6,9 @@
     this.host = null;
     this.stage = null;
     this.canvas = null;
-    this.context = null;
     this.udid = '';
     this.model = null;
-    this.socket = null;
-    this.decoder = null;
+    this.session = null;
     this.format = 'mjpeg';
     this.background = '#f1f3f6';
     this.rotation = { x: -8, y: 18, z: 0 };
@@ -19,8 +17,6 @@
     this.variants = {};
     this.deviceSize = { width: 1, height: 1 };
     this.onFps = null;
-    this.frames = 0;
-    this.fpsStarted = 0;
     this.pointer = null;
     this.restartTimer = null;
     this.cameraFrame = 0;
@@ -76,7 +72,6 @@
           '<span class="r3d-spinner"></span><span>Loading model…</span>' +
         '</div>';
     this.canvas = this.stage.querySelector('canvas');
-    this.context = this.canvas.getContext('2d', { alpha: false });
     this.canvas.addEventListener('pointerdown', (event) => this.pointerDown(event));
     this.canvas.addEventListener('pointermove', (event) => this.pointerMove(event));
     this.canvas.addEventListener('pointerup', (event) => this.pointerUp(event));
@@ -97,8 +92,6 @@
   Sim3DPanel.prototype.start = function () {
     this.stop();
     if (!this.canvas || !this.model) return;
-    this.frames = 0;
-    this.fpsStarted = 0;
     const generation = ++this.generation;
     const size = this.outputSize();
     const params = new URLSearchParams({
@@ -114,40 +107,50 @@
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const path = '/simulators/' + encodeURIComponent(this.udid) +
         '/stream.3d.' + this.format + '?' + params.toString();
-    const socket = new WebSocket(scheme + '//' + location.host + path);
-    socket.binaryType = 'arraybuffer';
-    this.socket = socket;
-    this.decoder = window.FrameDecoder.create(this.format, {
-      onFrame: (frame) => this.paint(frame, generation),
+    this.setState('Loading model…', true);
+    this.session = new window.StreamSession({
+      udid: this.udid,
+      format: this.format,
+      canvas: this.canvas,
+      url: scheme + '//' + location.host + path,
+      onFps: (fps) => {
+        if (generation === this.generation && this.onFps && fps > 0) {
+          this.onFps(fps);
+        }
+      },
       onLog: (message, error) => {
         if (error && generation === this.generation) {
           this.setState(message || '3D decode failed', false, true);
         }
       },
-    });
-    this.setState('Loading model…', true);
-    socket.addEventListener('open', () => {
-      this.setState('Waiting for frame…', true);
-      this.sendCamera();
-    });
-    socket.addEventListener('message', (event) => {
-      if (generation !== this.generation) return;
-      if (typeof event.data === 'string') {
-        let envelope = null;
-        try { envelope = JSON.parse(event.data); } catch (_) {}
-        if (envelope && envelope.error) this.setState(envelope.error, false, true);
-      }
-      this.decoder.feed(event);
-    });
-    socket.addEventListener('close', () => {
-      if (generation === this.generation && this.canvas &&
+      onText: (envelope) => {
+        if (envelope && envelope.error && generation === this.generation) {
+          this.setState(envelope.error, false, true);
+          return true;
+        }
+        return false;
+      },
+      onOpen: () => {
+        if (generation !== this.generation) return;
+        this.setState('Waiting for frame…', true);
+        this.sendCamera();
+      },
+      onPaint: () => {
+        if (generation === this.generation) this.setState('', false);
+      },
+      onClose: () => {
+        if (generation === this.generation && this.canvas &&
           !this.canvas.hasAttribute('data-painted')) {
-        this.setState('3D stream disconnected', false, true);
-      }
+          this.setState('3D stream disconnected', false, true);
+        }
+      },
+      onError: () => {
+        if (generation === this.generation) {
+          this.setState('3D stream failed', false, true);
+        }
+      },
     });
-    socket.addEventListener('error', () => {
-      if (generation === this.generation) this.setState('3D stream failed', false, true);
-    });
+    this.session.start();
   };
 
   Sim3DPanel.prototype.stop = function () {
@@ -156,31 +159,8 @@
     this.restartTimer = null;
     if (this.cameraFrame) cancelAnimationFrame(this.cameraFrame);
     this.cameraFrame = 0;
-    if (this.socket) {
-      try { this.socket.close(); } catch (_) {}
-    }
-    this.socket = null;
-    if (this.decoder) {
-      this.decoder.dispose();
-      this.decoder = null;
-    }
-  };
-
-  Sim3DPanel.prototype.paint = function (frame, generation) {
-    if (generation !== this.generation || !this.canvas) {
-      if (frame && typeof frame.close === 'function') frame.close();
-      return;
-    }
-    const width = frame.displayWidth || frame.width;
-    const height = frame.displayHeight || frame.height;
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
-    }
-    this.context.drawImage(frame, 0, 0);
-    if (typeof frame.close === 'function') frame.close();
-    this.setState('', false);
-    this.countFrame();
+    if (this.session) this.session.stop();
+    this.session = null;
   };
 
   Sim3DPanel.prototype.setFormat = function (format) {
@@ -205,15 +185,10 @@
     this.host = null;
     this.stage = null;
     this.canvas = null;
-    this.context = null;
   };
 
   Sim3DPanel.prototype.send = function (payload) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(payload));
-      return true;
-    }
-    return false;
+    return !!(this.session && this.session.send(payload));
   };
 
   Sim3DPanel.prototype.scheduleRestart = function (delay) {
@@ -356,23 +331,6 @@
     const spinner = state.querySelector('.r3d-spinner');
     if (spinner) spinner.hidden = !busy;
     if (!message && this.canvas) this.canvas.setAttribute('data-painted', '');
-  };
-
-  Sim3DPanel.prototype.countFrame = function () {
-    const now = performance.now();
-    if (!this.fpsStarted || now - this.fpsStarted > 2000) {
-      this.fpsStarted = now;
-      this.frames = 1;
-      return;
-    }
-    this.frames += 1;
-    const elapsed = now - this.fpsStarted;
-    if (elapsed >= 1000) {
-      const fps = Math.round(this.frames * 1000 / elapsed);
-      if (this.onFps && fps > 0) this.onFps(fps);
-      this.frames = 0;
-      this.fpsStarted = now;
-    }
   };
 
   Sim3DPanel.prototype.pointerDown = function (event) {

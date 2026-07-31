@@ -5,10 +5,12 @@
 //
 //   const session = new StreamSession({
 //     udid, format, version,
+//     url,                    // optional custom stream WebSocket URL
 //     canvas,
 //     onSize: (w, h) => …,    // first frame + on resize
 //     onFps:  (fps) => …,     // every second
 //     onLog:  (msg, isErr) => …,
+//     onOpen, onClose, onError, onPaint,
 //   });
 //   session.start();
 //   // …
@@ -31,11 +33,14 @@
   }
 
   StreamSession.prototype.start = function () {
-    const { udid, format, version, canvas, onSize, onFps, onLog, onText } = this.opts;
+    const {
+      udid, format, version, canvas, url,
+      onSize, onFps, onLog, onText, onOpen, onClose, onError, onPaint,
+    } = this.opts;
     const ctx = canvas.getContext('2d');
     const log = onLog || (() => {});
 
-    const wsUrl = buildWSUrl(udid, format, version || 'v2');
+    const wsUrl = url || buildWSUrl(udid, format, version || 'v2');
     const socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';
     this.ws = socket;
@@ -49,7 +54,9 @@
     this.send = (payload) => {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(payload));
+        return true;
       }
+      return false;
     };
 
     this.decoder = window.FrameDecoder.create(format, {
@@ -62,7 +69,10 @@
       onLog: log,
     });
 
-    socket.onopen    = () => log('WS connected');
+    socket.onopen    = () => {
+      log('WS connected');
+      if (onOpen) onOpen();
+    };
     // Text frames piggyback alongside binary video on the same WS
     // (describe_ui_result, server-pushed errors, …). Give callers
     // first crack at parsed JSON; if their hook returns truthy the
@@ -75,8 +85,16 @@
       }
       this.decoder.feed(e);
     };
-    socket.onclose   = () => { log('WS disconnected'); this.alive = false; this.ws = null; };
-    socket.onerror   = () => log('WS error', true);
+    socket.onclose   = () => {
+      log('WS disconnected');
+      this.alive = false;
+      this.ws = null;
+      if (onClose) onClose();
+    };
+    socket.onerror   = () => {
+      log('WS error', true);
+      if (onError) onError();
+    };
 
     const paint = () => {
       if (!this.alive) return;
@@ -93,6 +111,7 @@
         ctx.drawImage(f, 0, 0);
         if (typeof f.close === 'function') { try { f.close(); } catch {} }
         this.frameCount++;
+        if (onPaint) onPaint(w, h);
       }
       this.rafId = requestAnimationFrame(paint);
     };
