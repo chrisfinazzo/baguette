@@ -1,7 +1,7 @@
 import AppKit
-import CoreImage
 import Foundation
 import IOSurface
+import Metal
 import SceneKit
 
 /// Persistent SceneKit adapter for one live 3D stream connection.
@@ -13,9 +13,14 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
     private let plan: DeviceRenderPlan
     private let scene: SCNScene
     private let screenNode: SCNNode
+    private let wrapperNode: SCNNode
+    private let camera: SCNCamera
+    private let baseCameraScale: Double
     private let renderer: SCNRenderer
+    private let metalDevice: any MTLDevice
+    private let commandQueue: any MTLCommandQueue
+    private let depthTexture: any MTLTexture
     private let scratch: URL
-    private let ciContext = CIContext()
     private let lock = NSLock()
 
     init(
@@ -69,6 +74,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             subject.removeFromParentNode()
             wrapper.addChildNode(subject)
             output.rootNode.addChildNode(wrapper)
+            wrapperNode = wrapper
             wrapper.eulerAngles = SCNVector3(
                 Self.radians(plan.rotation.x),
                 Self.radians(plan.rotation.y),
@@ -94,6 +100,8 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             let camera = SCNCamera()
             camera.usesOrthographicProjection = true
             camera.orthographicScale = max(height, width / aspect) * 0.59
+            baseCameraScale = camera.orthographicScale
+            self.camera = camera
             camera.zNear = 0.001
             camera.zFar = max(1000, depth * 100)
             let cameraNode = SCNNode()
@@ -105,7 +113,26 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             Self.addLights(to: output)
             scene = output
 
-            let sceneRenderer = SCNRenderer(device: nil, options: nil)
+            guard let device = MTLCreateSystemDefaultDevice(),
+                  let queue = device.makeCommandQueue() else {
+                throw DeviceModelError.renderFailed
+            }
+            metalDevice = device
+            commandQueue = queue
+            let depthDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .depth32Float,
+                width: plan.outputSize.width,
+                height: plan.outputSize.height,
+                mipmapped: false
+            )
+            depthDescriptor.storageMode = .private
+            depthDescriptor.usage = .renderTarget
+            guard let depthTexture = device.makeTexture(descriptor: depthDescriptor) else {
+                throw DeviceModelError.renderFailed
+            }
+            self.depthTexture = depthTexture
+
+            let sceneRenderer = SCNRenderer(device: device, options: nil)
             sceneRenderer.scene = output
             sceneRenderer.pointOfView = cameraNode
             renderer = sceneRenderer
@@ -121,86 +148,138 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
 
     func render(screen surface: IOSurface) throws -> IOSurface {
         try lock.withLock {
-            let sourceImage = try image(from: surface)
-            let texture = Self.fittedTexture(
-                sourceImage,
-                target: plan.model.definition.scene.textureSize,
-                fit: plan.fit
-            )
+            let texture = try inputTexture(from: surface)
             Self.replaceMaterial(
                 on: screenNode,
                 named: plan.model.definition.scene.screenMaterial,
-                texture: texture
-            )
-            let image = renderer.snapshot(
-                atTime: 0,
-                with: CGSize(
-                    width: plan.outputSize.width,
-                    height: plan.outputSize.height
+                texture: texture,
+                source: RenderDimensions(
+                    width: IOSurfaceGetWidth(surface),
+                    height: IOSurfaceGetHeight(surface)
                 ),
-                antialiasingMode: .multisampling4X
+                target: plan.model.definition.scene.textureSize,
+                fit: plan.fit
             )
-            return try Self.surface(from: image, size: plan.outputSize)
+            return try renderSurface()
         }
     }
 
-    private static func surface(
-        from image: NSImage,
-        size: RenderDimensions
-    ) throws -> IOSurface {
-        var proposed = NSRect(
-            x: 0, y: 0,
-            width: size.width,
-            height: size.height
+    private func inputTexture(from surface: IOSurface) throws -> any MTLTexture {
+        let width = IOSurfaceGetWidth(surface)
+        let height = IOSurfaceGetHeight(surface)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
         )
-        guard let cgImage = image.cgImage(
-            forProposedRect: &proposed,
-            context: nil,
-            hints: nil
-        ), let surface = IOSurfaceCreate([
-            kIOSurfaceWidth: size.width,
-            kIOSurfaceHeight: size.height,
+        descriptor.storageMode = .shared
+        descriptor.usage = .shaderRead
+        guard let texture = metalDevice.makeTexture(descriptor: descriptor) else {
+            throw DeviceModelError.screenImageInvalid
+        }
+        IOSurfaceLock(surface, .readOnly, nil)
+        texture.replace(
+            region: MTLRegionMake2D(0, 0, width, height),
+            mipmapLevel: 0,
+            withBytes: IOSurfaceGetBaseAddress(surface),
+            bytesPerRow: IOSurfaceGetBytesPerRow(surface)
+        )
+        IOSurfaceUnlock(surface, .readOnly, nil)
+        return texture
+    }
+
+    private func renderSurface() throws -> IOSurface {
+        let width = plan.outputSize.width
+        let height = plan.outputSize.height
+        let bytesPerRow = ((width * 4 + 63) / 64) * 64
+        guard let surface = IOSurfaceCreate([
+            kIOSurfaceWidth: width,
+            kIOSurfaceHeight: height,
             kIOSurfaceBytesPerElement: 4,
-            kIOSurfaceBytesPerRow: size.width * 4,
-            kIOSurfaceAllocSize: size.width * size.height * 4,
+            kIOSurfaceBytesPerRow: bytesPerRow,
+            kIOSurfaceAllocSize: bytesPerRow * height,
             kIOSurfacePixelFormat: UInt32(0x42475241),
         ] as CFDictionary) else {
             throw DeviceModelError.renderFailed
         }
-        IOSurfaceLock(surface, [], nil)
-        defer { IOSurfaceUnlock(surface, [], nil) }
-        guard let context = CGContext(
-            data: IOSurfaceGetBaseAddress(surface),
-            width: size.width,
-            height: size.height,
-            bitsPerComponent: 8,
-            bytesPerRow: IOSurfaceGetBytesPerRow(surface),
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue
-                | CGImageAlphaInfo.premultipliedFirst.rawValue
-        ) else {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.storageMode = .shared
+        descriptor.usage = [.renderTarget, .shaderRead]
+        guard let output = metalDevice.makeTexture(
+            descriptor: descriptor,
+            iosurface: surface,
+            plane: 0
+        ), let commandBuffer = commandQueue.makeCommandBuffer() else {
             throw DeviceModelError.renderFailed
         }
-        context.draw(
-            cgImage,
-            in: CGRect(x: 0, y: 0, width: size.width, height: size.height)
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = output
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        pass.colorAttachments[0].clearColor = Self.clearColor(plan.background)
+        pass.depthAttachment.texture = depthTexture
+        pass.depthAttachment.loadAction = .clear
+        pass.depthAttachment.storeAction = .dontCare
+        pass.depthAttachment.clearDepth = 1
+        renderer.render(
+            atTime: 0,
+            viewport: CGRect(x: 0, y: 0, width: width, height: height),
+            commandBuffer: commandBuffer,
+            passDescriptor: pass
         )
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        guard commandBuffer.status == .completed else {
+            throw DeviceModelError.renderFailed
+        }
         return surface
     }
 
-    private func image(from surface: IOSurface) throws -> NSImage {
-        let width = IOSurfaceGetWidth(surface)
-        let height = IOSurfaceGetHeight(surface)
-        let ciImage = CIImage(ioSurface: surface)
-        guard let cgImage = ciContext.createCGImage(
-            ciImage,
-            from: CGRect(x: 0, y: 0, width: width, height: height)
-        ) else {
-            throw DeviceModelError.screenImageInvalid
+    var projection: DeviceScreenProjection {
+        lock.withLock { makeProjection() }
+    }
+
+    @discardableResult
+    func update(camera requested: Device3DCamera) -> DeviceScreenProjection {
+        lock.withLock {
+            wrapperNode.eulerAngles = SCNVector3(
+                Self.radians(requested.rotation.x),
+                Self.radians(requested.rotation.y),
+                Self.radians(requested.rotation.z)
+            )
+            camera.orthographicScale = baseCameraScale / requested.zoom
+            return makeProjection()
         }
-        return NSImage(
-            cgImage: cgImage,
-            size: NSSize(width: width, height: height)
+    }
+
+    private func makeProjection() -> DeviceScreenProjection {
+        let bounds = screenNode.boundingBox
+        let min = bounds.min
+        let max = bounds.max
+        let local = [
+            SCNVector3(min.x, max.y, max.z),
+            SCNVector3(max.x, max.y, max.z),
+            SCNVector3(max.x, min.y, max.z),
+            SCNVector3(min.x, min.y, max.z),
+        ]
+        let points = local.map { point -> DeviceScreenPoint in
+            let world = screenNode.convertPosition(point, to: nil)
+            let projected = renderer.projectPoint(world)
+            return DeviceScreenPoint(
+                x: Double(projected.x),
+                y: Double(plan.outputSize.height) - Double(projected.y)
+            )
+        }
+        return DeviceScreenProjection(
+            viewport: plan.outputSize,
+            device: plan.model.definition.scene.textureSize,
+            corners: points
         )
     }
 
@@ -271,7 +350,10 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
     private static func replaceMaterial(
         on node: SCNNode,
         named name: String,
-        texture: NSImage
+        texture: any MTLTexture,
+        source: RenderDimensions,
+        target: RenderDimensions,
+        fit: DeviceScreenFit
     ) {
         guard let geometry = node.geometry else { return }
         geometry.materials = geometry.materials.map { existing in
@@ -280,50 +362,55 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
             material.name = existing.name
             material.diffuse.contents = texture
             material.emission.contents = texture
+            let transform = textureTransform(source: source, target: target, fit: fit)
+            material.diffuse.contentsTransform = transform
+            material.emission.contentsTransform = transform
+            material.diffuse.wrapS = .clamp
+            material.diffuse.wrapT = .clamp
+            material.emission.wrapS = .clamp
+            material.emission.wrapT = .clamp
             material.emission.intensity = 1
             material.lightingModel = .constant
             return material
         }
     }
 
-    private static func fittedTexture(
-        _ source: NSImage,
+    private static func textureTransform(
+        source: RenderDimensions,
         target: RenderDimensions,
         fit: DeviceScreenFit
-    ) -> NSImage {
-        let targetSize = NSSize(width: target.width, height: target.height)
-        let output = NSImage(size: targetSize)
-        output.lockFocus()
-        NSColor.black.setFill()
-        NSBezierPath(rect: NSRect(origin: .zero, size: targetSize)).fill()
-        let sourceSize = source.size
-        let destination: NSRect
-        switch fit {
-        case .stretch:
-            destination = NSRect(origin: .zero, size: targetSize)
-        case .cover, .contain:
-            let scaleX = targetSize.width / sourceSize.width
-            let scaleY = targetSize.height / sourceSize.height
-            let scale = fit == .cover ? max(scaleX, scaleY) : min(scaleX, scaleY)
-            let size = NSSize(
-                width: sourceSize.width * scale,
-                height: sourceSize.height * scale
-            )
-            destination = NSRect(
-                x: (targetSize.width - size.width) / 2,
-                y: (targetSize.height - size.height) / 2,
-                width: size.width,
-                height: size.height
-            )
+    ) -> SCNMatrix4 {
+        guard fit != .stretch else { return SCNMatrix4Identity }
+        let sourceAspect = Double(source.width) / Double(source.height)
+        let targetAspect = Double(target.width) / Double(target.height)
+        var scaleX = 1.0
+        var scaleY = 1.0
+        if (fit == .cover) == (sourceAspect > targetAspect) {
+            scaleX = targetAspect / sourceAspect
+        } else {
+            scaleY = sourceAspect / targetAspect
         }
-        source.draw(
-            in: destination,
-            from: NSRect(origin: .zero, size: sourceSize),
-            operation: .copy,
-            fraction: 1
+        let translation = SCNMatrix4MakeTranslation(
+            CGFloat((1 - scaleX) / 2),
+            CGFloat((1 - scaleY) / 2),
+            0
         )
-        output.unlockFocus()
-        return output
+        return SCNMatrix4Mult(
+            SCNMatrix4MakeScale(CGFloat(scaleX), CGFloat(scaleY), 1),
+            translation
+        )
+    }
+
+    private static func clearColor(
+        _ background: DeviceRenderBackground
+    ) -> MTLClearColor {
+        let color = backgroundColor(background).usingColorSpace(.deviceRGB) ?? .clear
+        return MTLClearColor(
+            red: color.redComponent,
+            green: color.greenComponent,
+            blue: color.blueComponent,
+            alpha: color.alphaComponent
+        )
     }
 
     private static func backgroundColor(_ background: DeviceRenderBackground) -> NSColor {

@@ -11,4 +11,11 @@ protocol DeviceScene: AnyObject, Sendable {
     /// return the composed 3D scene as a BGRA surface. Keeping the result
     /// unencoded lets any existing stream codec consume it.
     func render(screen: IOSurface) throws -> IOSurface
+
+    /// Current projection of the model's display into output pixels.
+    var projection: DeviceScreenProjection { get }
+
+    /// Mutate camera state without reloading the model or reconnecting.
+    @discardableResult
+    func update(camera: Device3DCamera) -> DeviceScreenProjection
 }
