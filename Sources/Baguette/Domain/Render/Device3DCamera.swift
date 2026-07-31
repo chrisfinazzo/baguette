@@ -35,28 +35,3 @@ struct Device3DCamera: Equatable, Sendable {
         return result.isFinite ? result : nil
     }
 }
-
-struct DeviceScreenPoint: Equatable, Sendable {
-    let x: Double
-    let y: Double
-}
-
-/// Projected display quadrilateral in top-left-origin output pixels.
-///
-/// Corner order is top-left, top-right, bottom-right, bottom-left.
-struct DeviceScreenProjection: Equatable, Sendable {
-    let viewport: RenderDimensions
-    let device: RenderDimensions
-    let corners: [DeviceScreenPoint]
-
-    var json: String {
-        let points = corners.map {
-            #"{"x":\#(Self.number($0.x)),"y":\#(Self.number($0.y))}"#
-        }.joined(separator: ",")
-        return #"{"type":"3d_projection","viewport":{"width":\#(viewport.width),"height":\#(viewport.height)},"device":{"width":\#(device.width),"height":\#(device.height)},"corners":[\#(points)]}"#
-    }
-
-    private static func number(_ value: Double) -> String {
-        String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), value)
-    }
-}

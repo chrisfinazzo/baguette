@@ -46,20 +46,4 @@ struct Device3DCameraTests {
         }
     }
 
-    @Test func `projection serializes ordered screen corners and device size`() {
-        let projection = DeviceScreenProjection(
-            viewport: RenderDimensions(width: 960, height: 720),
-            device: RenderDimensions(width: 402, height: 874),
-            corners: [
-                DeviceScreenPoint(x: 100, y: 50),
-                DeviceScreenPoint(x: 800, y: 70),
-                DeviceScreenPoint(x: 780, y: 650),
-                DeviceScreenPoint(x: 120, y: 640),
-            ]
-        )
-
-        #expect(projection.json.contains(#""type":"3d_projection""#))
-        #expect(projection.json.contains(#""width":402"#))
-        #expect(projection.json.contains(#""x":100"#))
-    }
 }

@@ -1170,12 +1170,13 @@ struct Server: Sendable {
     static func handleLive3DControl(
         line: String,
         scene: any DeviceScene
-    ) throws -> DeviceScreenProjection? {
+    ) throws -> Bool {
         guard let data = line.data(using: .utf8),
               let camera = try Device3DCamera.parsing(json: data) else {
-            return nil
+            return false
         }
-        return scene.update(camera: camera)
+        scene.update(camera: camera)
+        return true
     }
 
     static func model3DJSONString(
@@ -1413,7 +1414,6 @@ struct Server: Sendable {
             ))
             return
         }
-        try? await outbound.write(.text(scene.projection.json))
         defer {
             stream.stop()
         }
@@ -1423,11 +1423,11 @@ struct Server: Sendable {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
                 do {
-                    if let projection = try handleLive3DControl(
+                    if try handleLive3DControl(
                         line: line,
                         scene: scene
                     ) {
-                        try? await outbound.write(.text(projection.json))
+                        screen.refresh()
                         continue
                     }
                 } catch {

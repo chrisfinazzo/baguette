@@ -17,6 +17,7 @@ final class RenderedScreen: Screen, @unchecked Sendable {
     private var delivery: (@Sendable (IOSurface) -> Void)?
     private var isRendering = false
     private var pendingSurface: IOSurface?
+    private var latestSurface: IOSurface?
     private var isStopped = true
 
     init(source: any Screen, scene: any DeviceScene) {
@@ -46,6 +47,7 @@ final class RenderedScreen: Screen, @unchecked Sendable {
         lock.withLock {
             isStopped = true
             pendingSurface = nil
+            latestSurface = nil
             delivery = nil
         }
         source.stop()
@@ -54,6 +56,7 @@ final class RenderedScreen: Screen, @unchecked Sendable {
     private func enqueue(_ surface: IOSurface) {
         let shouldStart = lock.withLock {
             guard !isStopped else { return false }
+            latestSurface = surface
             if isRendering {
                 pendingSurface = surface
                 return false
@@ -63,6 +66,14 @@ final class RenderedScreen: Screen, @unchecked Sendable {
         }
         guard shouldStart else { return }
         queue.async { [weak self] in self?.render(surface) }
+    }
+
+    /// Recompose the retained simulator frame after an in-place pose change.
+    func refresh() {
+        guard let surface = lock.withLock({ isStopped ? nil : latestSurface }) else {
+            return
+        }
+        enqueue(surface)
     }
 
     private func render(_ firstSurface: IOSurface) {

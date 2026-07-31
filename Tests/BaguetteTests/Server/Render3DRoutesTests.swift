@@ -129,19 +129,14 @@ struct Render3DRoutesTests {
 
     @Test func `live camera control mutates the scene without replacing its stream`() throws {
         let scene = MockDeviceScene()
-        let projection = DeviceScreenProjection(
-            viewport: RenderDimensions(width: 960, height: 960),
-            device: RenderDimensions(width: 402, height: 874),
-            corners: []
-        )
-        given(scene).update(camera: .any).willReturn(projection)
+        given(scene).update(camera: .any).willReturn()
 
-        let result = try Server.handleLive3DControl(
+        let handled = try Server.handleLive3DControl(
             line: #"{"type":"set_3d_camera","rotation":{"x":-8,"y":32,"z":0},"zoom":1.2}"#,
             scene: scene
         )
 
-        #expect(result == projection)
+        #expect(handled)
         verify(scene).update(camera: .matching {
             $0.rotation == DeviceRotation(x: -8, y: 32, z: 0)
                 && $0.zoom == 1.2

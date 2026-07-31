@@ -13,6 +13,8 @@
     this.decoder = null;
     this.format = 'mjpeg';
     this.rotation = { x: -8, y: 18, z: 0 };
+    this.zoom = 1;
+    this.mode = 'pose';
     this.variants = {};
     this.deviceSize = { width: 1, height: 1 };
     this.onFps = null;
@@ -20,6 +22,7 @@
     this.fpsStarted = 0;
     this.pointer = null;
     this.restartTimer = null;
+    this.cameraFrame = 0;
     this.generation = 0;
   }
 
@@ -64,8 +67,13 @@
     this.canvas = this.stage.querySelector('canvas');
     this.context = this.canvas.getContext('2d', { alpha: false });
     this.stage.addEventListener('pointerdown', (event) => this.pointerDown(event));
+    this.stage.addEventListener('pointermove', (event) => this.pointerMove(event));
     this.stage.addEventListener('pointerup', (event) => this.pointerUp(event));
     this.stage.addEventListener('pointercancel', () => { this.pointer = null; });
+    this.stage.addEventListener('dblclick', () => this.resetCamera());
+    this.stage.addEventListener('wheel', (event) => this.zoomCamera(event), {
+      passive: false,
+    });
   };
 
   Sim3DPanel.prototype.start = function () {
@@ -100,7 +108,10 @@
       },
     });
     this.setState('Loading model…', true);
-    socket.addEventListener('open', () => this.setState('Waiting for frame…', true));
+    socket.addEventListener('open', () => {
+      this.setState('Waiting for frame…', true);
+      this.sendCamera();
+    });
     socket.addEventListener('message', (event) => {
       if (generation !== this.generation) return;
       if (typeof event.data === 'string') {
@@ -125,6 +136,8 @@
     this.generation += 1;
     if (this.restartTimer) clearTimeout(this.restartTimer);
     this.restartTimer = null;
+    if (this.cameraFrame) cancelAnimationFrame(this.cameraFrame);
+    this.cameraFrame = 0;
     if (this.socket) {
       try { this.socket.close(); } catch (_) {}
     }
@@ -228,6 +241,10 @@
         variants +
         '<section class="r3d-section"><label>Camera</label>' +
           '<div class="r3d-presets">' +
+            '<button type="button" class="r3d-mode active" data-mode="pose">Pose</button>' +
+            '<button type="button" class="r3d-mode" data-mode="interact">Interact</button>' +
+          '</div>' +
+          '<div class="r3d-presets">' +
             '<button type="button" data-preset="-8,18,0">Hero</button>' +
             '<button type="button" data-preset="0,0,0">Front</button>' +
             '<button type="button" data-preset="0,38,0">Side</button>' +
@@ -262,7 +279,7 @@
       range.addEventListener('input', () => {
         this.rotation[range.dataset.axis] = Number(range.value);
         if (output) output.textContent = range.value + '°';
-        this.scheduleRestart(120);
+        this.sendCamera();
       });
     });
     this.host.querySelectorAll('[data-preset]').forEach((button) => {
@@ -275,7 +292,15 @@
           if (range) range.value = String(values[index]);
           if (output) output.textContent = values[index] + '°';
         });
-        this.scheduleRestart(0);
+        this.sendCamera();
+      });
+    });
+    this.host.querySelectorAll('[data-mode]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.mode = button.dataset.mode;
+        this.host.querySelectorAll('[data-mode]').forEach((candidate) => {
+          candidate.classList.toggle('active', candidate.dataset.mode === this.mode);
+        });
       });
     });
     this.host.querySelector('[data-role="download"]').addEventListener(
@@ -325,13 +350,27 @@
   Sim3DPanel.prototype.pointerDown = function (event) {
     if (!this.canvas || !this.canvas.hasAttribute('data-painted')) return;
     this.stage.setPointerCapture(event.pointerId);
-    this.pointer = { x: event.clientX, y: event.clientY, time: performance.now() };
+    this.pointer = {
+      x: event.clientX, y: event.clientY, time: performance.now(),
+      rotation: { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z },
+    };
+  };
+
+  Sim3DPanel.prototype.pointerMove = function (event) {
+    if (!this.pointer || this.mode !== 'pose') return;
+    this.rotation.x = Math.max(-80, Math.min(80,
+        this.pointer.rotation.x + (event.clientY - this.pointer.y) * 0.35));
+    this.rotation.y = Math.max(-180, Math.min(180,
+        this.pointer.rotation.y + (event.clientX - this.pointer.x) * 0.35));
+    this.syncCameraControls();
+    this.sendCamera();
   };
 
   Sim3DPanel.prototype.pointerUp = function (event) {
     if (!this.pointer) return;
     const start = this.pointer;
     this.pointer = null;
+    if (this.mode === 'pose') return;
     const rect = this.canvas.getBoundingClientRect();
     const point = (x, y) => ({
       x: Math.max(0, Math.min(this.deviceSize.width,
@@ -355,6 +394,43 @@
         duration: Math.max(0.1, (performance.now() - start.time) / 1000),
       });
     }
+  };
+
+  Sim3DPanel.prototype.sendCamera = function () {
+    if (this.cameraFrame) return;
+    this.cameraFrame = requestAnimationFrame(() => {
+      this.cameraFrame = 0;
+      this.send({
+        type: 'set_3d_camera',
+        rotation: this.rotation,
+        zoom: this.zoom,
+      });
+    });
+  };
+
+  Sim3DPanel.prototype.syncCameraControls = function () {
+    ['x', 'y', 'z'].forEach((axis) => {
+      const value = Math.round(this.rotation[axis]);
+      const range = this.host && this.host.querySelector('[data-axis="' + axis + '"]');
+      const output = this.host && this.host.querySelector('[data-value="' + axis + '"]');
+      if (range) range.value = String(value);
+      if (output) output.textContent = value + '°';
+    });
+  };
+
+  Sim3DPanel.prototype.resetCamera = function () {
+    this.rotation = { x: 0, y: 0, z: 0 };
+    this.zoom = 1;
+    this.syncCameraControls();
+    this.sendCamera();
+  };
+
+  Sim3DPanel.prototype.zoomCamera = function (event) {
+    if (this.mode !== 'pose') return;
+    event.preventDefault();
+    this.zoom = Math.max(0.5, Math.min(3,
+        this.zoom * Math.exp(-event.deltaY * 0.0015)));
+    this.sendCamera();
   };
 
   Sim3DPanel.prototype.download = function () {

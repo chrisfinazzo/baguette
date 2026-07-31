@@ -12,10 +12,6 @@ protocol DeviceScene: AnyObject, Sendable {
     /// unencoded lets any existing stream codec consume it.
     func render(screen: IOSurface) throws -> IOSurface
 
-    /// Current projection of the model's display into output pixels.
-    var projection: DeviceScreenProjection { get }
-
     /// Mutate camera state without reloading the model or reconnecting.
-    @discardableResult
-    func update(camera: Device3DCamera) -> DeviceScreenProjection
+    func update(camera: Device3DCamera)
 }

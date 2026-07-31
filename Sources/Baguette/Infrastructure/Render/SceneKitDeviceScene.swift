@@ -242,12 +242,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
         return surface
     }
 
-    var projection: DeviceScreenProjection {
-        lock.withLock { makeProjection() }
-    }
-
-    @discardableResult
-    func update(camera requested: Device3DCamera) -> DeviceScreenProjection {
+    func update(camera requested: Device3DCamera) {
         lock.withLock {
             wrapperNode.eulerAngles = SCNVector3(
                 Self.radians(requested.rotation.x),
@@ -255,33 +250,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
                 Self.radians(requested.rotation.z)
             )
             camera.orthographicScale = baseCameraScale / requested.zoom
-            return makeProjection()
         }
-    }
-
-    private func makeProjection() -> DeviceScreenProjection {
-        let bounds = screenNode.boundingBox
-        let min = bounds.min
-        let max = bounds.max
-        let local = [
-            SCNVector3(min.x, max.y, max.z),
-            SCNVector3(max.x, max.y, max.z),
-            SCNVector3(max.x, min.y, max.z),
-            SCNVector3(min.x, min.y, max.z),
-        ]
-        let points = local.map { point -> DeviceScreenPoint in
-            let world = screenNode.convertPosition(point, to: nil)
-            let projected = renderer.projectPoint(world)
-            return DeviceScreenPoint(
-                x: Double(projected.x),
-                y: Double(plan.outputSize.height) - Double(projected.y)
-            )
-        }
-        return DeviceScreenProjection(
-            viewport: plan.outputSize,
-            device: plan.model.definition.scene.textureSize,
-            corners: points
-        )
     }
 
     private static func preparedSceneURL(

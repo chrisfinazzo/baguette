@@ -25,7 +25,7 @@ struct SceneKitDeviceSceneTests {
         #expect(Self.bytes(blueFrame) != Self.bytes(redFrame))
     }
 
-    @Test func `camera updates mutate the persistent scene and projection`() throws {
+    @Test func `camera updates change the next frame without rebuilding the scene`() throws {
         let scratch = FileManager.default.temporaryDirectory
             .appending(path: "baguette-live-camera-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -33,16 +33,18 @@ struct SceneKitDeviceSceneTests {
         try Self.writeScene(to: scratch.appending(path: "device.scn"))
         let scene = try SceneKitDeviceScene(plan: Self.plan(directory: scratch))
 
-        let before = scene.projection
-        let after = scene.update(camera: Device3DCamera(
+        let before = try scene.render(screen: try #require(Self.surface(
+            red: 0, green: 0, blue: 255
+        )))
+        scene.update(camera: Device3DCamera(
             rotation: DeviceRotation(x: 0, y: 40, z: 0),
             zoom: 1.4
         ))
+        let after = try scene.render(screen: try #require(Self.surface(
+            red: 0, green: 0, blue: 255
+        )))
 
-        #expect(after != before)
-        #expect(after.viewport == RenderDimensions(width: 320, height: 240))
-        #expect(after.device == RenderDimensions(width: 100, height: 200))
-        #expect(after.corners.count == 4)
+        #expect(Self.bytes(after) != Self.bytes(before))
     }
 }
 
