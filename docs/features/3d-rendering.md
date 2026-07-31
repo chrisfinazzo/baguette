@@ -310,6 +310,11 @@ pose, zoom, variant, decoder, and stream remain live, and a stage button opens
 the inspector again. The cube toolbar button is the explicit way to leave 3D
 and return to the 2D stream.
 
+The live 3D canvas uses the same full viewport rectangle as the 2D simulator,
+without a separate card, border, radius, or stage shadow. MJPEG and H.264
+frames are opaque, so the browser sends the current light or dark page color
+as the render background and reconnects the 3D stream when the theme changes.
+
 The 3D stage follows an explicit two-mode interaction model:
 
 - **Pose** (default): drag rotates the persistent model, wheel/pinch zooms,

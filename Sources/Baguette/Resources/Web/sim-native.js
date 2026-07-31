@@ -1039,7 +1039,7 @@
           },
         });
       } else if (render3DPanel) {
-        render3DPanel.setBackground(live3DBackground());
+        render3DPanel.background = live3DBackground();
         render3DPanel.start();
       }
     }

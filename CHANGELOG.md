@@ -30,6 +30,9 @@ For releases prior to this changelog, see the
   when its responsive right-inspector/bottom-sheet is hidden. Pose, Interact,
   and Reset stay directly on the stage; exact rotation is grouped under
   Advanced, and the cube toolbar button alone exits 3D mode.
+- **Unified 2D/3D focus stage.** The 3D view now fills the same available
+  viewport as the 2D simulator without a separate rounded card, and its opaque
+  MJPEG/H.264 frame background follows the active page theme.
 
 ---
 
