@@ -160,6 +160,7 @@ final class SceneKitDeviceScene: DeviceScene, @unchecked Sendable {
                 target: plan.model.definition.scene.textureSize,
                 fit: plan.fit
             )
+            SCNTransaction.flush()
             return try renderSurface()
         }
     }

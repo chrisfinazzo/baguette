@@ -51,6 +51,28 @@ struct RenderedScreenTests {
 
         #expect(elapsed < .milliseconds(50))
     }
+
+    @Test func `refresh rerenders the latest simulator surface after camera movement`() throws {
+        let source = MockScreen()
+        let scene = MockDeviceScene()
+        let input = try #require(Self.surface(width: 2, height: 2))
+        let rendered = try #require(Self.surface(width: 4, height: 3))
+        var sourceDelivery: (@Sendable (IOSurface) -> Void)?
+        let renderCount = LockedCount()
+        given(source).start(onFrame: .any).willProduce { sourceDelivery = $0 }
+        given(scene).render(screen: .any).willProduce { _ in
+            renderCount.increment()
+            return rendered
+        }
+        let screen = RenderedScreen(source: source, scene: scene)
+        try screen.start { _ in }
+        sourceDelivery?(input)
+        #expect(Self.waitUntil { renderCount.value == 1 })
+
+        screen.refresh()
+
+        #expect(Self.waitUntil { renderCount.value == 2 })
+    }
 }
 
 private final class LockedSurface: @unchecked Sendable {
@@ -58,6 +80,13 @@ private final class LockedSurface: @unchecked Sendable {
     private var storage: IOSurface?
     var value: IOSurface? { lock.withLock { storage } }
     func set(_ surface: IOSurface) { lock.withLock { storage = surface } }
+}
+
+private final class LockedCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = 0
+    var value: Int { lock.withLock { storage } }
+    func increment() { lock.withLock { storage += 1 } }
 }
 
 private extension RenderedScreenTests {

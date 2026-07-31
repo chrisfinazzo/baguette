@@ -1167,6 +1167,17 @@ struct Server: Sendable {
         StreamFormat(rawValue: pathExtension)
     }
 
+    static func handleLive3DControl(
+        line: String,
+        scene: any DeviceScene
+    ) throws -> DeviceScreenProjection? {
+        guard let data = line.data(using: .utf8),
+              let camera = try Device3DCamera.parsing(json: data) else {
+            return nil
+        }
+        return scene.update(camera: camera)
+    }
+
     static func model3DJSONString(
         udid: String,
         simulators: any Simulators,
@@ -1402,6 +1413,7 @@ struct Server: Sendable {
             ))
             return
         }
+        try? await outbound.write(.text(scene.projection.json))
         defer {
             stream.stop()
         }
@@ -1410,6 +1422,20 @@ struct Server: Sendable {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
+                do {
+                    if let projection = try handleLive3DControl(
+                        line: line,
+                        scene: scene
+                    ) {
+                        try? await outbound.write(.text(projection.json))
+                        continue
+                    }
+                } catch {
+                    try? await outbound.write(.text(
+                        #"{"ok":false,"error":"invalid 3D camera"}"#
+                    ))
+                    continue
+                }
                 if await handleDescribeUI(line: line, sim: sim, outbound: outbound) {
                     continue
                 }
