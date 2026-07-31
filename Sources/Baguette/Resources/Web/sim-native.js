@@ -796,7 +796,12 @@
       if (current === next && (session ||
           (view && view.getAttribute('data-render3d') === 'open'))) return;
       localStorage.setItem('asc.simFormat', next);
-      if (!view || view.getAttribute('data-render3d') !== 'open') startSession(next);
+      reflectFormat(next);
+      if (view && view.getAttribute('data-render3d') === 'open') {
+        if (render3DPanel) render3DPanel.setFormat(next);
+      } else {
+        startSession(next);
+      }
     };
     window.__nativeToggleTheme = () => {
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
@@ -1006,6 +1011,7 @@
         render3DPanel = new window.Sim3DPanel();
         render3DPanel.attach(host, stage, udid, {
           deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
+          format: localStorage.getItem('asc.simFormat') || pickFormat(),
           onFps: (fps) => {
             const status = document.getElementById('nativeStatus');
             if (status) status.textContent = fps + ' fps · 3D';

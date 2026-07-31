@@ -10,6 +10,8 @@
     this.udid = '';
     this.model = null;
     this.socket = null;
+    this.decoder = null;
+    this.format = 'mjpeg';
     this.rotation = { x: -8, y: 18, z: 0 };
     this.variants = {};
     this.deviceSize = { width: 1, height: 1 };
@@ -28,6 +30,7 @@
     options = options || {};
     this.deviceSize = options.deviceSize || this.deviceSize;
     this.onFps = options.onFps || null;
+    this.format = options.format === 'avcc' ? 'avcc' : 'mjpeg';
     this.renderLoading('Loading 3D model…');
     try {
       const response = await fetch(
@@ -84,34 +87,28 @@
     });
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const path = '/simulators/' + encodeURIComponent(this.udid) +
-        '/stream.3d.mjpeg?' + params.toString();
+        '/stream.3d.' + this.format + '?' + params.toString();
     const socket = new WebSocket(scheme + '//' + location.host + path);
-    socket.binaryType = 'blob';
+    socket.binaryType = 'arraybuffer';
     this.socket = socket;
+    this.decoder = window.FrameDecoder.create(this.format, {
+      onFrame: (frame) => this.paint(frame, generation),
+      onLog: (message, error) => {
+        if (error && generation === this.generation) {
+          this.setState(message || '3D decode failed', false, true);
+        }
+      },
+    });
     this.setState('Loading model…', true);
     socket.addEventListener('open', () => this.setState('Waiting for frame…', true));
-    socket.addEventListener('message', async (event) => {
+    socket.addEventListener('message', (event) => {
       if (generation !== this.generation) return;
       if (typeof event.data === 'string') {
         let envelope = null;
         try { envelope = JSON.parse(event.data); } catch (_) {}
         if (envelope && envelope.error) this.setState(envelope.error, false, true);
-        return;
       }
-      try {
-        const bitmap = await createImageBitmap(event.data);
-        if (generation !== this.generation) { bitmap.close(); return; }
-        if (this.canvas.width !== bitmap.width || this.canvas.height !== bitmap.height) {
-          this.canvas.width = bitmap.width;
-          this.canvas.height = bitmap.height;
-        }
-        this.context.drawImage(bitmap, 0, 0);
-        bitmap.close();
-        this.setState('', false);
-        this.countFrame();
-      } catch (error) {
-        this.setState('Could not decode 3D frame', false, true);
-      }
+      this.decoder.feed(event);
     });
     socket.addEventListener('close', () => {
       if (generation === this.generation && this.canvas &&
@@ -132,6 +129,35 @@
       try { this.socket.close(); } catch (_) {}
     }
     this.socket = null;
+    if (this.decoder) {
+      this.decoder.dispose();
+      this.decoder = null;
+    }
+  };
+
+  Sim3DPanel.prototype.paint = function (frame, generation) {
+    if (generation !== this.generation || !this.canvas) {
+      if (frame && typeof frame.close === 'function') frame.close();
+      return;
+    }
+    const width = frame.displayWidth || frame.width;
+    const height = frame.displayHeight || frame.height;
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+    }
+    this.context.drawImage(frame, 0, 0);
+    if (typeof frame.close === 'function') frame.close();
+    this.setState('', false);
+    this.countFrame();
+  };
+
+  Sim3DPanel.prototype.setFormat = function (format) {
+    const next = format === 'avcc' ? 'avcc' : 'mjpeg';
+    if (this.format === next) return;
+    this.format = next;
+    this.renderControls();
+    this.start();
   };
 
   Sim3DPanel.prototype.detach = function () {
@@ -176,7 +202,7 @@
     this.host.querySelector('[data-role="message"]').textContent = message;
     this.host.querySelector('[data-role="retry"]').addEventListener(
         'click', () => this.attach(this.host, this.stage, this.udid, {
-          deviceSize: this.deviceSize, onFps: this.onFps,
+          deviceSize: this.deviceSize, onFps: this.onFps, format: this.format,
         })
     );
   };
@@ -197,7 +223,8 @@
     }).join('');
     this.host.innerHTML =
         '<div class="r3d-live-summary"><strong>' +
-          escapeHTML(this.model.displayName) + '</strong><span>Live MJPEG</span></div>' +
+          escapeHTML(this.model.displayName) + '</strong><span>Live ' +
+          escapeHTML(this.format.toUpperCase()) + '</span></div>' +
         variants +
         '<section class="r3d-section"><label>Camera</label>' +
           '<div class="r3d-presets">' +
