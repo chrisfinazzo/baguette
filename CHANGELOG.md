@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.87] - 2026-08-01
+
 ### Fixed
 
 - **Homebrew installs no longer crash at startup with `could not load
@@ -435,7 +439,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.86...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.87...HEAD
+[0.1.87]: https://github.com/tddworks/baguette/compare/v0.1.86...v0.1.87
 [0.1.86]: https://github.com/tddworks/baguette/compare/v0.1.85...v0.1.86
 [0.1.85]: https://github.com/tddworks/baguette/compare/v0.1.84...v0.1.85
 [0.1.84]: https://github.com/tddworks/baguette/compare/v0.1.83...v0.1.84
