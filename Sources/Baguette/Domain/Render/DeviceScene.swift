@@ -14,4 +14,9 @@ protocol DeviceScene: AnyObject, Sendable {
 
     /// Mutate camera state without reloading the model or reconnecting.
     func update(camera: Device3DCamera)
+
+    /// Where the screen mesh currently lands in the rendered image, for
+    /// mapping browser clicks back onto the device screen without ray
+    /// casting into the GPU scene. `nil` until the first render/update.
+    var screenQuad: ScreenQuad? { get }
 }

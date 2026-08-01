@@ -37,8 +37,14 @@
       this.bindInteraction({ element: screenArea, overlayHost: screenArea });
     }
 
-    /** Bind the standard simulator interaction surface to any live view. */
-    bindInteraction({ element, overlayHost }) {
+    /**
+     * Bind the standard simulator interaction surface to any live view.
+     * `mapClientPoint`, when supplied, overrides the default element-
+     * rect-relative coordinate mapping — used by the 3D Interact mode,
+     * where `element` is the whole canvas and the screen sits inside it
+     * as a rotated, perspective-foreshortened quad.
+     */
+    bindInteraction({ element, overlayHost, mapClientPoint }) {
       this.unbindInteraction();
       this.element = element;
       this.transport.setScreenSize(this.def.rect.width, this.def.rect.height);
@@ -47,6 +53,7 @@
         overlay: this._overlay,
         getOrientation: this.getOrientation,
         log: this.log,
+        mapClientPoint,
       });
       this._interpreter.attach(element);
     }

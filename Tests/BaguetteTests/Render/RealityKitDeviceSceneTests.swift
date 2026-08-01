@@ -125,6 +125,33 @@ struct RealityKitDeviceSceneTests {
         #expect(rowsWithBlend * 20 >= rowsWithEdge * 13)
     }
 
+    @Test func `screenQuad tracks the rendered screen content at front and steep poses`() throws {
+        for rotation in [DeviceRotation.zero, DeviceRotation(x: -20, y: 40, z: 0)] {
+            let scratch = try Self.makeScratch("quad")
+            defer { try? FileManager.default.removeItem(at: scratch) }
+            let scene = try RealityKitDeviceScene(plan: Self.plan(
+                directory: scratch,
+                rotation: rotation
+            ))
+            let white = try #require(Self.surface(red: 255, green: 255, blue: 255))
+
+            let frame = try scene.render(screen: white)
+            let quad = try #require(scene.screenQuad)
+
+            let width = IOSurfaceGetWidth(frame)
+            let height = IOSurfaceGetHeight(frame)
+            let bounds = try #require(Self.brightRegionBounds(frame, y: height / 2))
+            let predictedCenterU = (quad.topLeft.u + quad.topRight.u) / 2
+            let actualCenterU = Double(bounds.left + bounds.right) / 2 / Double(width)
+            #expect(abs(predictedCenterU - actualCenterU) < 0.1)
+
+            let columnBounds = try #require(Self.brightColumnBounds(frame, x: width / 2))
+            let predictedCenterV = (quad.topLeft.v + quad.bottomLeft.v) / 2
+            let actualCenterV = Double(columnBounds.top + columnBounds.bottom) / 2 / Double(height)
+            #expect(abs(predictedCenterV - actualCenterV) < 0.1)
+        }
+    }
+
     @Test func `cover glass reflections composite only when the plan asks`() throws {
         let scratch = try Self.makeScratch("glass")
         defer { try? FileManager.default.removeItem(at: scratch) }
@@ -319,6 +346,40 @@ private extension RealityKitDeviceSceneTests {
             x += 1
         }
         return nil
+    }
+
+    /// The horizontal span of near-white pixels in row `y` — the visible
+    /// screen content, distinct from the darker bezel/background around it.
+    static func brightRegionBounds(_ surface: IOSurface, y: Int) -> (left: Int, right: Int)? {
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let address = IOSurfaceGetBaseAddress(surface).assumingMemoryBound(to: UInt8.self)
+        let rowBytes = IOSurfaceGetBytesPerRow(surface)
+        let width = IOSurfaceGetWidth(surface)
+        func lum(_ x: Int) -> Int {
+            let offset = y * rowBytes + x * 4
+            return (Int(address[offset]) + Int(address[offset + 1]) + Int(address[offset + 2])) / 3
+        }
+        let bright = (0..<width).filter { lum($0) >= 230 }
+        guard let left = bright.first, let right = bright.last else { return nil }
+        return (left, right)
+    }
+
+    /// The vertical span of near-white pixels in column `x` — the visible
+    /// screen content, distinct from the darker bezel/background around it.
+    static func brightColumnBounds(_ surface: IOSurface, x: Int) -> (top: Int, bottom: Int)? {
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let address = IOSurfaceGetBaseAddress(surface).assumingMemoryBound(to: UInt8.self)
+        let rowBytes = IOSurfaceGetBytesPerRow(surface)
+        let height = IOSurfaceGetHeight(surface)
+        func lum(_ y: Int) -> Int {
+            let offset = y * rowBytes + x * 4
+            return (Int(address[offset]) + Int(address[offset + 1]) + Int(address[offset + 2])) / 3
+        }
+        let bright = (0..<height).filter { lum($0) >= 230 }
+        guard let top = bright.first, let bottom = bright.last else { return nil }
+        return (top, bottom)
     }
 
     static func bytes(_ surface: IOSurface) -> Data {

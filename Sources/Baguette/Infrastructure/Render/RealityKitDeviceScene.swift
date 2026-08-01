@@ -29,6 +29,8 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
     private var screenTexture: LowLevelTexture?
     private var screenSourceSize: RenderDimensions?
     private var screenContentRegion: ContentRegion?
+    private var screenLocalCorners: ScreenLocalCorners!
+    private(set) var screenQuad: ScreenQuad?
     private var renderTargets: MetalRenderTargetRing!
     private var metalDevice: (any MTLDevice)!
     private var commandQueue: (any MTLCommandQueue)!
@@ -75,7 +77,26 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
             self.cameraEntity.position.z = Float(
                 self.cameraFraming.distance(at: requested.zoom)
             )
+            self.screenQuad = self.projectedScreenQuad(
+                rotation: requested.rotation,
+                zoom: requested.zoom
+            )
         }
+    }
+
+    /// Where the screen mesh lands in the output image for the given pose —
+    /// pure trig mirroring the same rotation and perspective camera the
+    /// renderer uses, so the browser can map clicks back onto the screen
+    /// without ray casting into the GPU scene.
+    @MainActor
+    private func projectedScreenQuad(rotation: DeviceRotation, zoom: Double) -> ScreenQuad {
+        ScreenQuadProjection.project(
+            corners: screenLocalCorners,
+            rotation: rotation,
+            distance: cameraFraming.distance(at: zoom),
+            fieldOfViewDegrees: cameraFraming.fieldOfViewDegrees,
+            aspect: Double(plan.outputSize.width) / Double(plan.outputSize.height)
+        )
     }
 
     // MARK: - stage construction (MainActor)
@@ -132,6 +153,20 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
         subject.position -= bounds.center
         wrapperEntity.orientation = Self.orientation(plan.rotation)
 
+        let screenBounds = screen.visualBounds(relativeTo: wrapperEntity)
+        screenLocalCorners = ScreenLocalCorners.from(
+            center: Vector3(
+                x: Double(screenBounds.center.x),
+                y: Double(screenBounds.center.y),
+                z: Double(screenBounds.center.z)
+            ),
+            extents: Vector3(
+                x: Double(screenBounds.extents.x),
+                y: Double(screenBounds.extents.y),
+                z: Double(screenBounds.extents.z)
+            )
+        )
+
         let framing = DeviceCameraFraming.fit(
             subjectWidth: Double(extents.x),
             subjectHeight: Double(extents.y),
@@ -166,6 +201,8 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
             height: plan.outputSize.height,
             device: device
         )
+
+        screenQuad = projectedScreenQuad(rotation: plan.rotation, zoom: 1)
 
         // The engine's MSAA covers lit geometry but skips the unlit
         // screen pass, so its content edge stair-steps on tilted poses.

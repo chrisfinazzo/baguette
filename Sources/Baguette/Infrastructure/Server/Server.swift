@@ -1181,6 +1181,26 @@ struct Server: Sendable {
         return true
     }
 
+    /// Where the screen mesh currently lands in the rendered image, so the
+    /// browser can map Interact-mode clicks onto the device screen without
+    /// ray casting into the GPU scene. Sent once on connect and again after
+    /// every `set_3d_camera` update.
+    static func screenQuadJSON(_ quad: ScreenQuad) -> String? {
+        let object: [String: Any] = [
+            "type": "screen_quad",
+            "corners": [
+                [quad.topLeft.u, quad.topLeft.v],
+                [quad.topRight.u, quad.topRight.v],
+                [quad.bottomRight.u, quad.bottomRight.v],
+                [quad.bottomLeft.u, quad.bottomLeft.v],
+            ],
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: object) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
     static func model3DJSONString(
         udid: String,
         simulators: any Simulators,
@@ -1420,6 +1440,10 @@ struct Server: Sendable {
             stream.stop()
         }
 
+        if let quad = scene.screenQuad, let json = screenQuadJSON(quad) {
+            try? await outbound.write(.text(json))
+        }
+
         do {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
@@ -1430,6 +1454,9 @@ struct Server: Sendable {
                         scene: scene
                     ) {
                         screen.refresh()
+                        if let quad = scene.screenQuad, let json = screenQuadJSON(quad) {
+                            try? await outbound.write(.text(json))
+                        }
                         continue
                     }
                 } catch {

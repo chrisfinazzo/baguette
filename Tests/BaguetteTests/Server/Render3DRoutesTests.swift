@@ -143,6 +143,24 @@ struct Render3DRoutesTests {
                 && $0.zoom == 1.2
         }).called(1)
     }
+
+    @Test func `screen quad encodes its four corners in TL TR BR BL order`() throws {
+        let quad = ScreenQuad(
+            topLeft: NormalizedPoint(u: 0.1, v: 0.2),
+            topRight: NormalizedPoint(u: 0.9, v: 0.2),
+            bottomRight: NormalizedPoint(u: 0.9, v: 0.8),
+            bottomLeft: NormalizedPoint(u: 0.1, v: 0.8)
+        )
+
+        let json = try #require(Server.screenQuadJSON(quad))
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        )
+        let corners = try #require(object["corners"] as? [[Double]])
+
+        #expect(object["type"] as? String == "screen_quad")
+        #expect(corners == [[0.1, 0.2], [0.9, 0.2], [0.9, 0.8], [0.1, 0.8]])
+    }
 }
 
 private extension Render3DRoutesTests {

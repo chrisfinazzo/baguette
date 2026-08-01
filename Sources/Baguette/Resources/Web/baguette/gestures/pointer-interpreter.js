@@ -58,12 +58,20 @@
      * @param {PinchOverlay} [opts.overlay]  visual HUD
      * @param {() => string} [opts.getOrientation]  device orientation
      * @param {(msg:string, isErr?:boolean)=>void} [opts.log]
+     * @param {(clientX:number, clientY:number) => {x:number,y:number,
+     *   xNorm:number,yNorm:number,inside:boolean}} [opts.mapClientPoint]
+     *   Overrides the default element-rect-relative mapping — used by
+     *   the 3D Interact mode, where the bound element is the whole
+     *   canvas and the actual screen sits inside it as a rotated,
+     *   perspective-foreshortened quad. `inside` is false when the
+     *   point falls outside that quad (bezel/body/background).
      */
-    constructor(screen, { overlay, getOrientation, log } = {}) {
+    constructor(screen, { overlay, getOrientation, log, mapClientPoint } = {}) {
       this.screen = screen;
       this.overlay = overlay || null;
       this.getOrientation = getOrientation || (() => 'portrait');
       this.log = log || (() => {});
+      this._mapClientPoint = mapClientPoint || null;
       this._handlers = [];
       this._dragActive = false;
       this._optionHeld = false;
@@ -92,22 +100,29 @@
       this._handlers.push([target, event, fn, opts]);
     }
 
-    /** view → chrome-pixel point in screen space. */
-    _pointInScreen(e) {
+    /**
+     * clientX/clientY → screen-space point, honoring `mapClientPoint`
+     * when the bound element isn't a 1:1 crop of the screen (3D
+     * Interact mode). Falls back to plain element-rect-relative math,
+     * with `inside` always true, when no mapper is supplied.
+     */
+    _screenPoint(clientX, clientY) {
+      if (this._mapClientPoint) return this._mapClientPoint(clientX, clientY);
       const r = this._el.getBoundingClientRect();
       const { width, height } = this.screen.size;
-      return {
-        x: ((e.clientX - r.left) / r.width)  * width,
-        y: ((e.clientY - r.top)  / r.height) * height,
-      };
+      const xNorm = r.width  ? (clientX - r.left) / r.width  : 0;
+      const yNorm = r.height ? (clientY - r.top)  / r.height : 0;
+      return { x: xNorm * width, y: yNorm * height, xNorm, yNorm, inside: true };
+    }
+
+    /** view → chrome-pixel point in screen space. */
+    _pointInScreen(e) {
+      return this._screenPoint(e.clientX, e.clientY);
     }
 
     _normInScreen(e) {
-      const r = this._el.getBoundingClientRect();
-      return {
-        x: (e.clientX - r.left) / r.width,
-        y: (e.clientY - r.top)  / r.height,
-      };
+      const { xNorm, yNorm } = this._screenPoint(e.clientX, e.clientY);
+      return { x: xNorm, y: yNorm };
     }
 
     _ptToNorm(pt) {
@@ -153,26 +168,29 @@
       };
 
       this._on(this._el, 'mousedown', (e) => {
+        // In 3D Interact mode the bound element is the whole canvas, not
+        // a 1:1 crop of the screen — a press on the device bezel/body
+        // maps outside the screen quad and starts nothing.
+        const point = this._screenPoint(e.clientX, e.clientY);
+        if (!point.inside) return;
         const r = this._el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
         const mode = modeOf(e);
         this._dragActive = true;
 
         // Edge-stream detection — orientation-aware.
-        const xNorm = r.width  ? (vx / r.width)  : 0;
-        const yNorm = r.height ? (vy / r.height) : 0;
         const ori = this.getOrientation();
         const inBottomBand = ori === 'portrait-upside-down'
-          ? xNorm <= (1 - EDGE_BAND_NORM)
-          : yNorm >= EDGE_BAND_NORM;
+          ? point.xNorm <= (1 - EDGE_BAND_NORM)
+          : point.yNorm >= EDGE_BAND_NORM;
         const inTopBand = ori === 'portrait-upside-down'
-          ? xNorm >= EDGE_BAND_NORM
-          : yNorm <= TOP_BAND_NORM;
+          ? point.xNorm >= EDGE_BAND_NORM
+          : point.yNorm <= TOP_BAND_NORM;
         const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
 
         if (mode === 'tap-or-drag' && startEdge) {
           state = { mode: 'edge-stream', edge: startEdge };
-          this.screen.touchDown([this._pointInScreen(e)], { edge: startEdge });
+          this.screen.touchDown([point], { edge: startEdge });
           this.log('edge stream begin (' + ori + ', edge=' + startEdge + ')');
           return;
         }
@@ -657,34 +675,34 @@
           return;
         }
         if (all.length === 1) {
-          // Edge-band detection — same shape as the mouse handler.
-          // Tag the wire envelope with `edge:"bottom"` (or "top")
-          // using the touch's REAL coords; no clamp. iOS treats the
-          // flag as a swipe HINT — it commits to the home-indicator
-          // recogniser when motion follows, otherwise the touch
-          // lands as a normal tap at the real location and bottom-
-          // band UI buttons still work.
-          const r = this._el.getBoundingClientRect();
-          const xNorm = r.width  ? (all[0].vx / r.width)  : 0;
-          const yNorm = r.height ? (all[0].vy / r.height) : 0;
-          const ori = this.getOrientation();
-          const inBottomBand = ori === 'portrait-upside-down'
-            ? xNorm <= (1 - TOUCH_EDGE_BAND_NORM)
-            : yNorm >= TOUCH_EDGE_BAND_NORM;
-          const inTopBand = ori === 'portrait-upside-down'
-            ? xNorm >= TOUCH_EDGE_BAND_NORM
-            : yNorm <= TOUCH_TOP_BAND_NORM;
-          const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
+          // Edge-band detection — same shape as the mouse handler. In
+          // 3D Interact mode a touch on the device bezel/body maps
+          // outside the screen quad and starts nothing.
+          const touch = e.touches[0];
+          const point = this._screenPoint(touch.clientX, touch.clientY);
+          if (point.inside) {
+            // Tag the wire envelope with `edge:"bottom"` (or "top")
+            // using the touch's REAL coords; no clamp. iOS treats the
+            // flag as a swipe HINT — it commits to the home-indicator
+            // recogniser when motion follows, otherwise the touch
+            // lands as a normal tap at the real location and bottom-
+            // band UI buttons still work.
+            const ori = this.getOrientation();
+            const inBottomBand = ori === 'portrait-upside-down'
+              ? point.xNorm <= (1 - TOUCH_EDGE_BAND_NORM)
+              : point.yNorm >= TOUCH_EDGE_BAND_NORM;
+            const inTopBand = ori === 'portrait-upside-down'
+              ? point.xNorm >= TOUCH_EDGE_BAND_NORM
+              : point.yNorm <= TOUCH_TOP_BAND_NORM;
+            const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
 
-          if (startEdge) {
-            state = { mode: 'edge-stream', edge: startEdge };
-            this.screen.touchDown(
-              [{ x: all[0].x, y: all[0].y }],
-              { edge: startEdge }
-            );
-          } else {
-            state = { mode: 'single' };
-            this.screen.touchDown([{ x: all[0].x, y: all[0].y }]);
+            if (startEdge) {
+              state = { mode: 'edge-stream', edge: startEdge };
+              this.screen.touchDown([point], { edge: startEdge });
+            } else {
+              state = { mode: 'single' };
+              this.screen.touchDown([point]);
+            }
           }
         }
         lastMs = 0;
@@ -712,11 +730,13 @@
         lastMs = now;
         if (state.mode === 'edge-stream' && all.length === 1) {
           this.screen.touchMove(
-            [{ x: all[0].x, y: all[0].y }],
+            [this._screenPoint(e.touches[0].clientX, e.touches[0].clientY)],
             { edge: state.edge }
           );
         } else if (state.mode === 'single' && all.length === 1) {
-          this.screen.touchMove([{ x: all[0].x, y: all[0].y }]);
+          this.screen.touchMove(
+              [this._screenPoint(e.touches[0].clientX, e.touches[0].clientY)]
+          );
         } else if (state.mode === 'single' && all.length >= 2) {
           // Late-arriving second finger after a streaming single
           // touch had already started: close it cleanly and hand
@@ -738,12 +758,14 @@
           state = null;
           return;
         }
-        const ended = relFingers(e.changedTouches);
-        const f = ended[0] || { x: 0, y: 0 };
+        const touch = e.changedTouches[0];
+        const point = touch
+          ? this._screenPoint(touch.clientX, touch.clientY)
+          : { x: 0, y: 0 };
         if (state.mode === 'edge-stream') {
-          this.screen.touchUp([{ x: f.x, y: f.y }], { edge: state.edge });
+          this.screen.touchUp([point], { edge: state.edge });
         } else {
-          this.screen.touchUp([{ x: f.x, y: f.y }]);
+          this.screen.touchUp([point]);
         }
         state = null;
       };

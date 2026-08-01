@@ -20,6 +20,12 @@
     this.onFps = null;
     this.pointer = null;
     this.interactiveScreen = null;
+    // Where the screen mesh currently lands in the rendered image
+    // (server-pushed `screen_quad`, normalized to the output frame) —
+    // lets Interact mode map a canvas click onto the device screen at
+    // any camera pose instead of treating the whole canvas as the
+    // screen. `null` until the first message arrives.
+    this.screenQuad = null;
     this.restartTimer = null;
     this.cameraFrame = 0;
     this.generation = 0;
@@ -114,6 +120,7 @@
   Sim3DPanel.prototype.start = function () {
     this.stop();
     if (!this.canvas || !this.model) return;
+    this.screenQuad = null;
     const generation = ++this.generation;
     const size = this.outputSize();
     const params = new URLSearchParams({
@@ -147,7 +154,12 @@
         }
       },
       onText: (envelope) => {
-        if (envelope && envelope.error && generation === this.generation) {
+        if (generation !== this.generation) return false;
+        if (envelope && envelope.type === 'screen_quad') {
+          this.screenQuad = quadFromCorners(envelope.corners);
+          return true;
+        }
+        if (envelope && envelope.error) {
           this.setState(envelope.error, false, true);
           return true;
         }
@@ -349,6 +361,7 @@
         this.interactiveScreen.bindInteraction({
           element: this.canvas,
           overlayHost: this.stage,
+          mapClientPoint: (clientX, clientY) => this.mapClientPoint(clientX, clientY),
         });
       } else {
         this.interactiveScreen.unbindInteraction();
@@ -456,6 +469,29 @@
     document.removeEventListener('touchcancel', this.onTouchCancel);
   };
 
+  /**
+   * canvas-pixel click → device-screen point, for Interact mode.
+   * Maps through the last `screen_quad` the server pushed instead of
+   * treating the whole canvas as a 1:1 screen crop — the rendered
+   * screen is a rotated, perspective-foreshortened quad sitting inside
+   * a larger canvas (device body/bezel/background/cover-glass).
+   */
+  Sim3DPanel.prototype.mapClientPoint = function (clientX, clientY) {
+    const outside = { x: 0, y: 0, xNorm: 0, yNorm: 0, inside: false };
+    if (!this.screenQuad || !this.canvas || !this.canvas.width || !this.canvas.height) {
+      return outside;
+    }
+    const rect = canvasContentRect(this.canvas);
+    if (!rect.width || !rect.height) return outside;
+    const contentU = (clientX - rect.left) / rect.width;
+    const contentV = (clientY - rect.top) / rect.height;
+    const solved = inverseBilinearQuad(this.screenQuad, contentU, contentV);
+    const xNorm = Math.max(0, Math.min(1, solved.u));
+    const yNorm = Math.max(0, Math.min(1, solved.v));
+    const { width, height } = this.deviceSize;
+    return { x: xNorm * width, y: yNorm * height, xNorm, yNorm, inside: solved.inside };
+  };
+
   Sim3DPanel.prototype.sendCamera = function () {
     if (this.cameraFrame) return;
     this.cameraFrame = requestAnimationFrame(() => {
@@ -500,6 +536,92 @@
     link.download = (this.model.id || 'device') + '-live-3d.png';
     link.click();
   };
+
+  function quadFromCorners(corners) {
+    if (!Array.isArray(corners) || corners.length !== 4) return null;
+    const [topLeft, topRight, bottomRight, bottomLeft] = corners;
+    return {
+      topLeft: { u: topLeft[0], v: topLeft[1] },
+      topRight: { u: topRight[0], v: topRight[1] },
+      bottomRight: { u: bottomRight[0], v: bottomRight[1] },
+      bottomLeft: { u: bottomLeft[0], v: bottomLeft[1] },
+    };
+  }
+
+  // The canvas's CSS box is `width:100%;height:100%` of the stage, but
+  // `object-fit: contain` letterboxes the drawn frame inside it when the
+  // stage aspect ratio doesn't match the backing store's — this finds
+  // that actual drawn (content) rect so client coordinates line up with
+  // the server's normalized `screen_quad`.
+  function canvasContentRect(canvas) {
+    const box = canvas.getBoundingClientRect();
+    const contentAspect = canvas.width / canvas.height;
+    const boxAspect = box.width / box.height;
+    let width, height;
+    if (contentAspect > boxAspect) {
+      width = box.width;
+      height = box.width / contentAspect;
+    } else {
+      height = box.height;
+      width = box.height * contentAspect;
+    }
+    return {
+      left: box.left + (box.width - width) / 2,
+      top: box.top + (box.height - height) / 2,
+      width,
+      height,
+    };
+  }
+
+  function crossXY(a, b) {
+    return a.x * b.y - a.y * b.x;
+  }
+
+  // Solves for (u,v) in [0,1]×[0,1] such that bilinear interpolation of
+  // the quad's four corners at (u,v) lands on (px,py) — the inverse of
+  // the forward map used to place the corners. `inside` is false when
+  // (px,py) falls outside the quad (bezel/body/background around the
+  // rendered screen).
+  function inverseBilinearQuad(quad, px, py) {
+    const a0 = quad.topLeft, b0 = quad.topRight;
+    const c0 = quad.bottomRight, d0 = quad.bottomLeft;
+    const e = { x: b0.u - a0.u, y: b0.v - a0.v };
+    const f = { x: d0.u - a0.u, y: d0.v - a0.v };
+    const g = { x: a0.u - b0.u - d0.u + c0.u, y: a0.v - b0.v - d0.v + c0.v };
+    const h = { x: px - a0.u, y: py - a0.v };
+
+    const qa = crossXY(g, f);
+    const qb = crossXY(e, f) + crossXY(h, g);
+    const qc = crossXY(h, e);
+
+    let v;
+    if (Math.abs(qa) < 1e-9) {
+      v = Math.abs(qb) < 1e-9 ? 0 : -qc / qb;
+    } else {
+      const discriminant = qb * qb - 4 * qa * qc;
+      if (discriminant < 0) return { u: 0.5, v: 0.5, inside: false };
+      const sqrtDiscriminant = Math.sqrt(discriminant);
+      const v1 = (-qb + sqrtDiscriminant) / (2 * qa);
+      const v2 = (-qb - sqrtDiscriminant) / (2 * qa);
+      const inRange = (value) => value >= -0.001 && value <= 1.001;
+      if (inRange(v1) && !inRange(v2)) v = v1;
+      else if (inRange(v2) && !inRange(v1)) v = v2;
+      else v = Math.abs(v1 - 0.5) <= Math.abs(v2 - 0.5) ? v1 : v2;
+    }
+
+    const denomX = e.x + v * g.x;
+    const denomY = e.y + v * g.y;
+    const u = Math.abs(denomX) >= Math.abs(denomY)
+      ? (h.x - v * f.x) / denomX
+      : (h.y - v * f.y) / denomY;
+
+    // A small epsilon so a click landing right at the visual edge —
+    // exactly what edge-band gestures target — doesn't get rejected by
+    // floating-point noise from the quadratic solve.
+    const epsilon = 0.001;
+    const inside = u >= -epsilon && u <= 1 + epsilon && v >= -epsilon && v <= 1 + epsilon;
+    return { u, v, inside };
+  }
 
   function rangeRow(axis, label, min, max, value) {
     return '<div class="r3d-range-row"><span>' + label + '</span>' +
