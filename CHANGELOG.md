@@ -10,6 +10,16 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/devices/device-filter.js` no longer 404s.** The `devices/` web-root
+  subfolder was added without a matching static route (Hummingbird needs
+  one literal route per subdirectory). The per-subdirectory routes are
+  now generated from a single `Server.staticAssetSubdirectories` list,
+  and `StaticAssetRoutesTests` pins that list against the folders that
+  actually exist under `Resources/Web/` — adding a subfolder without
+  routing it now fails a test instead of 404ing in the browser.
+
 ---
 
 ## [0.1.87] - 2026-08-01

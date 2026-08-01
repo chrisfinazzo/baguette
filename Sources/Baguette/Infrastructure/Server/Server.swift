@@ -491,47 +491,26 @@ struct Server: Sendable {
         // Device-farm UI — multi-device dashboard. The HTML at /farm
         // is a thin shell that loads its own component scripts from
         // the `farm/` subfolder; sibling assets (CSS + per-component
-        // JS) resolve against `/farm/<file>`. Registered before the
-        // catch-all `/:file` so `/farm` doesn't get hijacked.
+        // JS) resolve against `/farm/<file>` via the subdirectory
+        // routes below. Registered before the catch-all `/:file` so
+        // `/farm` doesn't get hijacked.
         router.get("/farm") { _, _ in Self.staticAsset("farm/farm.html") }
-        router.get("/farm/:file") { r, _ in
-            let name = String(r.uri.path.split(separator: "/").last ?? "")
-                .removingPercentEncoding ?? ""
-            return Self.staticAsset("farm/\(name)")
-        }
 
-        // Baguette SDK — served from `Resources/Web/baguette/`. The
-        // SDK's two-level layout (`parts/`, `gestures/`) needs literal
-        // subdirectory routes; Hummingbird's router rejects two
-        // placeholder routes that share a path slot with different
-        // param names (`/baguette/:file` vs `/baguette/:dir/:file`
-        // both bind position 2 but disagree on the name), so we
-        // register one route per known subdirectory instead.
-        router.get("/baguette/:file") { r, _ in
-            let name = String(r.uri.path.split(separator: "/").last ?? "")
-                .removingPercentEncoding ?? ""
-            return Self.staticAsset("baguette/\(name)")
-        }
-        router.get("/baguette/parts/:file") { r, _ in
-            let name = String(r.uri.path.split(separator: "/").last ?? "")
-                .removingPercentEncoding ?? ""
-            return Self.staticAsset("baguette/parts/\(name)")
-        }
-        router.get("/baguette/gestures/:file") { r, _ in
-            let name = String(r.uri.path.split(separator: "/").last ?? "")
-                .removingPercentEncoding ?? ""
-            return Self.staticAsset("baguette/gestures/\(name)")
-        }
-
-        // Vendored Leaflet — the location panel's map library + CSS,
-        // served from `Resources/Web/vendor/leaflet/`. Same literal-
-        // subdirectory pattern as the SDK routes above. Map tiles
-        // themselves are fetched by the browser from OpenStreetMap at
-        // runtime; only the library is vendored.
-        router.get("/vendor/leaflet/:file") { r, _ in
-            let name = String(r.uri.path.split(separator: "/").last ?? "")
-                .removingPercentEncoding ?? ""
-            return Self.staticAsset("vendor/leaflet/\(name)")
+        // Static assets in web-root subfolders (`baguette/` SDK,
+        // `devices/`, vendored Leaflet, …). Hummingbird's router
+        // rejects two placeholder routes that share a path slot with
+        // different param names (`/baguette/:file` vs
+        // `/baguette/:dir/:file` both bind position 2 but disagree on
+        // the name), so each known subdirectory gets its own literal
+        // route. The list lives in `staticAssetSubdirectories`;
+        // `StaticAssetRoutesTests` pins it against the folders that
+        // actually exist under `Resources/Web/`.
+        for dir in Self.staticAssetSubdirectories {
+            router.get("/\(dir)/:file") { r, _ in
+                let name = String(r.uri.path.split(separator: "/").last ?? "")
+                    .removingPercentEncoding ?? ""
+                return Self.staticAsset("\(dir)/\(name)")
+            }
         }
 
         // Live stream — encoded frames downstream as binary; upstream
@@ -630,6 +609,19 @@ struct Server: Sendable {
     }
 
     // MARK: - handlers
+
+    /// Web-root subfolders that get a literal `/<dir>/:file` route.
+    /// Must list every directory under `Resources/Web/` that directly
+    /// contains assets — `StaticAssetRoutesTests` checks it against
+    /// the folders on disk.
+    static let staticAssetSubdirectories = [
+        "baguette",
+        "baguette/gestures",
+        "baguette/parts",
+        "devices",
+        "farm",
+        "vendor/leaflet",
+    ]
 
     static func staticAsset(_ name: String) -> Response {
         guard let data = WebRoot.data(named: name) else {
