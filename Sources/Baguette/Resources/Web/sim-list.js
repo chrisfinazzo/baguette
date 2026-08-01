@@ -225,43 +225,17 @@
       : { boot: `asc simulators boot --udid ${id}` };
   }
 
-  function runtimeVersion(runtime) {
-    const match = String(runtime || '').match(/(\d+(?:\.\d+)*)/);
-    if (!match) return [0];
-    return match[1].split('.').map(n => Number(n) || 0);
-  }
-
-  function compareVersions(a, b) {
-    const av = runtimeVersion(a);
-    const bv = runtimeVersion(b);
-    const length = Math.max(av.length, bv.length);
-    for (let i = 0; i < length; i++) {
-      const diff = (av[i] || 0) - (bv[i] || 0);
-      if (diff) return diff;
-    }
-    return 0;
-  }
-
-  function latestRuntime(devices) {
-    return devices.reduce((latest, device) => compareVersions(device.runtime, latest) > 0 ? device.runtime : latest, '');
-  }
+  const DeviceFilter = window.Baguette._DeviceFilter;
 
   function filteredDevices() {
-    const latest = latestRuntime(state.devices);
-    const term = state.search.trim().toLowerCase();
-    return state.devices.filter(device => {
-      if (state.family === 'iphones' && !/^iphone\b/i.test(device.name)) return false;
-      if (state.family === 'ipads' && !/^ipad\b/i.test(device.name)) return false;
-      if (state.runtime === 'latest' && latest && device.runtime !== latest) return false;
-      if (state.runtime !== 'latest' && state.runtime !== 'all' && device.runtime !== state.runtime) return false;
-      if (term && !`${device.name} ${device.state} ${device.runtime} ${device.id}`.toLowerCase().includes(term)) return false;
-      return true;
-    });
+    return new DeviceFilter({
+      family: state.family, runtime: state.runtime, search: state.search,
+    }).apply(state.devices);
   }
 
   function runtimeOptions() {
     const runtimes = Array.from(new Set(state.devices.map(d => d.runtime).filter(Boolean)))
-      .sort((a, b) => compareVersions(b, a));
+      .sort((a, b) => DeviceFilter.compareVersions(b, a));
     return [
       `<option value="all" ${state.runtime === 'all' ? 'selected' : ''}>All Runtimes</option>`,
       `<option value="latest" ${state.runtime === 'latest' ? 'selected' : ''}>Latest Runtime</option>`,
