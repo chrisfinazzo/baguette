@@ -32,20 +32,21 @@
      *   point falls outside that quad (bezel/body/background).
      */
     constructor(screen, { overlay, getOrientation, log, mapClientPoint } = {}) {
-      this._sources = [
-        new root.Baguette._TouchGestureSource(screen, { overlay, getOrientation, mapClientPoint }),
-        new root.Baguette._WheelGestureSource(screen, { overlay }),
-        new root.Baguette._SafariGestureEventSource(screen, { overlay }),
-      ];
       this._optionHoverPreview = new root.Baguette._OptionHoverPreview(screen, { overlay });
-      this._sources.push(this._optionHoverPreview);
-      this._sources.push(new root.Baguette._MouseGestureSource(screen, {
+      const mouseSource = new root.Baguette._MouseGestureSource(screen, {
         overlay, getOrientation, log, mapClientPoint,
         // The one piece of state MouseGestureSource and OptionHoverPreview
         // share — threaded explicitly instead of having either reach into
         // the other. See option-hover-preview.js for why.
         onDragChange: (active) => this._optionHoverPreview.setDragActive(active),
-      }));
+      });
+      this._sources = [
+        mouseSource,
+        this._optionHoverPreview,
+        new root.Baguette._TouchGestureSource(screen, { overlay, getOrientation, mapClientPoint }),
+        new root.Baguette._WheelGestureSource(screen, { overlay }),
+        new root.Baguette._SafariGestureEventSource(screen, { overlay }),
+      ];
     }
 
     attach(el) {
