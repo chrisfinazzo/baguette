@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.88] - 2026-08-01
+
 ### Fixed
 
 - **`/devices/device-filter.js` no longer 404s.** The `devices/` web-root
@@ -449,7 +453,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.87...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.88...HEAD
+[0.1.88]: https://github.com/tddworks/baguette/compare/v0.1.87...v0.1.88
 [0.1.87]: https://github.com/tddworks/baguette/compare/v0.1.86...v0.1.87
 [0.1.86]: https://github.com/tddworks/baguette/compare/v0.1.85...v0.1.86
 [0.1.85]: https://github.com/tddworks/baguette/compare/v0.1.84...v0.1.85
