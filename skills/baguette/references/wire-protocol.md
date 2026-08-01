@@ -321,6 +321,31 @@ The POST response is `image/png`. The GET response exposes only public model
 and variant IDs; filesystem paths, download URLs, material names, and USD prim
 paths remain server-side.
 
+## Live 3D WebSocket — `WS /simulators/<UDID>/stream.3d.<mjpeg|avcc>`
+
+Same binary-frame stream as `stream.<mjpeg|avcc>`, plus a camera-control text
+verb and gestures (dispatched exactly like the 2D stream — same
+`GestureDispatcher`/`Input`, device points, no new HID dialect):
+
+```json
+{"type":"set_3d_camera","rotation":{"x":-8,"y":32,"z":0},"zoom":1.2}
+```
+`rotation.x` clamps to `-80…80`, `rotation.y`/`.z` to `-180…180`, `zoom` to
+`0.5…3`.
+
+Server → client, sent once on connect and again after every
+`set_3d_camera`:
+
+```json
+{"type":"screen_quad","corners":[[0.32,0.11],[0.71,0.09],[0.74,0.88],[0.29,0.91]]}
+```
+`corners` is `[topLeft, topRight, bottomRight, bottomLeft]`, each an
+`[x, y]` pair normalized to the rendered output image — where the device
+screen mesh lands for the active camera pose. Interact-mode gestures
+originating from the browser use this to map a canvas click onto the
+correct simulator device point at any rotation, not just Front. See
+[`docs/features/3d-rendering.md`](../../../docs/features/3d-rendering.md).
+
 ## Logs WebSocket — `WS /simulators/<UDID>/logs`
 
 Dedicated socket for the live unified-log feed. Filter is fixed at

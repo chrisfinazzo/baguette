@@ -135,6 +135,24 @@
       return { x: width / 2, y: height / 2 };
     }
 
+    /**
+     * Orientation-aware edge-stream classification, shared by the mouse
+     * and touch entry points (each with their own hot-zone width —
+     * touch's ellipse-centroid coordinates need a wider band than a
+     * precise mouse cursor). portrait-upside-down rotates the physical
+     * home-indicator edge onto visual-left/right instead of top/bottom.
+     */
+    _edgeFor(point, bottomBandNorm, topBandNorm) {
+      const ori = this.getOrientation();
+      const inBottomBand = ori === 'portrait-upside-down'
+        ? point.xNorm <= (1 - bottomBandNorm)
+        : point.yNorm >= bottomBandNorm;
+      const inTopBand = ori === 'portrait-upside-down'
+        ? point.xNorm >= bottomBandNorm
+        : point.yNorm <= topBandNorm;
+      return inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
+    }
+
     // --- Mouse: tap / drag / pinch / pan / edge ----------------------
 
     _mountMouse() {
@@ -178,20 +196,12 @@
         const mode = modeOf(e);
         this._dragActive = true;
 
-        // Edge-stream detection — orientation-aware.
-        const ori = this.getOrientation();
-        const inBottomBand = ori === 'portrait-upside-down'
-          ? point.xNorm <= (1 - EDGE_BAND_NORM)
-          : point.yNorm >= EDGE_BAND_NORM;
-        const inTopBand = ori === 'portrait-upside-down'
-          ? point.xNorm >= EDGE_BAND_NORM
-          : point.yNorm <= TOP_BAND_NORM;
-        const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
+        const startEdge = this._edgeFor(point, EDGE_BAND_NORM, TOP_BAND_NORM);
 
         if (mode === 'tap-or-drag' && startEdge) {
           state = { mode: 'edge-stream', edge: startEdge };
           this.screen.touchDown([point], { edge: startEdge });
-          this.log('edge stream begin (' + ori + ', edge=' + startEdge + ')');
+          this.log('edge stream begin (' + this.getOrientation() + ', edge=' + startEdge + ')');
           return;
         }
 
@@ -687,14 +697,7 @@
             // recogniser when motion follows, otherwise the touch
             // lands as a normal tap at the real location and bottom-
             // band UI buttons still work.
-            const ori = this.getOrientation();
-            const inBottomBand = ori === 'portrait-upside-down'
-              ? point.xNorm <= (1 - TOUCH_EDGE_BAND_NORM)
-              : point.yNorm >= TOUCH_EDGE_BAND_NORM;
-            const inTopBand = ori === 'portrait-upside-down'
-              ? point.xNorm >= TOUCH_EDGE_BAND_NORM
-              : point.yNorm <= TOUCH_TOP_BAND_NORM;
-            const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
+            const startEdge = this._edgeFor(point, TOUCH_EDGE_BAND_NORM, TOUCH_TOP_BAND_NORM);
 
             if (startEdge) {
               state = { mode: 'edge-stream', edge: startEdge };
