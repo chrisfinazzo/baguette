@@ -37,8 +37,6 @@
   // minimumPressDuration, which starts counting from OUR touch-down —
   // so a context menu surfaces ~750 ms into the user's press.
   const LONG_PRESS_MS = 250;
-  const EDGE_BAND_NORM = 0.93;          // mouse: bottom edge hot zone
-  const TOP_BAND_NORM  = 0.07;          // mouse: top edge hot zone
   // Touch on iPhone Safari reports `clientY` as the centroid of the
   // contact ellipse, ~10–20 px above the user's visual fingertip.
   // A wider band catches what the user perceives as a bottom swipe.
@@ -46,8 +44,12 @@
   // envelope carries the real `y` and `edge:"bottom"`. iOS uses the
   // flag only for swipe disambiguation; a tap (no motion) at
   // yNorm=0.90 still lands on whatever app button is there.
-  const TOUCH_EDGE_BAND_NORM = 0.85;
-  const TOUCH_TOP_BAND_NORM  = 0.15;
+  //
+  // Built lazily (not at module load) so this file doesn't need to load
+  // after edge-bands.js — same lazy-reference pattern transport.js uses
+  // for GestureEnvelope.
+  function mouseEdgeBands() { return new root.Baguette._EdgeBands(0.93, 0.07); }
+  function touchEdgeBands() { return new root.Baguette._EdgeBands(0.85, 0.15); }
   const WHEEL_IDLE_MS  = 120;           // wheel idle → close 2-finger
   const MOVE_FLUSH_MS  = 16;            // ~60 fps coalescing window
 
@@ -135,24 +137,6 @@
       return { x: width / 2, y: height / 2 };
     }
 
-    /**
-     * Orientation-aware edge-stream classification, shared by the mouse
-     * and touch entry points (each with their own hot-zone width —
-     * touch's ellipse-centroid coordinates need a wider band than a
-     * precise mouse cursor). portrait-upside-down rotates the physical
-     * home-indicator edge onto visual-left/right instead of top/bottom.
-     */
-    _edgeFor(point, bottomBandNorm, topBandNorm) {
-      const ori = this.getOrientation();
-      const inBottomBand = ori === 'portrait-upside-down'
-        ? point.xNorm <= (1 - bottomBandNorm)
-        : point.yNorm >= bottomBandNorm;
-      const inTopBand = ori === 'portrait-upside-down'
-        ? point.xNorm >= bottomBandNorm
-        : point.yNorm <= topBandNorm;
-      return inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
-    }
-
     // --- Mouse: tap / drag / pinch / pan / edge ----------------------
 
     _mountMouse() {
@@ -196,7 +180,7 @@
         const mode = modeOf(e);
         this._dragActive = true;
 
-        const startEdge = this._edgeFor(point, EDGE_BAND_NORM, TOP_BAND_NORM);
+        const startEdge = mouseEdgeBands().classify(point, this.getOrientation());
 
         if (mode === 'tap-or-drag' && startEdge) {
           state = { mode: 'edge-stream', edge: startEdge };
@@ -697,7 +681,7 @@
             // recogniser when motion follows, otherwise the touch
             // lands as a normal tap at the real location and bottom-
             // band UI buttons still work.
-            const startEdge = this._edgeFor(point, TOUCH_EDGE_BAND_NORM, TOUCH_TOP_BAND_NORM);
+            const startEdge = touchEdgeBands().classify(point, this.getOrientation());
 
             if (startEdge) {
               state = { mode: 'edge-stream', edge: startEdge };
