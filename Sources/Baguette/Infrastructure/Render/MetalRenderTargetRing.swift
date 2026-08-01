@@ -5,13 +5,14 @@ import Metal
 ///
 /// Triple buffering keeps allocation constant and gives the GPU producer and
 /// codec consumer separate surfaces during the normal live-stream pipeline.
+/// Targets are single-sample; the render engine antialiases internally
+/// before resolving into them.
 final class MetalRenderTargetRing {
     struct Target {
         let surface: IOSurface
-        /// Single-sample IOSurface texture consumed by the video pipeline.
+        /// Single-sample IOSurface texture the engine renders into and the
+        /// video pipeline consumes.
         let texture: any MTLTexture
-        /// Texture SceneKit renders into. Multisampled when the GPU supports it.
-        let renderTexture: any MTLTexture
 
         /// Publish the completed Metal write to IOSurface consumers.
         func publish() {
@@ -21,13 +22,10 @@ final class MetalRenderTargetRing {
     }
 
     private static let bufferCount = 3
-    let sampleCount: Int
     private let targets: [Target]
     private var index = 0
 
     init(width: Int, height: Int, device: any MTLDevice) throws {
-        let resolvedSampleCount = device.supportsTextureSampleCount(4) ? 4 : 1
-        sampleCount = resolvedSampleCount
         let bytesPerRow = ((width * 4 + 63) / 64) * 64
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm_srgb,
@@ -54,33 +52,7 @@ final class MetalRenderTargetRing {
             ) else {
                 throw DeviceModelError.renderFailed
             }
-            if resolvedSampleCount == 1 {
-                return Target(
-                    surface: surface,
-                    texture: texture,
-                    renderTexture: texture
-                )
-            }
-            let multisampleDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: descriptor.pixelFormat,
-                width: width,
-                height: height,
-                mipmapped: false
-            )
-            multisampleDescriptor.textureType = .type2DMultisample
-            multisampleDescriptor.sampleCount = resolvedSampleCount
-            multisampleDescriptor.storageMode = .private
-            multisampleDescriptor.usage = .renderTarget
-            guard let renderTexture = device.makeTexture(
-                descriptor: multisampleDescriptor
-            ) else {
-                throw DeviceModelError.renderFailed
-            }
-            return Target(
-                surface: surface,
-                texture: texture,
-                renderTexture: renderTexture
-            )
+            return Target(surface: surface, texture: texture)
         }
     }
 

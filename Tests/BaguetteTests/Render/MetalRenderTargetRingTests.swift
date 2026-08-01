@@ -5,7 +5,7 @@ import Testing
 
 @Suite("MetalRenderTargetRing")
 struct MetalRenderTargetRingTests {
-    @Test func `renders with four samples before resolving into the codec surface`() throws {
+    @Test func `provides single-sample render targets the engine antialiases into`() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let ring = try MetalRenderTargetRing(
             width: 320,
@@ -15,9 +15,10 @@ struct MetalRenderTargetRingTests {
 
         let target = ring.next()
 
-        #expect(ring.sampleCount == (device.supportsTextureSampleCount(4) ? 4 : 1))
-        #expect(target.renderTexture.sampleCount == ring.sampleCount)
         #expect(target.texture.sampleCount == 1)
+        #expect(target.texture.usage.contains(.renderTarget))
+        #expect(IOSurfaceGetWidth(target.surface) == 320)
+        #expect(IOSurfaceGetHeight(target.surface) == 240)
     }
 
     @Test func `cycles through three stable codec surfaces`() throws {
