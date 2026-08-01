@@ -12,6 +12,16 @@ For releases prior to this changelog, see the
 
 ### Fixed
 
+- **Homebrew installs no longer crash at startup with `could not load
+  resource bundle`.** `DeviceModelRoots` (evaluated on every `serve` /
+  `render-3d` launch) was the last caller of SPM's generated
+  `Bundle.module` accessor, which looks in `Bundle.main.bundleURL` — the
+  *symlink's* directory (`/opt/homebrew/bin`) under Homebrew's
+  `bin/baguette → libexec/baguette` layout — and `fatalError`s on miss.
+  It now resolves the sidecar `Baguette_Baguette.bundle` via `dladdr`
+  (which reports the resolved real path), matching `WebRoot` and
+  `VirtualCameraInstaller`; a missing bundle drops the bundled-models
+  root instead of crashing.
 - **3D "Interact" mode maps clicks and edge drags correctly at any camera
   pose.** Previously the whole canvas was treated as a 1:1 crop of the
   device screen, so home-indicator/notification-center edge drags either
