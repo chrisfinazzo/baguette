@@ -181,6 +181,7 @@ Client-to-server text frames reuse the ordinary stream channel:
 {"type":"tap","x":219,"y":478,"width":438,"height":954}
 {"type":"set_fps","fps":20}
 {"type":"set_scale","scale":1}
+{"type":"set_3d_camera","rotation":{"x":-8,"y":32,"z":0},"zoom":1.2}
 ```
 
 Variant changes reconnect the 3D socket with a new validated render
@@ -188,6 +189,22 @@ configuration. Camera changes update the retained scene and immediately
 re-render the latest simulator surface without reconnecting. Gestures remain
 in simulator device points and are dispatched through the existing
 `GestureDispatcher` and `Input`; no new HID dialect is introduced.
+
+The server pushes one control message back on the same socket, on connect and
+after every `set_3d_camera`:
+
+```json
+{"type":"screen_quad","corners":[[0.32,0.11],[0.71,0.09],[0.74,0.88],[0.29,0.91]]}
+```
+
+`corners` is `[topLeft, topRight, bottomRight, bottomLeft]`, each an
+`[x, y]` pair normalized to the rendered output image (`0,0` top-left,
+`1,1` bottom-right) — where the device's screen mesh currently lands for the
+active camera pose. `RealityKitDeviceScene` computes it analytically
+(`ScreenQuadProjection`, mirroring the same rotation and perspective-camera
+math the renderer uses) rather than reading back GPU geometry. Interact mode
+uses it to invert a canvas click into a screen-space point via bilinear
+interpolation across the quad — see `sim-3d.js`'s `mapClientPoint`.
 
 ## Model bundles
 
@@ -378,8 +395,14 @@ The 3D stage follows an explicit two-mode interaction model:
 - **Interact**: the canvas binds the same `Screen` and `PointerInterpreter` as
   the 2D simulator. Normal drag, long press, edge gestures, Option-drag pinch,
   Option-Shift-drag two-finger pan, and wheel gestures therefore share one
-  browser and wire implementation. Use Front for accurate input until
-  screen-mesh ray casting is implemented.
+  browser and wire implementation. Single-finger tap, drag, and the
+  home-indicator/notification-center edge bands are pose-accurate at any
+  rotation: the server pushes `screen_quad` (§ Live 3D WebSocket) — where the
+  screen mesh's four corners land in the rendered image — after every camera
+  update, and the browser inverse-maps clicks through that quad instead of
+  treating the whole canvas as a 1:1 screen crop. Two-finger pinch/pan and the
+  Option-hover preview still use plain canvas-relative coordinates (they pivot
+  around the screen center, not the edges) and stay most accurate near Front.
 
 Pose/Interact and Reset live on the stage so direct manipulation remains
 available with the inspector hidden. Their controls sit outside the canvas
@@ -443,8 +466,11 @@ image for every live farm tile is too expensive and adds no control value.
 
 - Live 3D supports the existing MJPEG and H.264/AVCC stream formats. AVCC
   requires browser WebCodecs support, matching the normal focused stream.
-- Interact mode does not yet ray-cast onto the model's screen mesh. Front view
-  is the supported direct-input pose.
+- Interact mode maps clicks through the projected screen quad (a flat
+  rectangle), not a full ray cast against the GPU mesh — correct for the
+  planar displays every model authors so far, but two-finger pinch/pan and
+  the Option-hover preview still assume a 1:1 canvas crop and drift from the
+  true screen position away from Front.
 - Model definitions depend on opaque node/material names that Apple may change
   when replacing an asset at the same URL; SHA-256 verification prevents an
   unnoticed replacement.

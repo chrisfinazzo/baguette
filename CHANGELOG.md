@@ -10,6 +10,21 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+
+- **3D "Interact" mode maps clicks and edge drags correctly at any camera
+  pose.** Previously the whole canvas was treated as a 1:1 crop of the
+  device screen, so home-indicator/notification-center edge drags either
+  never triggered (a click at the visual screen edge landed well inside the
+  canvas) or dispatched at the wrong coordinate once the model was rotated
+  off Front — the default "Hero" pose. `RealityKitDeviceScene` now
+  analytically projects the screen mesh's four corners for the active pose
+  (`ScreenQuadProjection`, pure trig mirroring the renderer's own rotation
+  and perspective-camera math) and the server pushes them to the browser as
+  `{"type":"screen_quad", ...}` after every `set_3d_camera`; `sim-3d.js`
+  inverse-maps clicks through that quad instead of the raw canvas rect. See
+  [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
+
 ---
 
 ## [0.1.86] - 2026-08-01
