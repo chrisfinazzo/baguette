@@ -31,19 +31,15 @@
     }
 
     // --- Domain verbs the SDK parts call ---
+    // Envelope shape lives in GestureEnvelope (gestures/gesture-envelope.js)
+    // — this class owns dispatch (send + error logging + screen-size state).
 
-    tap({ x, y, duration = 0.05 }) {
-      this._dispatch({ type: 'tap', x, y, duration, ...this._size() });
+    tap(args) {
+      this._dispatch(root.Baguette._GestureEnvelope.tap(args, this._size()));
     }
 
-    swipe({ from, to, duration = 0.25 }) {
-      this._dispatch({
-        type: 'swipe',
-        startX: from.x, startY: from.y,
-        endX:   to.x,   endY:   to.y,
-        duration,
-        ...this._size(),
-      });
+    swipe(args) {
+      this._dispatch(root.Baguette._GestureEnvelope.swipe(args, this._size()));
     }
 
     touchDown(fingers, opts)  { this._touch('down', fingers, opts); }
@@ -60,20 +56,8 @@
     // --- internals ---
 
     _touch(phase, fingers, opts) {
-      const base = this._size();
-      if (fingers.length === 1) {
-        const env = { type: `touch1-${phase}`,
-                      x: fingers[0].x, y: fingers[0].y, ...base };
-        if (opts && opts.edge) env.edge = opts.edge;
-        this._dispatch(env);
-      } else if (fingers.length === 2) {
-        this._dispatch({
-          type: `touch2-${phase}`,
-          x1: fingers[0].x, y1: fingers[0].y,
-          x2: fingers[1].x, y2: fingers[1].y,
-          ...base,
-        });
-      }
+      const envelope = root.Baguette._GestureEnvelope.touch(phase, fingers, opts, this._size());
+      if (envelope) this._dispatch(envelope);
     }
 
     _size() {

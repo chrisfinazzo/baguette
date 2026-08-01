@@ -486,7 +486,7 @@
     if (!rect.width || !rect.height) return outside;
     const contentU = (clientX - rect.left) / rect.width;
     const contentV = (clientY - rect.top) / rect.height;
-    const solved = ScreenQuad.inverseBilinear(this.screenQuad, contentU, contentV);
+    const solved = this.screenQuad.locate(contentU, contentV);
     const xNorm = Math.max(0, Math.min(1, solved.u));
     const yNorm = Math.max(0, Math.min(1, solved.v));
     const { width, height } = this.deviceSize;

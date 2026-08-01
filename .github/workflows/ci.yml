@@ -16,6 +16,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: JS unit tests
+        run: node --test 'Tests/Web/**/*.test.js'
+
       - name: Setup Swift
         uses: SwiftyLab/setup-swift@latest
         with:

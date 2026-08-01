@@ -73,8 +73,16 @@
      each part IIFE attaches to `window.Baguette` and the entry
      `baguette.js` reads them. -->
 <script src="/baguette/transport.js"></script>
+<script src="/baguette/gestures/gesture-envelope.js"></script>
 <script src="/baguette/gestures/pinch-overlay.js"></script>
 <script src="/baguette/gestures/screen-quad.js"></script>
+<script src="/baguette/gestures/edge-bands.js"></script>
+<script src="/baguette/gestures/attachable-event-source.js"></script>
+<script src="/baguette/gestures/touch-gesture-source.js"></script>
+<script src="/baguette/gestures/wheel-gesture-source.js"></script>
+<script src="/baguette/gestures/safari-gesture-event-source.js"></script>
+<script src="/baguette/gestures/mouse-gesture-source.js"></script>
+<script src="/baguette/gestures/option-hover-preview.js"></script>
 <script src="/baguette/gestures/pointer-interpreter.js"></script>
 <script src="/baguette/parts/bezel.js"></script>
 <script src="/baguette/parts/screen.js"></script>
@@ -88,6 +96,7 @@
      /simulators/<udid> deep link, which sim-list.js checks at the
      top of its IIFE to bail out cleanly. Order matters here. -->
 <script src="/sim-native.js"></script>
+<script src="/devices/device-filter.js"></script>
 <script src="/sim-list.js"></script>
 </body>
 </html>
