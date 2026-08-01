@@ -34,8 +34,10 @@ For releases prior to this changelog, see the
   persistent `LowLevelTexture` onto an
   `UnlitMaterial(applyPostProcessToneMap: false)`, keeping screen pixels
   byte-accurate while the body stays physically lit; studio exposure is
-  calibrated (and test-pinned) against Quick Look sample zones. Antialiasing
-  is now the engine's own 4× MSAA into the existing bounded IOSurface target
+  calibrated (and test-pinned) against Quick Look sample zones. Frames render
+  2× supersampled (the engine's 4× MSAA covers lit geometry but skips the
+  tone-map-exempt screen pass, whose edges otherwise stair-step on tilted
+  poses) and Lanczos-downscale into the existing bounded IOSurface target
   ring, dropping the hand-rolled multisample/depth textures. Material-color
   variants now replace the authored base texture instead of tinting it, so
   Deep Blue and Silver render as declared instead of a muddy mix. See

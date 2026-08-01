@@ -39,6 +39,13 @@ Two details keep the pipeline honest:
   96-gray simulator pixel leaves the composed frame as 96-gray. Body and
   screen are effectively separate passes: PBR with tone mapping for the
   device, exact passthrough for the app.
+- **The unlit screen pass needs its own antialiasing.** RealityKit's 4× MSAA
+  covers lit geometry but skips the tone-map-exempt screen pass, so the
+  screen content edge stair-steps on tilted poses. Each frame therefore
+  renders at 2× and is Lanczos-downscaled into the codec ring (capped at
+  4096 px per side), restoring blended edge coverage everywhere — verified
+  by an edge-coverage test that counts intermediate pixels across the
+  bezel-to-content boundary.
 - **Exposure is calibrated, not eyeballed.** `DeviceStudioLighting` feeds one
   equirectangular studio image to RealityKit
   (`EnvironmentResource(equirectangular:)`) with `intensityExponent = 1.5`,
@@ -301,8 +308,9 @@ RenderedScreen (Screen decorator)
   3. fit a 32° perspective camera to the complete model once
   4. build studio lighting, screen material and renderer once
   5. blit each IOSurface into one persistent LowLevelTexture
-  6. render (engine-managed 4× MSAA) into a bounded Metal target ring
-  7. publish a codec-ready BGRA IOSurface
+  6. render 2× supersampled (plus engine 4× MSAA on lit geometry)
+  7. Lanczos-downscale into a bounded Metal target ring
+  8. publish a codec-ready BGRA IOSurface
       │
       ▼
 VideoFrameDimensions + VideoFrameScaler
@@ -379,9 +387,9 @@ the decoder callback because Safari/WebKit can retain the previous canvas
 backing image even while new frames are decoded.
 
 The browser requests up to 2× CSS-pixel resolution (capped at 1600 pixels per
-side) so Retina displays retain authored model and screen detail. RealityKit
-resolves its engine-managed 4× multisampling before either codec sees the
-frame; H.264 and MJPEG therefore receive identical geometry and antialiased
+side) so Retina displays retain authored model and screen detail. Frames are
+rendered 2× supersampled and Lanczos-downscaled before either codec sees
+them; H.264 and MJPEG therefore receive identical geometry and antialiased
 edges.
 
 The implementation also shares that session directly: `Sim3DPanel` supplies
