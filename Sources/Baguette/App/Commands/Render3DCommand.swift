@@ -35,6 +35,10 @@ struct Render3DCommand: AsyncParsableCommand {
     @Option(help: "Canvas background: transparent or #RRGGBB")
     var background: String = "transparent"
 
+    @Flag(name: .customLong("screen-glass"),
+          help: "Composite a reflective cover glass over the screen")
+    var screenGlass: Bool = false
+
     @Option(name: .shortAndLong, help: "Output PNG file (defaults to stdout)")
     var output: String?
 
@@ -106,7 +110,8 @@ struct Render3DCommand: AsyncParsableCommand {
             fit: DeviceScreenFit(rawValue: fit) ?? .cover,
             background: background == "transparent"
                 ? .transparent
-                : .color(background)
+                : .color(background),
+            screenGlass: screenGlass
         )
         let png = try renderer.render(plan: plan, screenImage: screenImage)
         if let output {

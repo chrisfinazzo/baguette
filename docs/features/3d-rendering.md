@@ -46,6 +46,13 @@ Two details keep the pipeline honest:
   4096 px per side), restoring blended edge coverage everywhere — verified
   by an edge-coverage test that counts intermediate pixels across the
   bezel-to-content boundary.
+- **Cover-glass reflections are opt-in.** `screenGlass` clones the display
+  geometry into a black dielectric layer at zero opacity, lifted a hair along
+  the display normal, so only fresnel-weighted reflections composite over the
+  unlit screen. The glass carries its own HDR streak environment through a
+  per-entity image-based light — body lighting and screen pixels stay exactly
+  as calibrated, and the default (off) output is byte-identical to before the
+  feature existed. Dragging the pose sweeps the streak band across the glass.
 - **Exposure is calibrated, not eyeballed.** `DeviceStudioLighting` feeds one
   equirectangular studio image to RealityKit
   (`EnvironmentResource(equirectangular:)`) with `intensityExponent = 1.5`,
@@ -89,6 +96,7 @@ with `--screen` and inferred from the simulator when `--udid` is used.
 | `--size WIDTHxHEIGHT` | source dimensions | Output pixel size |
 | `--fit cover\|contain\|stretch` | `cover` | Screenshot placement on the screen surface |
 | `--background transparent\|#RRGGBB` | `transparent` | Output canvas |
+| `--screen-glass` | off | Composite a reflective cover glass over the screen |
 | `--output`, `-o` | stdout | PNG destination |
 
 Unknown devices, model IDs, variant sets, and variant choices fail explicitly.
@@ -116,7 +124,8 @@ Content-Type: application/json
     "height": 1200
   },
   "fit": "cover",
-  "background": "transparent"
+  "background": "transparent",
+  "screenGlass": false
 }
 ```
 
@@ -155,6 +164,7 @@ Initial render configuration is supplied as public query parameters:
 &height=1200
 &fit=cover
 &background=%23eef1f5
+&screenGlass=true
 ```
 
 `variant` is repeatable. The server validates model, variant, rotation, output

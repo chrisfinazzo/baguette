@@ -10,13 +10,15 @@ struct Device3DStreamOptions: Equatable, Sendable {
     let outputSize: RenderDimensions
     let fit: DeviceScreenFit
     let background: DeviceRenderBackground
+    let screenGlass: Bool
 
     static let `default` = Device3DStreamOptions(
         rotation: DeviceRotation(x: -8, y: 18, z: 0),
         variants: [:],
         outputSize: RenderDimensions(width: 960, height: 960),
         fit: .cover,
-        background: .color("#eef1f5")
+        background: .color("#eef1f5"),
+        screenGlass: false
     )
 
     static func parse(_ query: [String: [String]]) throws -> Device3DStreamOptions {
@@ -34,6 +36,8 @@ struct Device3DStreamOptions: Equatable, Sendable {
         } ?? Self.default.fit
         let background = try query.single("background").map(parseBackground)
             ?? Self.default.background
+        let screenGlass = try query.single("screenGlass").map(parseBool)
+            ?? Self.default.screenGlass
 
         var variants: [String: String] = [:]
         for value in query["variant"] ?? [] {
@@ -55,7 +59,8 @@ struct Device3DStreamOptions: Equatable, Sendable {
                 requested: RenderDimensions(width: width, height: height)
             ).renderDimensions,
             fit: fit,
-            background: background
+            background: background,
+            screenGlass: screenGlass
         )
     }
 
@@ -72,6 +77,14 @@ struct Device3DStreamOptions: Equatable, Sendable {
             throw DeviceModelError.invalidRenderOptions
         }
         return result
+    }
+
+    private static func parseBool(_ value: String) throws -> Bool {
+        switch value {
+        case "true": return true
+        case "false": return false
+        default: throw DeviceModelError.invalidRenderOptions
+        }
     }
 
     private static func parseBackground(_ value: String) throws -> DeviceRenderBackground {

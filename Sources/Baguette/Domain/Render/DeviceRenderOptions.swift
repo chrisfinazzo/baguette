@@ -6,6 +6,7 @@ struct DeviceRenderOptions: Equatable, Sendable {
     let size: RenderDimensions?
     let fit: DeviceScreenFit
     let background: DeviceRenderBackground
+    let screenGlass: Bool
 
     static func parsing(json: Data) throws -> DeviceRenderOptions {
         let wire: Wire
@@ -54,7 +55,8 @@ struct DeviceRenderOptions: Equatable, Sendable {
             variants: wire.variants ?? [:],
             size: size,
             fit: fit,
-            background: background
+            background: background,
+            screenGlass: wire.screenGlass ?? false
         )
     }
 }
@@ -66,6 +68,7 @@ private extension DeviceRenderOptions {
         let size: Size?
         let fit: String?
         let background: String?
+        let screenGlass: Bool?
     }
 
     struct Rotation: Decodable {

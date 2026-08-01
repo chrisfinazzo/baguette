@@ -26,6 +26,9 @@ struct DeviceRenderPlan: Equatable, Sendable {
     let outputSize: RenderDimensions
     let fit: DeviceScreenFit
     let background: DeviceRenderBackground
+    /// Composite a reflective cover-glass layer over the screen. Off by
+    /// default so automation screenshots stay pixel-stable.
+    let screenGlass: Bool
 
     static func build(
         model: InstalledDeviceModel,
@@ -33,7 +36,8 @@ struct DeviceRenderPlan: Equatable, Sendable {
         rotation: DeviceRotation,
         outputSize: RenderDimensions,
         fit: DeviceScreenFit = .cover,
-        background: DeviceRenderBackground = .transparent
+        background: DeviceRenderBackground = .transparent,
+        screenGlass: Bool = false
     ) throws -> DeviceRenderPlan {
         guard outputSize.width > 0, outputSize.height > 0 else {
             throw DeviceModelError.invalidOutputSize
@@ -53,7 +57,8 @@ struct DeviceRenderPlan: Equatable, Sendable {
             rotation: rotation,
             outputSize: outputSize,
             fit: fit,
-            background: background
+            background: background,
+            screenGlass: screenGlass
         )
     }
 }

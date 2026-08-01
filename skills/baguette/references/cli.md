@@ -243,6 +243,8 @@ baguette render-3d --screen screenshot.png --device iphone-17-pro \
 
 Exactly one of `--udid` and `--screen` is required. With `--screen`, select an
 installed model using `--device`. `--variant <set>=<choice>` is repeatable.
+`--screen-glass` composites a subtle reflective cover glass over the screen
+(off by default so screenshots stay pixel-stable).
 Model bundles are discovered from `BAGUETTE_3D_MODEL_DIR`, Application
 Support, then bundled `Resources/Models3D`.
 

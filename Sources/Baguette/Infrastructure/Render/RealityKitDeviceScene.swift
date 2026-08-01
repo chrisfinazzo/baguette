@@ -28,6 +28,7 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
     private var screenMaterialIndex: Int = 0
     private var screenTexture: LowLevelTexture?
     private var screenSourceSize: RenderDimensions?
+    private var screenContentRegion: ContentRegion?
     private var renderTargets: MetalRenderTargetRing!
     private var metalDevice: (any MTLDevice)!
     private var commandQueue: (any MTLCommandQueue)!
@@ -110,6 +111,9 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
         screenMaterialIndex = screen.model?.materials.firstIndex {
             $0.name == definition.scene.screenMaterial
         } ?? 0
+        if plan.screenGlass {
+            try Self.addCoverGlass(over: screen, subject: subject)
+        }
 
         let stage = try RealityRenderer()
         renderer = stage
@@ -263,9 +267,50 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
             model.materials = materials
             screenEntity.model = model
         }
+        // The visible window keeps a permanent 2-pixel black border, and
+        // per-frame blits cover only the interior. Texture filtering fades
+        // content into the border over a texel, so the display's content
+        // edge resolves smoothly instead of dot-dashing at the mesh edge.
+        try blackFill(texture, size: sourceSize)
+        screenContentRegion = placement.contentRegion(in: sourceSize, inset: 2)
         screenTexture = texture
         screenSourceSize = sourceSize
         return texture
+    }
+
+    @MainActor
+    private func blackFill(_ texture: LowLevelTexture, size: RenderDimensions) throws {
+        let bytesPerRow = size.width * 4
+        var opaqueBlack = [UInt8](repeating: 0, count: bytesPerRow * size.height)
+        for index in stride(from: 3, to: opaqueBlack.count, by: 4) {
+            opaqueBlack[index] = 255
+        }
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm_srgb,
+            width: size.width,
+            height: size.height,
+            mipmapped: false
+        )
+        descriptor.storageMode = .shared
+        descriptor.usage = .shaderRead
+        guard let black = metalDevice.makeTexture(descriptor: descriptor),
+              let commandBuffer = commandQueue.makeCommandBuffer() else {
+            throw DeviceModelError.renderFailed
+        }
+        black.replace(
+            region: MTLRegionMake2D(0, 0, size.width, size.height),
+            mipmapLevel: 0,
+            withBytes: opaqueBlack,
+            bytesPerRow: bytesPerRow
+        )
+        let destination = texture.replace(using: commandBuffer)
+        guard let encoder = commandBuffer.makeBlitCommandEncoder() else {
+            throw DeviceModelError.renderFailed
+        }
+        encoder.copy(from: black, to: destination)
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
     }
 
     @MainActor
@@ -296,7 +341,21 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
         guard let encoder = commandBuffer.makeBlitCommandEncoder() else {
             throw DeviceModelError.renderFailed
         }
-        encoder.copy(from: source, to: destination)
+        if let region = screenContentRegion, region.width > 0, region.height > 0 {
+            encoder.copy(
+                from: source,
+                sourceSlice: 0,
+                sourceLevel: 0,
+                sourceOrigin: MTLOrigin(x: region.x, y: region.y, z: 0),
+                sourceSize: MTLSize(width: region.width, height: region.height, depth: 1),
+                to: destination,
+                destinationSlice: 0,
+                destinationLevel: 0,
+                destinationOrigin: MTLOrigin(x: region.x, y: region.y, z: 0)
+            )
+        } else {
+            encoder.copy(from: source, to: destination)
+        }
         encoder.endEncoding()
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
@@ -334,6 +393,51 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
             }
         }
         return nil
+    }
+
+    /// A cover-glass layer cloned from the display geometry: black dielectric
+    /// at zero opacity, so only fresnel-weighted reflections of a dedicated
+    /// streak environment composite over the unlit screen. The per-entity
+    /// image-based light keeps body lighting untouched.
+    @MainActor
+    private static func addCoverGlass(over screen: ModelEntity, subject: Entity) throws {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: .black)
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.0))
+        material.roughness = 0.1
+        material.metallic = 0.0
+
+        let glass = screen.clone(recursive: false)
+        glass.name = "baguette-cover-glass"
+        if var model = glass.model {
+            model.materials = Array(
+                repeating: material,
+                count: max(model.materials.count, 1)
+            )
+            glass.model = model
+        }
+
+        // Lift along the display normal — the thinnest local axis, signed
+        // outward (the screen face sits away from the device's center).
+        let bounds = screen.visualBounds(relativeTo: screen)
+        let extents = bounds.extents
+        let lift = max(extents.x, max(extents.y, extents.z)) * 0.002
+        var axis = SIMD3<Float>(1, 0, 0)
+        if extents.y <= extents.x, extents.y <= extents.z {
+            axis = SIMD3<Float>(0, 1, 0)
+        } else if extents.z <= extents.x, extents.z <= extents.y {
+            axis = SIMD3<Float>(0, 0, 1)
+        }
+        let deviceCenter = subject.visualBounds(relativeTo: screen).center
+        let outward: Float = simd_dot(bounds.center - deviceCenter, axis) < 0 ? -1 : 1
+        glass.transform = Transform(translation: axis * lift * outward)
+        screen.addChild(glass)
+
+        let streak = try EnvironmentResource(
+            equirectangular: DeviceStudioLighting.glassStreakImage
+        )
+        glass.components.set(ImageBasedLightComponent(source: .single(streak)))
+        glass.components.set(ImageBasedLightReceiverComponent(imageBasedLight: glass))
     }
 
     /// Material appearance variants replace the authored base texture with

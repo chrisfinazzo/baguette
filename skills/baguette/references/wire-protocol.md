@@ -312,7 +312,8 @@ Content-Type: application/json
   "variants": {"finish": "deep-blue"},
   "size": {"width": 1200, "height": 1200},
   "fit": "cover",
-  "background": "#eef1f5"
+  "background": "#eef1f5",
+  "screenGlass": false
 }
 ```
 

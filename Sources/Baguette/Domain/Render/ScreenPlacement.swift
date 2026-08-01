@@ -14,6 +14,36 @@ struct ScreenPlacement: Equatable, Sendable {
     static let identity = ScreenPlacement(scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0)
 }
 
+/// An integer texture-space window, in source pixels.
+struct ContentRegion: Equatable, Sendable {
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+}
+
+extension ScreenPlacement {
+    /// The window of the source frame the screen surface can actually
+    /// sample, inset by a feather border. Cover fits crop the source, so
+    /// the window follows the crop rather than the texture bounds.
+    func contentRegion(in source: RenderDimensions, inset: Int) -> ContentRegion {
+        let lowU = max(0.0, offsetX)
+        let highU = min(1.0, offsetX + scaleX)
+        let lowV = max(0.0, offsetY)
+        let highV = min(1.0, offsetY + scaleY)
+        let x = Int((lowU * Double(source.width)).rounded()) + inset
+        let y = Int((lowV * Double(source.height)).rounded()) + inset
+        let maxX = Int((highU * Double(source.width)).rounded()) - inset
+        let maxY = Int((highV * Double(source.height)).rounded()) - inset
+        return ContentRegion(
+            x: x,
+            y: y,
+            width: max(0, maxX - x),
+            height: max(0, maxY - y)
+        )
+    }
+}
+
 extension DeviceScreenFit {
     func placement(source: RenderDimensions, target: RenderDimensions) -> ScreenPlacement {
         guard self != .stretch else { return .identity }

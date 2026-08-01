@@ -23,6 +23,65 @@ enum DeviceStudioLighting {
         )
     )
 
+    /// Cover-glass reflection environment: near-black with two soft vertical
+    /// softbox bands, HDR-bright so the streak reads through 0-opacity glass.
+    /// Isolated to the glass layer via a per-entity image-based light, so
+    /// body colors never change when the glass is enabled. Band placement
+    /// follows the 3dsg screen-glass system; longitudes are tuned so front
+    /// poses catch the bright band edge.
+    static let glassStreakImage: CGImage = {
+        let width = 1024
+        let height = 512
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.extendedLinearSRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 32,
+                  bytesPerRow: 0,
+                  space: colorSpace,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                      | CGBitmapInfo.floatComponents.rawValue
+              ) else {
+            fatalError("glass streak context allocation failed")
+        }
+        func gray(_ value: CGFloat, alpha: CGFloat = 1) -> CGColor {
+            CGColor(colorSpace: colorSpace, components: [value, value, value, alpha])
+                ?? CGColor(gray: value, alpha: alpha)
+        }
+        let size = CGSize(width: width, height: height)
+        context.setFillColor(gray(0.012))
+        context.fill(CGRect(origin: .zero, size: size))
+        for (center, brightness) in [(0.45, 1.8), (0.79, 0.8)] {
+            let bandWidth = size.width * 0.09
+            let rect = CGRect(
+                x: size.width * center - bandWidth / 2,
+                y: size.height * 0.30,
+                width: bandWidth,
+                height: size.height * 0.62
+            )
+            context.saveGState()
+            context.setShadow(
+                offset: .zero,
+                blur: size.width * 0.035,
+                color: gray(1.2, alpha: 0.7)
+            )
+            context.setFillColor(gray(brightness))
+            context.addPath(CGPath(
+                roundedRect: rect,
+                cornerWidth: bandWidth * 0.08,
+                cornerHeight: bandWidth * 0.08,
+                transform: nil
+            ))
+            context.fillPath()
+            context.restoreGState()
+        }
+        guard let image = context.makeImage() else {
+            fatalError("glass streak image creation failed")
+        }
+        return image
+    }()
+
     static let equirectangularImage: CGImage = {
         let width = 1024
         let height = 512

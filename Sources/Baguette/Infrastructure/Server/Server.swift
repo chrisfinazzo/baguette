@@ -1126,7 +1126,8 @@ struct Server: Sendable {
                 rotation: options.rotation,
                 outputSize: options.size ?? sourceSize,
                 fit: options.fit,
-                background: options.background
+                background: options.background,
+                screenGlass: options.screenGlass
             )
         } catch {
             return .invalidConfiguration
@@ -1159,7 +1160,8 @@ struct Server: Sendable {
             rotation: options.rotation,
             outputSize: options.outputSize,
             fit: options.fit,
-            background: options.background
+            background: options.background,
+            screenGlass: options.screenGlass
         )
     }
 

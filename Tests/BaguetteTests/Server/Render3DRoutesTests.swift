@@ -19,7 +19,8 @@ struct Render3DRoutesTests {
                 variants: ["finish": "silver"],
                 size: RenderDimensions(width: 800, height: 600),
                 fit: .contain,
-                background: .transparent
+                background: .transparent,
+                screenGlass: false
             ),
             screenImage: Data("SCREEN".utf8),
             sourceSize: RenderDimensions(width: 100, height: 200),
@@ -151,7 +152,8 @@ private extension Render3DRoutesTests {
             variants: [:],
             size: nil,
             fit: .cover,
-            background: .transparent
+            background: .transparent,
+            screenGlass: false
         )
     }
 

@@ -24,6 +24,17 @@ For releases prior to this changelog, see the
   Silver on iPhone 17 Pro/Pro Max. See
   [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
 
+- **Opt-in screen cover-glass reflections.** `baguette render-3d
+  --screen-glass`, `"screenGlass": true` in `POST render-3d.png`, the
+  `screenGlass=true` live-stream query parameter, and a "Glass reflections"
+  toggle in the 3D inspector composite a reflective cover glass over the
+  screen: a clone of the display geometry as a zero-opacity black dielectric
+  reflecting a dedicated HDR streak environment through a per-entity
+  image-based light (the 3dsg screen-glass system, ported to RealityKit).
+  Body lighting and screen pixels are untouched, and the option defaults to
+  off so automation screenshots stay pixel-stable. See
+  [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
+
 ### Changed
 
 - **Quick Look-accurate 3D colors via RealityKit.** Live and one-shot 3D

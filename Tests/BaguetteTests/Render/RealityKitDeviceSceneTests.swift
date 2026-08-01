@@ -120,7 +120,29 @@ struct RealityKitDeviceSceneTests {
             if edge.intermediates > 0 { rowsWithBlend += 1 }
         }
         #expect(rowsWithEdge > 20)
-        #expect(rowsWithBlend * 10 >= rowsWithEdge * 7)
+        // Every row must blend — half-pixel coverage gaps read as a
+        // dot-dash line once the browser zooms the stream.
+        #expect(rowsWithBlend * 20 >= rowsWithEdge * 19)
+    }
+
+    @Test func `cover glass reflections composite only when the plan asks`() throws {
+        let scratch = try Self.makeScratch("glass")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let plain = try RealityKitDeviceScene(plan: Self.plan(
+            directory: scratch,
+            rotation: DeviceRotation(x: -20, y: 40, z: 0)
+        ))
+        let glassy = try RealityKitDeviceScene(plan: Self.plan(
+            directory: scratch,
+            rotation: DeviceRotation(x: -20, y: 40, z: 0),
+            screenGlass: true
+        ))
+        let dark = try #require(Self.surface(red: 24, green: 24, blue: 26))
+
+        let plainFrame = try plain.render(screen: dark)
+        let glassyFrame = try glassy.render(screen: dark)
+
+        #expect(Self.bytes(plainFrame) != Self.bytes(glassyFrame))
     }
 
     @Test func `live render preserves the authored cosmic orange color space`() throws {
@@ -193,7 +215,8 @@ private extension RealityKitDeviceSceneTests {
 
     static func plan(
         directory: URL,
-        rotation: DeviceRotation = DeviceRotation(x: -8, y: 18, z: 0)
+        rotation: DeviceRotation = DeviceRotation(x: -8, y: 18, z: 0),
+        screenGlass: Bool = false
     ) throws -> DeviceRenderPlan {
         let model = InstalledDeviceModel(
             definition: DeviceModelDefinition(
@@ -219,7 +242,8 @@ private extension RealityKitDeviceSceneTests {
             variants: [:],
             rotation: rotation,
             outputSize: RenderDimensions(width: 320, height: 240),
-            background: .color("#eef1f5")
+            background: .color("#eef1f5"),
+            screenGlass: screenGlass
         )
     }
 

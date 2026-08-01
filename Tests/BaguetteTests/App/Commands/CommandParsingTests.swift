@@ -550,11 +550,13 @@ struct CommandParsingTests {
             "--size", "1200x900",
             "--fit", "contain",
             "--background", "#112233",
+            "--screen-glass",
             "--output", "device.png",
         ])
 
         #expect(cmd.udid == "ABC")
         #expect(cmd.screen == nil)
+        #expect(cmd.screenGlass == true)
         #expect(cmd.variants == ["finish=space-black", "keyboard=iso"])
         #expect(cmd.rotation == "-30,45,30")
         #expect(cmd.size == "1200x900")
@@ -569,6 +571,7 @@ struct CommandParsingTests {
         ])
         #expect(cmd.screen == "screen.png")
         #expect(cmd.device == "iphone-17-pro")
+        #expect(cmd.screenGlass == false)
     }
 
     @Test func `render-3d rejects both input sources`() {

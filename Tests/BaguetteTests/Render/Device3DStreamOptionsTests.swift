@@ -11,6 +11,7 @@ struct Device3DStreamOptionsTests {
         #expect(options.outputSize == RenderDimensions(width: 960, height: 960))
         #expect(options.fit == .cover)
         #expect(options.background == .color("#eef1f5"))
+        #expect(options.screenGlass == false)
     }
 
     @Test func `parses camera output and repeatable public variants`() throws {
@@ -21,6 +22,7 @@ struct Device3DStreamOptionsTests {
             "height": ["720"],
             "fit": ["contain"],
             "background": ["transparent"],
+            "screenGlass": ["true"],
         ])
 
         #expect(options.rotation == DeviceRotation(x: -12, y: 24, z: 3))
@@ -31,6 +33,13 @@ struct Device3DStreamOptionsTests {
         #expect(options.outputSize == RenderDimensions(width: 1280, height: 720))
         #expect(options.fit == .contain)
         #expect(options.background == .transparent)
+        #expect(options.screenGlass == true)
+    }
+
+    @Test func `rejects a malformed screen glass flag`() {
+        #expect(throws: DeviceModelError.invalidRenderOptions) {
+            _ = try Device3DStreamOptions.parse(["screenGlass": ["shiny"]])
+        }
     }
 
     @Test func `aligns live output dimensions for hardware video codecs`() throws {

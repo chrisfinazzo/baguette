@@ -15,6 +15,7 @@
     this.zoom = 1;
     this.mode = 'pose';
     this.variants = {};
+    this.screenGlass = false;
     this.deviceSize = { width: 1, height: 1 };
     this.onFps = null;
     this.pointer = null;
@@ -122,6 +123,7 @@
       fit: 'cover',
       background: this.background,
     });
+    if (this.screenGlass) params.set('screenGlass', 'true');
     Object.keys(this.variants).forEach((set) => {
       params.append('variant', set + ':' + this.variants[set]);
     });
@@ -263,6 +265,11 @@
           escapeHTML(this.model.displayName) + '</strong><span>Live ' +
           escapeHTML(this.format.toUpperCase()) + '</span></div>' +
         variants +
+        '<section class="r3d-section"><label>Screen</label>' +
+          '<div class="r3d-presets">' +
+            '<button type="button" data-role="glass-toggle">Glass reflections</button>' +
+          '</div>' +
+        '</section>' +
         '<section class="r3d-section"><label>View</label>' +
           '<div class="r3d-presets">' +
             '<button type="button" data-preset="-8,18,0">Hero</button>' +
@@ -320,6 +327,13 @@
     });
     this.host.querySelectorAll('[data-mode]').forEach((button) => {
       button.addEventListener('click', () => this.setMode(button.dataset.mode));
+    });
+    const glassToggle = this.host.querySelector('[data-role="glass-toggle"]');
+    glassToggle.classList.toggle('active', this.screenGlass);
+    glassToggle.addEventListener('click', () => {
+      this.screenGlass = !this.screenGlass;
+      glassToggle.classList.toggle('active', this.screenGlass);
+      this.scheduleRestart(0);
     });
     this.host.querySelector('[data-role="download"]').addEventListener(
         'click', () => this.download()
