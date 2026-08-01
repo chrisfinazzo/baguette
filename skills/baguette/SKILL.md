@@ -138,6 +138,20 @@ send `{"type":"snapshot"}` on that channel — the server emits a
 keyframe immediately. Use this only when the WS is already live; for
 fresh captures `baguette screenshot` is one HTTP-free command.
 
+For a presentation image on a 3D device model, use `render-3d`:
+
+```bash
+baguette render-3d --udid <UDID> \
+  --variant finish=deep-blue --rotation=-8,18,0 \
+  --size 1200x1200 --output /tmp/device.png
+```
+
+An existing image can be rendered with
+`--screen <image> --device <model-id>`. The HTTP equivalents are
+`GET /simulators/<UDID>/3d-model.json` for public model/variant metadata and
+`POST /simulators/<UDID>/render-3d.png` for the PNG. This is a one-shot
+presentation surface; gestures still target the live 2D stream.
+
 ## What's wired vs what isn't
 
 Wired (use freely):

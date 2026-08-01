@@ -9,7 +9,7 @@ final class MJPEGStream: Stream, @unchecked Sendable {
     private(set) var config: StreamConfig
     private let sink: any FrameSink
     private let jpeg: JPEGEncoder
-    private let scaler = Scaler()
+    private let scaler = VideoFrameScaler()
     private let queue = DispatchQueue(label: "baguette.mjpeg", qos: .userInteractive)
 
     private var screen: (any Screen)?
@@ -50,7 +50,7 @@ final class MJPEGStream: Stream, @unchecked Sendable {
     }
 
     private func encode(_ surface: IOSurface) {
-        guard let pb = scaler.downscale(surface, scale: config.scale) else { return }
+        guard let pb = scaler.scale(surface, by: config.scale) else { return }
         guard let bytes = jpeg.encode(pb) else { return }
         sink.write(MJPEGEnvelope.framed(jpeg: bytes))
     }

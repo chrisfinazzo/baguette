@@ -19,7 +19,7 @@ struct CommandParsingTests {
             "list", "boot", "shutdown", "input", "stream",
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type", "paste", "clipboard",
-            "chrome", "screenshot", "describe-ui", "logs", "serve",
+            "chrome", "screenshot", "render-3d", "describe-ui", "logs", "serve",
             "orientation", "status-bar", "location", "install", "add-media",
             "diag-digitizer-trackpad", "lifetime",
         ])
@@ -537,6 +537,50 @@ struct CommandParsingTests {
         #expect(cmd.output == "/tmp/x.jpg")
         #expect(cmd.quality == 0.5)
         #expect(cmd.scale == 2)
+    }
+
+    // MARK: - render-3d
+
+    @Test func `render-3d parses simulator render options`() throws {
+        let cmd = try Render3DCommand.parse([
+            "--udid", "ABC",
+            "--variant", "finish=space-black",
+            "--variant", "keyboard=iso",
+            "--rotation=-30,45,30",
+            "--size", "1200x900",
+            "--fit", "contain",
+            "--background", "#112233",
+            "--screen-glass",
+            "--output", "device.png",
+        ])
+
+        #expect(cmd.udid == "ABC")
+        #expect(cmd.screen == nil)
+        #expect(cmd.screenGlass == true)
+        #expect(cmd.variants == ["finish=space-black", "keyboard=iso"])
+        #expect(cmd.rotation == "-30,45,30")
+        #expect(cmd.size == "1200x900")
+        #expect(cmd.fit == "contain")
+        #expect(cmd.background == "#112233")
+        #expect(cmd.output == "device.png")
+    }
+
+    @Test func `render-3d accepts an existing screen with explicit model`() throws {
+        let cmd = try Render3DCommand.parse([
+            "--screen", "screen.png", "--device", "iphone-17-pro",
+        ])
+        #expect(cmd.screen == "screen.png")
+        #expect(cmd.device == "iphone-17-pro")
+        #expect(cmd.screenGlass == false)
+    }
+
+    @Test func `render-3d rejects both input sources`() {
+        #expect(throws: (any Error).self) {
+            try Render3DCommand.parse([
+                "--udid", "ABC", "--screen", "screen.png",
+                "--device", "iphone-17-pro",
+            ])
+        }
     }
 
     // MARK: - describe-ui

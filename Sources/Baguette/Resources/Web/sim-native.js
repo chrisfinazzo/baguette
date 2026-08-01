@@ -38,6 +38,7 @@
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let locationPanel = null;  // LocationPanel — simctl location map picker
+  let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
   let powerCard = null;      // boot affordance shown on an unbooted device's screen
@@ -300,11 +301,13 @@
         host: location.origin,
         udid,
         send: (payload) => {
-          if (!session) return;
           const out = currentOrientation === 'portrait'
             ? payload
             : remapEnvelopeToPortrait(payload);
-          session.send(out);
+          const view = document.getElementById('simNativeView');
+          if (view && view.getAttribute('data-render3d') === 'open' &&
+              render3DPanel && render3DPanel.send(out)) return;
+          if (session) session.send(out);
         },
         getOrientation: () => currentOrientation,
         log: (msg) => console.log('[native]', msg),
@@ -384,6 +387,15 @@
         ? 'light' : 'dark';
   }
 
+  function live3DBackground() {
+    const root = document.getElementById('simNativeView');
+    const computed = root
+        ? getComputedStyle(root).getPropertyValue('--nv-page-bg').trim()
+        : '';
+    if (/^#[0-9a-f]{6}$/i.test(computed)) return computed;
+    return currentTheme() === 'light' ? '#f1f3f6' : '#1a1a1f';
+  }
+
   function setTheme(theme) {
     const root = document.getElementById('simNativeView');
     if (!root) return;
@@ -393,6 +405,9 @@
     } else {
       root.removeAttribute('data-theme');
       localStorage.removeItem(THEME_KEY);
+    }
+    if (render3DPanel && root.getAttribute('data-render3d') === 'open') {
+      render3DPanel.setBackground(live3DBackground());
     }
   }
 
@@ -789,9 +804,16 @@
     window.__nativeSetFormat = (next) => {
       if (next !== 'avcc' && next !== 'mjpeg') return;
       const current = localStorage.getItem('asc.simFormat') || pickFormat();
-      if (current === next && session) return;
+      const view = document.getElementById('simNativeView');
+      if (current === next && (session ||
+          (view && view.getAttribute('data-render3d') === 'open'))) return;
       localStorage.setItem('asc.simFormat', next);
-      startSession(next);
+      reflectFormat(next);
+      if (view && view.getAttribute('data-render3d') === 'open') {
+        if (render3DPanel) render3DPanel.setFormat(next);
+      } else {
+        startSession(next);
+      }
     };
     window.__nativeToggleTheme = () => {
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
@@ -800,6 +822,8 @@
     window.__nativeToggleCamera = () => toggleCamera();
     window.__nativeToggleStatusBar = () => toggleStatusBar();
     window.__nativeToggleLocation = () => toggleLocation();
+    window.__nativeToggle3D = () => toggle3D();
+    window.__nativeToggle3DInspector = () => toggle3DInspector();
     window.__nativeToggleAx = () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
@@ -972,6 +996,72 @@
     }
   }
 
+  // Live 3D is a main-view mode, not a duplicate preview. Its WebSocket
+  // replaces the 2D StreamSession while open and carries both MJPEG
+  // frames and the same inbound input/control envelopes.
+  function toggle3D() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('native3DHost');
+    const stage = document.getElementById('native3DStage');
+    const btn = document.getElementById('native3DToggle');
+    const open = view && view.getAttribute('data-render3d') === 'open';
+    if (!view || !host || !stage || !sim) return;
+    if (open) {
+      view.removeAttribute('data-render3d');
+      view.removeAttribute('data-render3d-inspector');
+      if (btn) btn.classList.remove('active');
+      if (render3DPanel) render3DPanel.stop();
+      startSession(localStorage.getItem('asc.simFormat') || pickFormat());
+    } else {
+      if (session) {
+        session.stop();
+        session = null;
+      }
+      view.setAttribute('data-render3d', 'open');
+      const inspectorOpen = localStorage.getItem('asc.3dInspector') !== 'closed';
+      if (inspectorOpen) {
+        view.setAttribute('data-render3d-inspector', 'open');
+      }
+      const sheet = document.getElementById('native3DSheet');
+      if (sheet) sheet.setAttribute('aria-hidden', inspectorOpen ? 'false' : 'true');
+      if (btn) btn.classList.add('active');
+      const status = document.getElementById('nativeStatus');
+      if (status) status.textContent = '3D live';
+      if (!render3DPanel && window.Sim3DPanel && udid) {
+        render3DPanel = new window.Sim3DPanel();
+        render3DPanel.attach(host, stage, udid, {
+          deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
+          format: localStorage.getItem('asc.simFormat') || pickFormat(),
+          background: live3DBackground(),
+          onFps: (fps) => {
+            const status = document.getElementById('nativeStatus');
+            if (status) status.textContent = fps + ' fps · 3D';
+          },
+        });
+      } else if (render3DPanel) {
+        render3DPanel.background = live3DBackground();
+        render3DPanel.start();
+      }
+    }
+  }
+
+  // The inspector is a tool surface, not the 3D session owner. Collapsing it
+  // must leave the model, decoder, socket, pose, zoom, and variant untouched.
+  function toggle3DInspector() {
+    const view = document.getElementById('simNativeView');
+    const sheet = document.getElementById('native3DSheet');
+    if (!view || view.getAttribute('data-render3d') !== 'open') return;
+    const open = view.getAttribute('data-render3d-inspector') === 'open';
+    if (open) {
+      view.removeAttribute('data-render3d-inspector');
+      localStorage.setItem('asc.3dInspector', 'closed');
+    } else {
+      view.setAttribute('data-render3d-inspector', 'open');
+      localStorage.setItem('asc.3dInspector', 'open');
+    }
+    if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
+  }
+
   function wireUnload() {
     window.addEventListener('beforeunload', () => {
       try { hidePowerCard(); } catch (_) { /* ignore */ }
@@ -981,6 +1071,7 @@
       try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
       try { if (statusBarPanel) statusBarPanel.detach(); } catch (_) { /* ignore */ }
       try { if (locationPanel) locationPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (render3DPanel) render3DPanel.detach(); } catch (_) { /* ignore */ }
     });
   }
 
@@ -988,6 +1079,11 @@
   // skip CaptureGallery here — the focus chrome has nowhere to put a
   // thumbnail strip, and the user just wants the file.
   function downloadSnapshot() {
+    const view = document.getElementById('simNativeView');
+    if (view && view.getAttribute('data-render3d') === 'open' && render3DPanel) {
+      render3DPanel.download();
+      return;
+    }
     if (!sim || !sim.canvas) return;
     const w = lastPaintedSize.w || sim.canvas.width;
     const h = lastPaintedSize.h || sim.canvas.height;

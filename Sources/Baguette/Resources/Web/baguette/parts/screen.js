@@ -34,19 +34,30 @@
     bindDOM({ screenArea, canvas }) {
       this.element = screenArea;
       this.canvas = canvas;
+      this.bindInteraction({ element: screenArea, overlayHost: screenArea });
+    }
+
+    /** Bind the standard simulator interaction surface to any live view. */
+    bindInteraction({ element, overlayHost }) {
+      this.unbindInteraction();
+      this.element = element;
       this.transport.setScreenSize(this.def.rect.width, this.def.rect.height);
-      this._overlay = new root.Baguette._PinchOverlay(screenArea);
+      this._overlay = new root.Baguette._PinchOverlay(overlayHost || element);
       this._interpreter = new root.Baguette._PointerInterpreter(this, {
         overlay: this._overlay,
         getOrientation: this.getOrientation,
         log: this.log,
       });
-      this._interpreter.attach(screenArea);
+      this._interpreter.attach(element);
+    }
+
+    unbindInteraction() {
+      if (this._interpreter) { this._interpreter.detach(); this._interpreter = null; }
+      if (this._overlay) { this._overlay.detach(); this._overlay = null; }
     }
 
     detach() {
-      if (this._interpreter) { this._interpreter.detach(); this._interpreter = null; }
-      if (this._overlay) { this._overlay.detach(); this._overlay = null; }
+      this.unbindInteraction();
       this.element = null;
       this.canvas = null;
     }

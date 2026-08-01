@@ -10,6 +10,78 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **Data-driven 3D device rendering.** `baguette render-3d` and
+  `POST /simulators/:udid/render-3d.png` place a screenshot onto a RealityKit
+  device model; the focused simulator UI exposes a live 3D viewport over both
+  existing MJPEG and H.264/AVCC codecs.
+  Model bundles contain `definition.json` plus a local USDZ or a SHA-256
+  verified download. Bundled models cover iPhone 17/Air/Pro/Pro Max, iPad Pro
+  11/13-inch M4, Apple Watch Series 11 42/46mm, Apple Watch Ultra 3, and a
+  downloadable MacBook Pro 14-inch example. Variants support native USD sets
+  and named material appearances, including Cosmic Orange, Deep Blue, and
+  Silver on iPhone 17 Pro/Pro Max. See
+  [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
+
+- **Opt-in screen cover-glass reflections.** `baguette render-3d
+  --screen-glass`, `"screenGlass": true` in `POST render-3d.png`, the
+  `screenGlass=true` live-stream query parameter, and a "Glass reflections"
+  toggle in the 3D inspector composite a reflective cover glass over the
+  screen: a clone of the display geometry as a zero-opacity black dielectric
+  reflecting a dedicated HDR streak environment through a per-entity
+  image-based light (the 3dsg screen-glass system, ported to RealityKit).
+  Body lighting and screen pixels are untouched, and the option defaults to
+  off so automation screenshots stay pixel-stable. See
+  [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
+
+### Changed
+
+- **Quick Look-accurate 3D colors via RealityKit.** Live and one-shot 3D
+  rendering moved from SceneKit to RealityKit's `RealityRenderer` — the engine
+  Quick Look uses for USDZ — so device finishes tone-map exactly like opening
+  `device.usdz` directly (Cosmic Orange no longer clips to washed-out red;
+  bright aluminum rolls toward gold). Simulator frames stream through one
+  persistent `LowLevelTexture` onto an
+  `UnlitMaterial(applyPostProcessToneMap: false)`, keeping screen pixels
+  byte-accurate while the body stays physically lit; studio exposure is
+  calibrated (and test-pinned) against Quick Look sample zones. Frames render
+  2× supersampled (the engine's 4× MSAA covers lit geometry but skips the
+  tone-map-exempt screen pass, whose edges otherwise stair-step on tilted
+  poses) and Lanczos-downscale into the existing bounded IOSurface target
+  ring, dropping the hand-rolled multisample/depth textures. Material-color
+  variants now replace the authored base texture instead of tinting it, so
+  Deep Blue and Silver render as declared instead of a muddy mix. See
+  [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
+- **Perspective, Retina-quality 3D rendering.** Live and one-shot 3D now share
+  the reference renderer's 32° perspective lens, aspect-aware bounds fit, and
+  distance-based zoom instead of an orthographic camera that visibly squashed
+  devices at steep poses. The live viewport requests up to 2× CSS-pixel
+  resolution and resolves 4× MSAA before the common H.264/MJPEG pipeline.
+  See [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
+- **Stage-first 3D controls.** The live model now remains mounted and streaming
+  when its responsive right-inspector/bottom-sheet is hidden. Pose, Interact,
+  and Reset stay directly on the stage; exact rotation is grouped under
+  Advanced, and the cube toolbar button alone exits 3D mode.
+- **Unified 2D/3D focus stage.** The 3D view now fills the same available
+  viewport as the 2D simulator without a separate rounded card, and its opaque
+  MJPEG/H.264 frame background follows the active page theme.
+- **Reliable 3D stage input.** Pose, Interact, and Reset no longer enter the
+  canvas gesture path. Matching the mature 2D surface, 3D uses explicit
+  mouse/touch listeners with document-level drag continuation instead of
+  Pointer Events and element capture.
+- **One 2D/3D browser stream pipeline.** Live 3D now supplies its custom URL and
+  controls to the same `StreamSession` as 2D, removing its duplicate WebSocket,
+  decoder, FPS, and canvas-paint implementation. AVCC and MJPEG now have one
+  lifecycle and latest-frame compositor path across Chrome, Safari, and
+  embedded browsers. Frame deduplication uses IOSurface identity plus seed so newly
+  rendered 3D surfaces are never dropped, and completed Metal writes are
+  published before encoding for Safari/WebKit compatibility. A persistent
+  triple-buffered Metal target set replaces per-frame IOSurface allocation.
+  Live dimensions are chroma-aligned for VideoToolbox, and scaled GPU copies
+  stay aligned after runtime scaling and are published before asynchronous
+  H.264 encoding.
+
 ---
 
 ## [0.1.85] - 2026-07-29

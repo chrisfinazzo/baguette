@@ -296,6 +296,31 @@ tree, or skip the image and act on the labels and frames directly.
 
 These do not exist for `baguette input` (no stream there).
 
+## 3D render HTTP routes
+
+3D rendering is HTTP, not a WebSocket gesture verb:
+
+```http
+GET /simulators/<UDID>/3d-model.json
+POST /simulators/<UDID>/render-3d.png
+Content-Type: application/json
+```
+
+```json
+{
+  "rotation": {"x": -8, "y": 18, "z": 0},
+  "variants": {"finish": "deep-blue"},
+  "size": {"width": 1200, "height": 1200},
+  "fit": "cover",
+  "background": "#eef1f5",
+  "screenGlass": false
+}
+```
+
+The POST response is `image/png`. The GET response exposes only public model
+and variant IDs; filesystem paths, download URLs, material names, and USD prim
+paths remain server-side.
+
 ## Logs WebSocket — `WS /simulators/<UDID>/logs`
 
 Dedicated socket for the live unified-log feed. Filter is fixed at
