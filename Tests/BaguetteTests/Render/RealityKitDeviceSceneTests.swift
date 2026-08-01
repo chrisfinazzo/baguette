@@ -98,6 +98,31 @@ struct RealityKitDeviceSceneTests {
         #expect(lower.blue > lower.red)
     }
 
+    @Test func `steep poses draw the screen content edge with blended coverage`() throws {
+        let scratch = try Self.makeScratch("edge-aa")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        // Pitch + yaw make the screen edge diagonal in image space; the
+        // engine's MSAA skips the unlit screen pass, so edge coverage
+        // must come from supersampling.
+        let scene = try RealityKitDeviceScene(plan: Self.plan(
+            directory: scratch,
+            rotation: DeviceRotation(x: -20, y: 40, z: 0)
+        ))
+        let white = try #require(Self.surface(red: 255, green: 255, blue: 255))
+
+        let frame = try scene.render(screen: white)
+
+        var rowsWithEdge = 0
+        var rowsWithBlend = 0
+        for y in stride(from: 40, through: 200, by: 4) {
+            guard let edge = Self.darkToBrightTransition(frame, y: y) else { continue }
+            rowsWithEdge += 1
+            if edge.intermediates > 0 { rowsWithBlend += 1 }
+        }
+        #expect(rowsWithEdge > 20)
+        #expect(rowsWithBlend * 10 >= rowsWithEdge * 7)
+    }
+
     @Test func `live render preserves the authored cosmic orange color space`() throws {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -234,6 +259,42 @@ private extension RealityKitDeviceSceneTests {
         }
         IOSurfaceUnlock(surface, [], nil)
         return surface
+    }
+
+    /// Finds the first dark→bright transition in a row and counts pixels
+    /// strictly between the dark and bright plateaus — antialiased edge
+    /// coverage. Returns nil when the row has no qualifying edge.
+    static func darkToBrightTransition(
+        _ surface: IOSurface,
+        y: Int
+    ) -> (x: Int, intermediates: Int)? {
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let address = IOSurfaceGetBaseAddress(surface)
+            .assumingMemoryBound(to: UInt8.self)
+        let rowBytes = IOSurfaceGetBytesPerRow(surface)
+        let width = IOSurfaceGetWidth(surface)
+        func lum(_ x: Int) -> Int {
+            let offset = y * rowBytes + x * 4
+            return (Int(address[offset]) + Int(address[offset + 1])
+                + Int(address[offset + 2])) / 3
+        }
+        var x = 8
+        while x < width - 8 {
+            if lum(x) < 110, lum(x + 1) >= 110 {
+                var probe = x + 1
+                var intermediates = 0
+                while probe < width, lum(probe) < 230, probe - x <= 8 {
+                    intermediates += 1
+                    probe += 1
+                }
+                if probe < width, lum(probe) >= 230 {
+                    return (x, intermediates)
+                }
+            }
+            x += 1
+        }
+        return nil
     }
 
     static func bytes(_ surface: IOSurface) -> Data {

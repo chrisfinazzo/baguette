@@ -34,7 +34,7 @@ final class MetalRenderTargetRing {
             mipmapped: false
         )
         descriptor.storageMode = .shared
-        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
 
         targets = try (0..<Self.bufferCount).map { _ in
             guard let surface = IOSurfaceCreate([

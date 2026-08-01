@@ -48,8 +48,8 @@ enum RealityKitRenderFixtures {
                 def Shader "Shader"
                 {
                     uniform token info:id = "UsdPreviewSurface"
-                    color3f inputs:diffuseColor = (0.33, 0.33, 0.33)
-                    float inputs:roughness = 0.6
+                    color3f inputs:diffuseColor = (0.02, 0.02, 0.02)
+                    float inputs:roughness = 0.9
                     token outputs:surface
                 }
             }

@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import IOSurface
 import Metal
+import MetalPerformanceShaders
 import RealityKit
 
 /// Persistent RealityKit adapter for one live 3D stream connection.
@@ -30,6 +31,8 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
     private var renderTargets: MetalRenderTargetRing!
     private var metalDevice: (any MTLDevice)!
     private var commandQueue: (any MTLCommandQueue)!
+    private var supersampled: (texture: any MTLTexture, output: RealityRenderer.CameraOutput)?
+    private var downscale: MPSImageLanczosScale?
 
     init(
         plan: DeviceRenderPlan,
@@ -159,6 +162,35 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
             height: plan.outputSize.height,
             device: device
         )
+
+        // The engine's MSAA covers lit geometry but skips the unlit
+        // screen pass, so its content edge stair-steps on tilted poses.
+        // Rendering at 2× and box-downsampling restores edge coverage
+        // for every pass; skipped only when 2× would exceed sane bounds.
+        let scaled = RenderDimensions(
+            width: plan.outputSize.width * 2,
+            height: plan.outputSize.height * 2
+        )
+        if max(scaled.width, scaled.height) <= 4096 {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .bgra8Unorm_srgb,
+                width: scaled.width,
+                height: scaled.height,
+                mipmapped: false
+            )
+            descriptor.storageMode = .private
+            descriptor.usage = [.renderTarget, .shaderRead]
+            guard let texture = device.makeTexture(descriptor: descriptor) else {
+                throw DeviceModelError.renderFailed
+            }
+            supersampled = (
+                texture: texture,
+                output: try RealityRenderer.CameraOutput(
+                    .singleProjection(colorTexture: texture)
+                )
+            )
+            downscale = MPSImageLanczosScale(device: device)
+        }
     }
 
     // MARK: - per-frame rendering (MainActor)
@@ -173,7 +205,7 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
         try blit(surface, into: texture, size: sourceSize)
 
         let target = renderTargets.next()
-        let output = try RealityRenderer.CameraOutput(
+        let output = try supersampled?.output ?? RealityRenderer.CameraOutput(
             .singleProjection(colorTexture: target.texture)
         )
         let finished = DispatchSemaphore(value: 0)
@@ -183,6 +215,18 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
             onComplete: { _ in finished.signal() }
         )
         finished.wait()
+        if let supersampled, let downscale {
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+                throw DeviceModelError.renderFailed
+            }
+            downscale.encode(
+                commandBuffer: commandBuffer,
+                sourceTexture: supersampled.texture,
+                destinationTexture: target.texture
+            )
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+        }
         target.publish()
         return target.surface
     }
