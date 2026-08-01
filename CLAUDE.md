@@ -98,13 +98,21 @@ Single resource tree, no `/api/` prefix; UDID always in path; format distinguish
 
 ## Testing approach
 
-**TDD first.** Write the failing test before the implementation — every behaviour change to a Domain or Infrastructure type starts with a red `@Test`, then the smallest impl that turns it green, then refactor. Don't ship parser / aggregate / serialization changes ahead of their tests, even when "obvious"; the codebase's confidence rests on the test suite covering each new field at the moment it lands. JS modules under `Resources/Web/` have no test harness — keep their changes minimal and exercise them through the Swift layer that produces their JSON inputs.
+**TDD first.** Write the failing test before the implementation — every behaviour change to a Domain or Infrastructure type starts with a red `@Test`, then the smallest impl that turns it green, then refactor. Don't ship parser / aggregate / serialization changes ahead of their tests, even when "obvious"; the codebase's confidence rests on the test suite covering each new field at the moment it lands.
 
 Chicago-school state-based throughout. Every external boundary is an `@Mockable` protocol; tests substitute auto-generated `MockXxx` fakes and assert on returned values rather than recorded calls. Patterns:
 
 - Pure parsers (`DeviceChrome`, `DeviceProfile`, `ReconfigParser`, `GestureRegistry`) — feed JSON / plist, assert parsed value.
 - Per-gesture parse + execute — verify wire dialect parses to the right value type and `execute(on: input)` calls the right `Input` method.
 - Aggregate semantics — drive `MockSimulators` / `MockChromes` through default-impl computed properties (`running`, `available`, `listJSON`).
+
+### JS testing (`Resources/Web/`)
+
+Small, reusable pieces of `Resources/Web/` logic are unit-tested with Node's built-in `node:test` — zero new dependencies. `make test-web` (or `node --test 'Tests/Web/**/*.test.js'`) runs them. `Tests/Web/helpers/load-browser-module.js` loads a plain `<script src>` IIFE file into a throwaway `window` and returns it — via `vm.runInThisContext`, not `vm.createContext` (a fresh VM context is a separate JS realm with its own `Object`/`Array` prototypes, which silently breaks `assert.deepEqual`'s prototype check on anything the loaded module returns). Production files stay bundler-free, unchanged.
+
+Rich domain, JS-flavored: `class` with `static` factories/utilities plus instance methods for behaviour on a constructed value — mirrors Swift's `static func` + instance methods on a `struct`. `new DeviceFilter(criteria).apply(devices)`, `new FarmFilter(opts).apply(devices)`, `quad.locate(px, py)` on a `ScreenQuad`, `bands.classify(point, orientation)` on `EdgeBands`. Behaviour lives on the value; callers don't reach into raw fields or manually AND together separate predicates. No generic `domain/`/`utils/` bucket folder — each class lives in the feature-topic folder it actually belongs to, same as `parts/` and `gestures/` already group by topic: `ScreenQuad` / `EdgeBands` / `GestureEnvelope` in `baguette/gestures/`; `DeviceFilter` beside `sim-list.js` in `devices/`; `FarmFilter` beside the rest of `farm/`.
+
+Page composition, DOM rendering, and WebSocket lifecycle (`sim-native.js`, `sim-location.js`, the `Screen`/`Transport`/`PointerInterpreter` orchestrators themselves) stay integration-only — same as Swift's `App/` layer isn't held to the Domain coverage bar. Extract a new testable unit opportunistically when touching one of these files; it's not a standalone sweep target.
 
 ## Known iOS 26 limits
 
