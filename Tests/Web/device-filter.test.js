@@ -11,7 +11,7 @@ const MODULE_PATH = path.join(
 );
 
 function DeviceFilter() {
-  return loadBrowserModule(MODULE_PATH)._DeviceFilter;
+  return loadBrowserModule(MODULE_PATH).Baguette._DeviceFilter;
 }
 
 test('compareVersions orders dotted numeric runtimes ascending', () => {

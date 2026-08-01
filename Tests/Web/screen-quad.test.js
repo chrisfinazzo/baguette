@@ -11,7 +11,7 @@ const MODULE_PATH = path.join(
 );
 
 function ScreenQuad() {
-  return loadBrowserModule(MODULE_PATH)._ScreenQuad;
+  return loadBrowserModule(MODULE_PATH).Baguette._ScreenQuad;
 }
 
 // Forward bilinear interpolation — the inverse of what `locate` solves.

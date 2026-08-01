@@ -4,9 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 /**
- * Loads a browser IIFE module (one that attaches its exports to
- * `window.Baguette.X`) and returns the resulting `window.Baguette`
- * namespace.
+ * Loads a browser IIFE module into a throwaway `window` and returns that
+ * `window`. Most SDK files attach to `window.Baguette.X`; some app-level
+ * files (e.g. farm/farm-filter.js) attach directly to `window.X` — call
+ * sites pick whichever property the file under test actually uses.
  *
  * Production files stay plain `<script src>`-loadable — no bundler, no
  * module system — this just gives Node a throwaway `window` for the file
@@ -26,7 +27,7 @@ function loadBrowserModule(filePath) {
   const factory = vm.runInThisContext(wrapped, { filename: filePath });
   const window = {};
   factory(window);
-  return window.Baguette;
+  return window;
 }
 
 module.exports = { loadBrowserModule };
