@@ -28,7 +28,8 @@ function mouseEvent(overrides) {
 test('a click without movement dispatches a one-shot tap and a ripple', (t) => {
   const doc = installFakeDocument();
   t.after(() => doc.uninstall());
-  const MGS = MouseGestureSource();
+  const MGS = MouseGestureSource(); // loading the module itself injects the ripple keyframes once
+  const createdAtLoad = doc.createdCount;
   const screen = fakeScreen({ width: 390, height: 844 });
   const el = new FakeElement({ left: 0, top: 0, width: 390, height: 844 });
   const source = new MGS(screen);
@@ -41,7 +42,7 @@ test('a click without movement dispatches a one-shot tap and a ripple', (t) => {
   assert.ok(Math.abs(screen.calls.tap[0].point.x - 100) < 1e-6);
   assert.ok(Math.abs(screen.calls.tap[0].point.y - 200) < 1e-6);
   assert.equal(screen.calls.touchDown.length, 0, 'a plain tap never streams touch1');
-  assert.equal(doc.createdCount, 1, 'the tap ripple was created');
+  assert.equal(doc.createdCount, createdAtLoad + 1, 'the tap ripple was created');
 });
 
 test('dragging past the threshold streams a single-finger touch1 down/move/up', () => {
@@ -124,7 +125,8 @@ test('holding still past LONG_PRESS_MS promotes to a held touch stream', (t) => 
   const doc = installFakeDocument();
   t.after(() => doc.uninstall());
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const MGS = MouseGestureSource();
+  const MGS = MouseGestureSource(); // loading the module itself injects the ripple keyframes once
+  const createdAtLoad = doc.createdCount;
   const screen = fakeScreen({ width: 390, height: 844 });
   const el = new FakeElement({ left: 0, top: 0, width: 390, height: 844 });
   const source = new MGS(screen);
@@ -135,7 +137,7 @@ test('holding still past LONG_PRESS_MS promotes to a held touch stream', (t) => 
 
   t.mock.timers.tick(250);
   assert.equal(screen.calls.touchDown.length, 1, 'long press promoted pending to a touch1 stream');
-  assert.equal(doc.createdCount, 1, 'a ripple marks the long-press moment');
+  assert.equal(doc.createdCount, createdAtLoad + 1, 'a ripple marks the long-press moment');
 
   el.fire('mouseup', mouseEvent({ clientX: 100, clientY: 200 }));
   assert.equal(screen.calls.touchUp.length, 1);
