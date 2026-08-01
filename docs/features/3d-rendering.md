@@ -21,6 +21,30 @@ The rendering approach is based on
 data-driven. Scene node names, screen geometry, device matching, and USD
 variant selections live in model definitions rather than Swift enums.
 
+## Color accuracy
+
+Rendering uses **RealityKit** (`RealityRenderer`), the same engine Quick Look
+uses for `device.usdz` previews, so authored finishes tone-map the way the
+model's own preview does. SceneKit rendered the identical USDZ visibly wrong:
+its lack of filmic tone mapping kept bright metal at the authored hue
+(dark saturated orange) where Quick Look rolls it toward gold, and no
+environment intensity could fix both glass and aluminum at once — measured
+against Quick Look sample zones, SceneKit bottomed out at roughly twice the
+color error RealityKit starts at.
+
+Two details keep the pipeline honest:
+
+- **The screen is exempt from scene lighting and tone mapping.** Simulator
+  frames land on an `UnlitMaterial(applyPostProcessToneMap: false)`, so a
+  96-gray simulator pixel leaves the composed frame as 96-gray. Body and
+  screen are effectively separate passes: PBR with tone mapping for the
+  device, exact passthrough for the app.
+- **Exposure is calibrated, not eyeballed.** `DeviceStudioLighting` feeds one
+  equirectangular studio image to RealityKit
+  (`EnvironmentResource(equirectangular:)`) with `intensityExponent = 1.5`,
+  the measured minimum of the per-zone color error against Quick Look's
+  rendering of the same asset. The calibration is pinned by tests.
+
 ## CLI
 
 Capture the current simulator frame and infer the model from its device type:
@@ -96,7 +120,7 @@ The response is `image/png`. Defaults are the same as the CLI. Error branches:
 | `400` | Malformed render options or an unknown variant selection |
 | `404` | Unknown simulator UDID or no installed definition matches it |
 | `422` | The matched definition cannot render the requested configuration |
-| `500` | Frame capture, model loading, asset download, or SceneKit rendering failed |
+| `500` | Frame capture, model loading, asset download, or RealityKit rendering failed |
 
 The model metadata used to build the browser inspector is exposed separately:
 
@@ -131,8 +155,8 @@ size, fit, and background before subscribing to the simulator screen.
 `RenderedScreen` produces codec-ready BGRA IOSurfaces, then the selected
 existing stream emits either raw JPEG messages or AVCC description/key/delta
 messages. The first frame can take longer because the model and asset are
-loaded; later frames reuse the same SceneKit scene, camera, materials, Metal
-targets, and renderer.
+loaded; later frames reuse the same RealityKit stage, camera, materials,
+screen texture, Metal targets, and renderer.
 
 Client-to-server text frames reuse the ordinary stream channel:
 
@@ -247,16 +271,17 @@ A definition is rejected when:
 
 Variants use one public set/choice vocabulary with two definition strategies:
 `"kind": "usd"` (the default) authors a native USD variant selection, while
-`"kind": "materials"` applies a declared map of SceneKit material names to
-hex colors. The latter supports models such as Matte's iPhone 17 Pro, whose
+`"kind": "materials"` applies a declared map of authored material names to
+hex colors, replacing the material's base texture so the declared finish is
+exact rather than a tint multiplied into the original texture. The latter supports models such as Matte's iPhone 17 Pro, whose
 Cosmic Orange, Deep Blue, and Silver appearances are material adjustments
 rather than native USD variants. One model may expose independent finish,
 keyboard, stand, Pencil, or other sets.
 
 When a request omits a set, its declared default is applied. For a USD set, the
 renderer creates a temporary USDA overlay that sublayers the USDZ and pins the
-selection before SceneKit loads the scene. Material selections are applied to
-the loaded node tree. Changing a variant reloads that model; the UI renders on
+selection before RealityKit loads the scene. Material selections are applied to
+the loaded entity tree. Changing a variant reloads that model; the UI renders on
 control commit rather than on every pointer-move event.
 
 Bundled local models currently cover iPhone 17, iPhone Air, iPhone 17 Pro,
@@ -272,12 +297,12 @@ SimulatorKit Screen
       ▼
 RenderedScreen (Screen decorator)
   1. resolve model + verified asset once
-  2. author variant overlay and load scene once
+  2. author variant overlay and load the entity once (RealityKit)
   3. fit a 32° perspective camera to the complete model once
-  4. build studio lighting, materials and renderer once
-  5. update the screen material for each IOSurface
-  6. render through 4× MSAA into a bounded Metal target ring
-  7. resolve and publish a codec-ready BGRA IOSurface
+  4. build studio lighting, screen material and renderer once
+  5. blit each IOSurface into one persistent LowLevelTexture
+  6. render (engine-managed 4× MSAA) into a bounded Metal target ring
+  7. publish a codec-ready BGRA IOSurface
       │
       ▼
 VideoFrameDimensions + VideoFrameScaler
@@ -289,8 +314,8 @@ VideoFrameDimensions + VideoFrameScaler
 CLI / PNG export
       │
       ▼
-SceneKitDeviceRenderer
-  uses the same definition, variant and camera vocabulary for one frame
+RealityKitDeviceRenderer
+  decodes the screen image and drives the same live stage for one frame
 ```
 
 `DeviceRenderPlan`, `DeviceCameraFraming`, `VideoFrameDimensions`, live-stream
@@ -303,8 +328,8 @@ foreshortening produced by the former orthographic projection.
 `LiveDeviceModels` implements the `DeviceModels` aggregate collection.
 `RenderedScreen` owns the conversational frame/render lifecycle while the
 existing `MJPEGStream` and `AVCCStream` retain codec responsibility. The
-irreducible URL download, filesystem, USD, IOSurface, and SceneKit calls remain
-in Infrastructure.
+irreducible URL download, filesystem, USD, IOSurface, and RealityKit calls
+remain in Infrastructure.
 
 This feature does not change `Input`, `IndigoHIDInput`, SimulatorKit HID
 symbols, or `GestureRegistry`. It reuses the existing bidirectional stream
@@ -354,9 +379,10 @@ the decoder callback because Safari/WebKit can retain the previous canvas
 backing image even while new frames are decoded.
 
 The browser requests up to 2× CSS-pixel resolution (capped at 1600 pixels per
-side) so Retina displays retain authored model and screen detail. SceneKit
-resolves 4× multisampling before either codec sees the frame; H.264 and MJPEG
-therefore receive identical geometry and antialiased edges.
+side) so Retina displays retain authored model and screen detail. RealityKit
+resolves its engine-managed 4× multisampling before either codec sees the
+frame; H.264 and MJPEG therefore receive identical geometry and antialiased
+edges.
 
 The implementation also shares that session directly: `Sim3DPanel` supplies
 the `/stream.3d.<format>` URL and 3D control callbacks to `StreamSession`; it
@@ -382,7 +408,7 @@ keyboard, pasteboard, and programmatic controls do not require a second
 connection. Variant choices may reconnect because native USD variant
 selection happens when the model is loaded; ordinary posing never does.
 
-The farm view is intentionally out of scope: rendering a separate SceneKit
+The farm view is intentionally out of scope: rendering a separate 3D
 image for every live farm tile is too expensive and adds no control value.
 
 ## Adding a model
@@ -404,7 +430,8 @@ image for every live farm tile is too expensive and adds no control value.
 - Model definitions depend on opaque node/material names that Apple may change
   when replacing an asset at the same URL; SHA-256 verification prevents an
   unnoticed replacement.
-- SceneKit rendering is macOS-only and remains an integration-tested boundary.
+- RealityKit rendering is macOS-only, main-actor bound (each frame hops to
+  the main queue, like HID input), and remains an integration-tested boundary.
 - Models without a declared and measurable screen surface cannot be used.
-- USD variants are chosen before SceneKit loads the scene; changing them
+- USD variants are chosen before RealityKit loads the scene; changing them
   requires a model reload.

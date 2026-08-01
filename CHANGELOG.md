@@ -13,7 +13,7 @@ For releases prior to this changelog, see the
 ### Added
 
 - **Data-driven 3D device rendering.** `baguette render-3d` and
-  `POST /simulators/:udid/render-3d.png` place a screenshot onto a SceneKit
+  `POST /simulators/:udid/render-3d.png` place a screenshot onto a RealityKit
   device model; the focused simulator UI exposes a live 3D viewport over both
   existing MJPEG and H.264/AVCC codecs.
   Model bundles contain `definition.json` plus a local USDZ or a SHA-256
@@ -26,11 +26,25 @@ For releases prior to this changelog, see the
 
 ### Changed
 
+- **Quick Look-accurate 3D colors via RealityKit.** Live and one-shot 3D
+  rendering moved from SceneKit to RealityKit's `RealityRenderer` — the engine
+  Quick Look uses for USDZ — so device finishes tone-map exactly like opening
+  `device.usdz` directly (Cosmic Orange no longer clips to washed-out red;
+  bright aluminum rolls toward gold). Simulator frames stream through one
+  persistent `LowLevelTexture` onto an
+  `UnlitMaterial(applyPostProcessToneMap: false)`, keeping screen pixels
+  byte-accurate while the body stays physically lit; studio exposure is
+  calibrated (and test-pinned) against Quick Look sample zones. Antialiasing
+  is now the engine's own 4× MSAA into the existing bounded IOSurface target
+  ring, dropping the hand-rolled multisample/depth textures. Material-color
+  variants now replace the authored base texture instead of tinting it, so
+  Deep Blue and Silver render as declared instead of a muddy mix. See
+  [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
 - **Perspective, Retina-quality 3D rendering.** Live and one-shot 3D now share
   the reference renderer's 32° perspective lens, aspect-aware bounds fit, and
   distance-based zoom instead of an orthographic camera that visibly squashed
   devices at steep poses. The live viewport requests up to 2× CSS-pixel
-  resolution and resolves 4× Metal MSAA before the common H.264/MJPEG pipeline.
+  resolution and resolves 4× MSAA before the common H.264/MJPEG pipeline.
   See [`docs/features/3d-rendering.md`](docs/features/3d-rendering.md).
 - **Stage-first 3D controls.** The live model now remains mounted and streaming
   when its responsive right-inspector/bottom-sheet is hidden. Pose, Interact,
