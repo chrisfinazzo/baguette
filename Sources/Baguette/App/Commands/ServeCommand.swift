@@ -41,7 +41,7 @@ struct ServeCommand: AsyncParsableCommand {
                 rasterizer: CoreGraphicsPDFRasterizer()
             ),
             models: models,
-            deviceRenderer: SceneKitDeviceRenderer(),
+            deviceRenderer: RealityKitDeviceRenderer(),
             host: host,
             port: port,
             allowedHosts: allowedHosts

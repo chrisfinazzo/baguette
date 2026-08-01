@@ -61,7 +61,7 @@ struct Render3DCommand: AsyncParsableCommand {
 
     func run() async throws {
         let models = try LiveDeviceModels(rootURLs: DeviceModelRoots.standard())
-        let renderer = SceneKitDeviceRenderer()
+        let renderer = RealityKitDeviceRenderer()
         let screenImage: Data
         let installed: InstalledDeviceModel
 

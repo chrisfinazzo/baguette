@@ -1,21 +1,18 @@
 import Foundation
 import IOSurface
-import SceneKit
 import Testing
+
 @testable import Baguette
 
-@Suite("SceneKitDeviceScene")
-struct SceneKitDeviceSceneTests {
+@Suite("RealityKitDeviceScene")
+struct RealityKitDeviceSceneTests {
     @Test func `successive simulator surfaces produce codec-ready BGRA frames`() throws {
-        let scratch = FileManager.default.temporaryDirectory
-            .appending(path: "baguette-live-scene-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let scratch = try Self.makeScratch("frames")
         defer { try? FileManager.default.removeItem(at: scratch) }
-        try Self.writeScene(to: scratch.appending(path: "device.scn"))
         let plan = try Self.plan(directory: scratch)
         let blue = try #require(Self.surface(red: 0, green: 0, blue: 255))
         let red = try #require(Self.surface(red: 255, green: 0, blue: 0))
-        let scene = try SceneKitDeviceScene(plan: plan, quality: 0.75)
+        let scene = try RealityKitDeviceScene(plan: plan)
 
         let blueFrame = try scene.render(screen: blue)
         let redFrame = try scene.render(screen: red)
@@ -26,12 +23,9 @@ struct SceneKitDeviceSceneTests {
     }
 
     @Test func `camera updates change the next frame without rebuilding the scene`() throws {
-        let scratch = FileManager.default.temporaryDirectory
-            .appending(path: "baguette-live-camera-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let scratch = try Self.makeScratch("camera")
         defer { try? FileManager.default.removeItem(at: scratch) }
-        try Self.writeScene(to: scratch.appending(path: "device.scn"))
-        let scene = try SceneKitDeviceScene(plan: Self.plan(directory: scratch))
+        let scene = try RealityKitDeviceScene(plan: Self.plan(directory: scratch))
 
         let before = try scene.render(screen: try #require(Self.surface(
             red: 0, green: 0, blue: 255
@@ -49,12 +43,9 @@ struct SceneKitDeviceSceneTests {
     }
 
     @Test func `live rendering reuses a bounded triple buffer`() throws {
-        let scratch = FileManager.default.temporaryDirectory
-            .appending(path: "baguette-live-buffer-pool-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let scratch = try Self.makeScratch("buffer-pool")
         defer { try? FileManager.default.removeItem(at: scratch) }
-        try Self.writeScene(to: scratch.appending(path: "device.scn"))
-        let scene = try SceneKitDeviceScene(plan: Self.plan(directory: scratch))
+        let scene = try RealityKitDeviceScene(plan: Self.plan(directory: scratch))
         let screen = try #require(Self.surface(red: 24, green: 48, blue: 96))
 
         var surfaceIDs: [IOSurfaceID] = []
@@ -71,12 +62,9 @@ struct SceneKitDeviceSceneTests {
     }
 
     @Test func `screen material preserves simulator midtones without additive clipping`() throws {
-        let scratch = FileManager.default.temporaryDirectory
-            .appending(path: "baguette-live-color-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let scratch = try Self.makeScratch("color")
         defer { try? FileManager.default.removeItem(at: scratch) }
-        try Self.writeScene(to: scratch.appending(path: "device.scn"))
-        let scene = try SceneKitDeviceScene(plan: Self.plan(
+        let scene = try RealityKitDeviceScene(plan: Self.plan(
             directory: scratch,
             rotation: .zero
         ))
@@ -90,6 +78,26 @@ struct SceneKitDeviceSceneTests {
         #expect(abs(Int(pixel.green) - Int(pixel.blue)) <= 2)
     }
 
+    @Test func `screen frame renders upright, not mirrored vertically`() throws {
+        let scratch = try Self.makeScratch("upright")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let scene = try RealityKitDeviceScene(plan: Self.plan(
+            directory: scratch,
+            rotation: .zero
+        ))
+        let split = try #require(Self.verticallySplitSurface(
+            top: (red: 200, green: 30, blue: 30),
+            bottom: (red: 30, green: 30, blue: 200)
+        ))
+
+        let frame = try scene.render(screen: split)
+        let upper = Self.pixel(frame, x: 160, y: 70)
+        let lower = Self.pixel(frame, x: 160, y: 170)
+
+        #expect(upper.red > upper.blue)
+        #expect(lower.blue > lower.red)
+    }
+
     @Test func `live render preserves the authored cosmic orange color space`() throws {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -100,7 +108,7 @@ struct SceneKitDeviceSceneTests {
             repository.appending(path: "Sources/Baguette/Resources/Models3D")
         ])
         let model = try #require(try models.find(id: "iphone-17-pro-max"))
-        let scene = try SceneKitDeviceScene(plan: DeviceRenderPlan.build(
+        let scene = try RealityKitDeviceScene(plan: DeviceRenderPlan.build(
             model: model,
             variants: ["finish": "cosmic-orange"],
             rotation: DeviceRotation(x: -8, y: 158, z: 0),
@@ -115,7 +123,7 @@ struct SceneKitDeviceSceneTests {
         #expect(Self.saturatedRedPixelCount(frame) < 4_000)
     }
 
-    @Test func `deep blue variant recolors texture backed body panels`() throws {
+    @Test func `deep blue variant replaces body textures instead of tinting them`() throws {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -125,35 +133,37 @@ struct SceneKitDeviceSceneTests {
             repository.appending(path: "Sources/Baguette/Resources/Models3D")
         ])
         let model = try #require(try models.find(id: "iphone-17-pro-max"))
-        let deepBlue = try #require(
-            model.definition.resolveVariants(["finish": "deep-blue"]).first
+        let plan = try DeviceRenderPlan.build(
+            model: model,
+            variants: ["finish": "deep-blue"],
+            rotation: DeviceRotation(x: 0, y: 180, z: 0),
+            outputSize: RenderDimensions(width: 240, height: 480),
+            background: .color("#FFFFFF")
         )
+        let scene = try RealityKitDeviceScene(plan: plan)
 
-        #expect(deepBlue.materialColors["SMUhrjUPCjJkPUK"] == "#5B627C")
-        #expect(deepBlue.materialColors["HETovHCBsEjcSiP"] == "#5B627C")
+        let frame = try scene.render(screen: try #require(Self.surface(
+            red: 0, green: 0, blue: 0
+        )))
+
+        // The camera plateau (upper back) must read blue-gray, not the
+        // muddy brown a tint multiplied into the orange base texture makes.
+        let plateau = Self.pixel(frame, x: 120, y: 100)
+        #expect(plateau.blue >= plateau.red)
     }
 }
 
-private extension SceneKitDeviceSceneTests {
-    static func writeScene(to url: URL) throws {
-        let scene = SCNScene()
-        let body = SCNNode(geometry: SCNBox(
-            width: 2.2, height: 4.4, length: 0.2, chamferRadius: 0.15
-        ))
-        body.name = "Device"
-        body.geometry?.firstMaterial?.name = "DeviceBody"
-        body.geometry?.firstMaterial?.diffuse.contents = NSColor.darkGray
-        let material = SCNMaterial()
-        material.name = "ScreenMaterial"
-        let screen = SCNNode(geometry: SCNPlane(width: 1.9, height: 3.9))
-        screen.name = "Screen"
-        screen.geometry?.materials = [material]
-        screen.position = SCNVector3(0, 0, 0.11)
-        body.addChildNode(screen)
-        scene.rootNode.addChildNode(body)
-        guard scene.write(to: url, options: nil, delegate: nil, progressHandler: nil) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
+private extension RealityKitDeviceSceneTests {
+    static func makeScratch(_ label: String) throws -> URL {
+        let scratch = FileManager.default.temporaryDirectory
+            .appending(path: "baguette-rk-\(label)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        try RealityKitRenderFixtures.deviceUSDA.write(
+            to: scratch.appending(path: "device.usda"),
+            atomically: true,
+            encoding: .utf8
+        )
+        return scratch
     }
 
     static func plan(
@@ -166,7 +176,7 @@ private extension SceneKitDeviceSceneTests {
                 id: "live-test",
                 displayName: "Live Test",
                 matches: DeviceModelMatches(),
-                asset: DeviceModelAsset(file: "device.scn", downloadURL: nil, sha256: nil),
+                asset: DeviceModelAsset(file: "device.usda", downloadURL: nil, sha256: nil),
                 scene: DeviceModelScene(
                     rootNode: "Device",
                     screenNode: "Screen",
@@ -189,6 +199,19 @@ private extension SceneKitDeviceSceneTests {
     }
 
     static func surface(red: UInt8, green: UInt8, blue: UInt8) -> IOSurface? {
+        filledSurface { _, _ in (red, green, blue) }
+    }
+
+    static func verticallySplitSurface(
+        top: (red: UInt8, green: UInt8, blue: UInt8),
+        bottom: (red: UInt8, green: UInt8, blue: UInt8)
+    ) -> IOSurface? {
+        filledSurface { _, y in y < 100 ? top : bottom }
+    }
+
+    static func filledSurface(
+        _ color: (Int, Int) -> (red: UInt8, green: UInt8, blue: UInt8)
+    ) -> IOSurface? {
         guard let surface = IOSurfaceCreate([
             kIOSurfaceWidth: 100,
             kIOSurfaceHeight: 200,
@@ -199,11 +222,15 @@ private extension SceneKitDeviceSceneTests {
         ] as CFDictionary) else { return nil }
         IOSurfaceLock(surface, [], nil)
         let bytes = IOSurfaceGetBaseAddress(surface).assumingMemoryBound(to: UInt8.self)
-        for index in stride(from: 0, to: 80_000, by: 4) {
-            bytes[index] = blue
-            bytes[index + 1] = green
-            bytes[index + 2] = red
-            bytes[index + 3] = 255
+        for y in 0..<200 {
+            for x in 0..<100 {
+                let pixel = color(x, y)
+                let offset = y * 400 + x * 4
+                bytes[offset] = pixel.blue
+                bytes[offset + 1] = pixel.green
+                bytes[offset + 2] = pixel.red
+                bytes[offset + 3] = 255
+            }
         }
         IOSurfaceUnlock(surface, [], nil)
         return surface
@@ -261,4 +288,5 @@ private extension SceneKitDeviceSceneTests {
         }
         return count
     }
+
 }

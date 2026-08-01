@@ -1,22 +1,19 @@
 import AppKit
 import Foundation
 import ImageIO
-import SceneKit
 import Testing
+
 @testable import Baguette
 
-@Suite("SceneKitDeviceRenderer")
-struct SceneKitDeviceRendererTests {
-
+@Suite("RealityKitDeviceRenderer")
+struct RealityKitDeviceRendererTests {
     @Test func `renders a generated device scene to requested PNG dimensions`() throws {
         let scratch = try Self.makeScratch()
         defer { try? FileManager.default.removeItem(at: scratch) }
-        let sceneURL = scratch.appending(path: "device.scn")
-        try Self.writeScene(to: sceneURL)
-        let plan = try Self.plan(directory: scratch, file: "device.scn")
+        let plan = try Self.plan(directory: scratch, file: "device.usda")
         let screen = try Self.screenPNG()
 
-        let png = try SceneKitDeviceRenderer().render(plan: plan, screenImage: screen)
+        let png = try RealityKitDeviceRenderer().render(plan: plan, screenImage: screen)
 
         #expect(Array(png.prefix(8)) == [137, 80, 78, 71, 13, 10, 26, 10])
         let source = try #require(CGImageSourceCreateWithData(png as CFData, nil))
@@ -34,7 +31,7 @@ struct SceneKitDeviceRendererTests {
         let plan = try Self.plan(directory: scratch, file: "missing.usdz")
 
         #expect(throws: DeviceModelError.localAssetNotFound("missing.usdz")) {
-            _ = try SceneKitDeviceRenderer().render(
+            _ = try RealityKitDeviceRenderer().render(
                 plan: plan,
                 screenImage: Data("not reached".utf8)
             )
@@ -44,20 +41,18 @@ struct SceneKitDeviceRendererTests {
     @Test func `material appearance variant changes rendered device finish`() throws {
         let scratch = try Self.makeScratch()
         defer { try? FileManager.default.removeItem(at: scratch) }
-        let sceneURL = scratch.appending(path: "device.scn")
-        try Self.writeScene(to: sceneURL)
         let orange = try Self.plan(
-            directory: scratch, file: "device.scn", finish: "orange"
+            directory: scratch, file: "device.usda", finish: "orange"
         )
         let blue = try Self.plan(
-            directory: scratch, file: "device.scn", finish: "blue"
+            directory: scratch, file: "device.usda", finish: "blue"
         )
         let screen = try Self.screenPNG()
 
-        let orangePNG = try SceneKitDeviceRenderer().render(
+        let orangePNG = try RealityKitDeviceRenderer().render(
             plan: orange, screenImage: screen
         )
-        let bluePNG = try SceneKitDeviceRenderer().render(
+        let bluePNG = try RealityKitDeviceRenderer().render(
             plan: blue, screenImage: screen
         )
 
@@ -65,36 +60,17 @@ struct SceneKitDeviceRendererTests {
     }
 }
 
-private extension SceneKitDeviceRendererTests {
+private extension RealityKitDeviceRendererTests {
     static func makeScratch() throws -> URL {
         let url = FileManager.default.temporaryDirectory
-            .appending(path: "baguette-render-\(UUID().uuidString)")
+            .appending(path: "baguette-rk-render-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try RealityKitRenderFixtures.deviceUSDA.write(
+            to: url.appending(path: "device.usda"),
+            atomically: true,
+            encoding: .utf8
+        )
         return url
-    }
-
-    static func writeScene(to url: URL) throws {
-        let scene = SCNScene()
-        let device = SCNNode(geometry: SCNBox(
-            width: 2.2, height: 4.4, length: 0.2, chamferRadius: 0.15
-        ))
-        device.name = "Device"
-        device.geometry?.firstMaterial?.name = "DeviceBody"
-        device.geometry?.firstMaterial?.diffuse.contents = NSColor.darkGray
-
-        let screenMaterial = SCNMaterial()
-        screenMaterial.name = "ScreenMaterial"
-        screenMaterial.diffuse.contents = NSColor.black
-        let screen = SCNNode(geometry: SCNPlane(width: 1.9, height: 3.9))
-        screen.name = "Screen"
-        screen.geometry?.materials = [screenMaterial]
-        screen.position = SCNVector3(0, 0, 0.11)
-        device.addChildNode(screen)
-        scene.rootNode.addChildNode(device)
-
-        guard scene.write(to: url, options: nil, delegate: nil, progressHandler: nil) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
     }
 
     static func screenPNG() throws -> Data {

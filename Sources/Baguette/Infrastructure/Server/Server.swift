@@ -47,7 +47,7 @@ struct Server: Sendable {
         simulators: any Simulators,
         chromes: any Chromes,
         models: any DeviceModels = DeviceModelCatalog.empty,
-        deviceRenderer: any DeviceRenderer = SceneKitDeviceRenderer(),
+        deviceRenderer: any DeviceRenderer = RealityKitDeviceRenderer(),
         host: String = "127.0.0.1",
         port: Int = 8421,
         allowedHosts: [String] = []
@@ -1380,7 +1380,7 @@ struct Server: Sendable {
             return
         }
         let plan: DeviceRenderPlan
-        let scene: SceneKitDeviceScene
+        let scene: RealityKitDeviceScene
         do {
             plan = try live3DPlan(
                 udid: udid,
@@ -1388,7 +1388,7 @@ struct Server: Sendable {
                 simulators: simulators,
                 models: models
             )
-            scene = try SceneKitDeviceScene(plan: plan, quality: 0.7)
+            scene = try RealityKitDeviceScene(plan: plan)
         } catch {
             try? await outbound.write(.text(
                 #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#

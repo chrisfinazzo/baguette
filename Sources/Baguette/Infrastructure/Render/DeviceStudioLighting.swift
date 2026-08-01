@@ -5,12 +5,25 @@ import SceneKit
 ///
 /// broad softboxes provide reflections without tinting or clipping device finishes.
 enum DeviceStudioLighting {
+    /// RealityKit environment exposure (2^exponent), calibrated so the
+    /// Cosmic Orange finish matches the Quick Look rendering of the same
+    /// `device.usdz` without clipping.
+    static let intensityExponent: Float = 1.5
+
     static func apply(to scene: SCNScene) {
         scene.lightingEnvironment.contents = environment
-        scene.lightingEnvironment.intensity = 2.6
+        scene.lightingEnvironment.intensity = 1.5
     }
 
-    private static let environment: NSImage = {
+    private static let environment = NSImage(
+        cgImage: equirectangularImage,
+        size: NSSize(
+            width: equirectangularImage.width,
+            height: equirectangularImage.height
+        )
+    )
+
+    static let equirectangularImage: CGImage = {
         let width = 1024
         let height = 512
         let colorSpace = CGColorSpaceCreateDeviceRGB()
@@ -23,7 +36,7 @@ enum DeviceStudioLighting {
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else {
-            return NSImage(size: NSSize(width: width, height: height))
+            fatalError("studio environment context allocation failed")
         }
 
         let size = CGSize(width: width, height: height)
@@ -111,8 +124,8 @@ enum DeviceStudioLighting {
         }
 
         guard let image = context.makeImage() else {
-            return NSImage(size: NSSize(width: width, height: height))
+            fatalError("studio environment image creation failed")
         }
-        return NSImage(cgImage: image, size: size)
+        return image
     }()
 }
