@@ -22,12 +22,31 @@ const vm = require('node:vm');
  * `window` per load.
  */
 function loadBrowserModule(filePath) {
-  const code = fs.readFileSync(filePath, 'utf8');
-  const wrapped = `(function (window) {\n${code}\n});`;
-  const factory = vm.runInThisContext(wrapped, { filename: filePath });
-  const window = {};
-  factory(window);
+  return loadBrowserModules([filePath]);
+}
+
+/**
+ * Loads several browser IIFE modules into ONE shared throwaway `window`,
+ * in order, and returns that `window` — for files that reference each
+ * other at load time (e.g. `class Touch extends window.Baguette._Base`),
+ * where the lazy `window.Baguette._X` reference pattern the rest of the
+ * SDK uses doesn't apply.
+ *
+ * @param {string[]} filePaths
+ * @param {object} [seedWindow] a pre-built object to load onto instead of
+ *   a fresh `{}` — e.g. a `FakeElement` (see fake-dom.js), for classes
+ *   that register global `window` listeners (keydown/keyup/blur) and
+ *   need that `window` to be fireable in tests.
+ */
+function loadBrowserModules(filePaths, seedWindow) {
+  const window = seedWindow || {};
+  for (const filePath of filePaths) {
+    const code = fs.readFileSync(filePath, 'utf8');
+    const wrapped = `(function (window) {\n${code}\n});`;
+    const factory = vm.runInThisContext(wrapped, { filename: filePath });
+    factory(window);
+  }
   return window;
 }
 
-module.exports = { loadBrowserModule };
+module.exports = { loadBrowserModule, loadBrowserModules };
