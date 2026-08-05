@@ -224,7 +224,28 @@ baguette <command> [options]
   # Web UI — single-device dashboard + multi-device farm + Camera card +
   # Accessibility inspector + Logs panel + in-browser recording.
   serve [--port 8421] [--host 127.0.0.1] [--device-set <path>]
-        [--allowed-hosts <host>]
+        [--allowed-hosts <host>] [--plugin-dir <path>] [--no-plugins]
+
+  # Plugins — domain-specific affordances that run as subprocesses.
+  # Nothing runs at install time; a plugin's command runs when you
+  # activate it. See docs/features/plugins.md.
+  plugin list                                Installed plugins + provenance
+  plugin show <name>                         Detail, including the capabilities
+                                             it may use — read before installing
+  plugin validate <path>                     Check a manifest before publishing
+  plugin run <plugin:command> --udid <UDID> [--plugin-dir <path>]
+                                             Run one contribution, print its JSON
+  plugin install <name | owner/repo/name>    Install from a trusted bakery, or
+                                             trust + install in one step
+  plugin update [<name>]                     Re-pull and re-install at latest
+  plugin remove <name>
+
+  # Bakeries — a git repo with a baguette.json menu supplies plugins.
+  # Trust is per bakery, once; everything pins to a commit.
+  bakery add <owner/repo | URL> [--yes]      Trust a source and record its menu
+  bakery list                                Trusted sources + pinned commits
+  bakery update [<ref>]                      Re-pull to the latest commit
+  bakery remove <ref>
 
   # DeviceKit chrome / bezel data
   chrome layout    --udid <UDID> | --device-name "iPhone 17 Pro"
@@ -313,6 +334,13 @@ rejected.
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
 | `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG (`?quality=&scale=`) |
+| `GET`  | `/simulators/:udid/describe-ui.json`       | accessibility tree over HTTP (`?x=&y=` hit-tests a point) |
+| `POST` | `/simulators/:udid/input`                  | one gesture envelope — same JSON `baguette input` takes |
+| `GET`  | `/plugins.json`                            | installed plugin manifests   |
+| `POST` | `/plugins/:id/commands/:cmd?udid=`         | run one plugin contribution, answer its rows |
+| `GET`  | `/bakeries.json`                           | trusted bakeries + pinned commits |
+| `POST` | `/bakeries/preview`                        | clone + read a bakery's menu (safe; trusts nothing) |
+| `POST` | `/bakeries/install`                        | trust a bakery and install a plugin from it |
 | `WS`   | `/simulators/:udid/stream?format=mjpeg\|avcc` | live frames + control + input + `describe_ui` |
 | `WS`   | `/simulators/:udid/logs?level=&style=&predicate=&bundleId=` | live unified-log stream |
 | `WS`   | `/simulators/:udid/camera`                 | virtual camera: pick a Mac webcam, frames pumped into the simulator's AVFoundation stack via the bundled `VirtualCamera.dylib` |
@@ -384,6 +412,50 @@ loads five IIFE component scripts from `/farm/<name>.js`:
 `BAGUETTE_WEB_DIR` overrides the served root, so you can iterate on the
 farm UI without rebuilding — point it at `Sources/Baguette/Resources/Web`
 on disk and reload the browser.
+
+## Plugins & bakeries
+
+Plugins add domain-specific affordances — an Expo reload button, an
+accessibility audit, a deep-link bar — without touching baguette's core.
+A plugin is a directory with a `baguette-plugin.json` manifest and a
+command baguette runs as a **subprocess**. Nothing a plugin ships is
+ever loaded into baguette's process or into the served page: it declares
+a panel, baguette draws it with host markup.
+
+```bash
+baguette bakery add tddworks/baguette-plugins   # trust a source, once
+baguette plugin install a11y                    # or: plugin install owner/repo/a11y
+baguette plugin show a11y                       # what it may do, before you install
+baguette serve --plugin-dir ./my-plugins        # local authoring, nothing installed
+```
+
+Two properties define the security model:
+
+- **Installing never runs a plugin's code.** Install clones and copies
+  files; there are no postinstall hooks. The command runs when you
+  activate the plugin — its button in the rail, or `plugin run`.
+- **A plugin's command is a real program with your permissions**, the
+  same trust you extend to anything you `brew install`. Trust is per
+  **bakery** (any git repo with a `baguette.json` menu), granted once,
+  and everything pins to a commit.
+
+A manifest declares `capabilities`, and the server holds it to them:
+each invocation gets its own token carrying exactly that set, revoked
+when the command exits, checked in front of every route. A plugin that
+didn't declare `input` gets a `403` on the input route even though its
+token is otherwise valid — and routes no capability names are closed to
+plugins entirely.
+
+In the browser, plugins get their own rail on the right edge of focus
+mode, deliberately apart from the device toolbar — baguette ships the
+toolbar, plugins are code you installed, and the split is a trust
+signal. One plugin is one slot however many tools it ships. The **+**
+at the foot of the rail previews and installs a bakery without leaving
+the page.
+
+Full contract — manifest schema, the command's JSON answer, capability
+table, bakery layout — in [`docs/features/plugins.md`](docs/features/plugins.md).
+A worked two-plugin bakery lives in [`examples/expo-bakery/`](examples/expo-bakery/).
 
 ## Wire protocol — `baguette input`
 
@@ -570,6 +642,14 @@ feature lives in one place across both layers.
 │   │   ├── Orientation/              Orientation + DeviceOrientation values
 │   │   ├── Logs/                     LogFilter + LogStream + Subprocess
 │   │   │                             collaborator
+│   │   ├── Plugin/                   PluginManifest / Plugin / Plugins aggregate +
+│   │   │                             Contribution / PanelBody / PluginResult +
+│   │   │                             PluginCapability / PluginGrants /
+│   │   │                             PluginRoute + PluginAccess (what a plugin
+│   │   │                             may reach, decided in one place)
+│   │   ├── Bakery/                   Bakery / BakeryRef / BakeryMenu +
+│   │   │                             InstallPlan / TrustDecision / Checkout +
+│   │   │                             BaguetteHome (~/.baguette layout)
 │   │   └── Camera/                   CameraDevice / CameraFrame / CameraFlags /
 │   │                                 CameraSource / CameraMediaKind / ScaleToFit /
 │   │                                 SharedFrameLayout / BGRAConverter /
@@ -598,6 +678,10 @@ feature lives in one place across both layers.
 │   │   │                             TokenDispatcher bridge)
 │   │   ├── Orientation/              PurpleWorkspacePortOrientation (GSEvent)
 │   │   ├── Logs/                     SimDeviceLogStream + HostSubprocess
+│   │   ├── Plugin/                   FileSystemPlugins + PluginRoot (bundled /
+│   │   │                             installed / --plugin-dir lookup)
+│   │   ├── Bakery/                   FileSystemBakeries + GitCheckout (shallow,
+│   │   │                             non-interactive, no submodules)
 │   │   ├── Camera/                   AVCameras + AVCameraCapture (orchestrator) +
 │   │   │                             HostVideoCapture (integration-only
 │   │   │                             AVCaptureSession plumbing) +
@@ -620,6 +704,8 @@ feature lives in one place across both layers.
 │       ├── sim-camera.js             Camera control card
 │       ├── sim-logs.js               Logs panel
 │       ├── sim-ax-inspector.js       Accessibility-tree overlay
+│       ├── sim-plugins.js            Plugins rail + panels (host-drawn)
+│       ├── plugin-row-action.js      what clicking a plugin row means
 │       ├── recorder.js               In-browser MP4 recorder
 │       ├── frame-decoder.js          MJPEG / AVCC strategy
 │       ├── stream-session.js         WebSocket + paint loop

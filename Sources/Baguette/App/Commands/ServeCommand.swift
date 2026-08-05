@@ -1,7 +1,8 @@
 import ArgumentParser
 import Foundation
 
-/// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …] [--allowed-hosts …]`
+/// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …]`
+/// `             [--allowed-hosts …] [--plugin-dir …] [--no-plugins]`
 ///
 /// Boots the standalone simulator UI. Open `http://<host>:<port>/`
 /// in a browser and the simulator picker loads — no SPA dependency,
