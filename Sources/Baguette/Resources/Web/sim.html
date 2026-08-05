@@ -64,7 +64,9 @@
 <script src="/sim-3d.js"></script>
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +
      panels from /plugins.json. Host-rendered only: no plugin script,
-     CSS or markup is ever loaded into this page. -->
+     CSS or markup is ever loaded into this page. `plugin-row-action.js`
+     carries the click semantics and must load first. -->
+<script src="/plugin-row-action.js"></script>
 <script src="/sim-plugins.js"></script>
 <!-- Leaflet (vendored) + the location map picker. Leaflet must load
      before sim-location.js, which is itself lazy-used by sim-native.js

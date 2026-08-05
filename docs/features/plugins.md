@@ -55,8 +55,15 @@ A plugin is a directory containing `baguette-plugin.json`:
   the rail shows when its tools are collapsed. Optional: omit it and the
   plugin wears the icon of the first panel it contributes.
 - **`when`**: `simulator.booted`, or omit for "always".
-- **`body.kind`** is `list` (the only widget today). `rowAction` is
-  `highlight` (draw a box on the device), `tap`, or `copy`.
+- **`body.kind`** is `list` (the only widget today). `rowAction` says
+  what clicking a row does:
+  - `highlight` — box the row's `frame` on the live screen
+  - `tap` — tap the centre of the row's `frame` on the device
+  - `copy` — put the row's `copy` string on the clipboard
+
+  A row missing what the action needs isn't clickable: no `frame` for
+  `highlight` / `tap`, no `copy` for `copy`. An unknown `rowAction` is
+  inert rather than resolved to the nearest match.
 
 Contributions are namespaced by plugin: `a11y:audit`. Two plugins can
 both ship a `reload`.
@@ -93,9 +100,10 @@ The command prints **one JSON object** on stdout and exits:
 
 - `severity` is `info` | `warn` | `error` (default `info`).
 - `frame` is **flat** — `x`/`y`/`width`/`height` in **device points**,
-  the same space as gesture coordinates. With `rowAction: "highlight"`,
-  clicking the row boxes that rect on the live screen. Omit the frame
-  and the row isn't clickable.
+  the same space as gesture coordinates, so `rowAction: "tap"` aims at
+  its centre with no conversion. Omit the frame and a `highlight` /
+  `tap` row isn't clickable.
+- `copy` is the string a `rowAction: "copy"` row puts on the clipboard.
 - `{ "ok": false, "message": "…" }` reports the plugin's own failure;
   baguette shows the message. Printing non-JSON is an error, not an
   empty result — a panel that renders nothing reads as "all clear".

@@ -704,9 +704,25 @@
       mount: document.getElementById('simNativeView') || document.body,
       isBooted: () => true,
       onHighlight: (frame) => paintPluginHighlight(frame),
+      onTap: (point) => tapForPlugin(point),
       log: (msg) => console.log('[plugin]', msg),
     });
     pluginPanels.load();
+  }
+
+  // A `rowAction: "tap"` row, dispatched down the same socket every
+  // other gesture uses. Wire shape matches GestureRegistry's `tap`:
+  // device-point coordinates plus the device-point screen size — the
+  // row's frame already arrives in that space, so there's nothing to
+  // convert.
+  function tapForPlugin(point) {
+    if (!session || !sim || !sim.screen || !sim.screen.size) return;
+    const size = sim.screen.size;
+    session.send({
+      type: 'tap',
+      x: point.x, y: point.y,
+      width: size.width, height: size.height,
+    });
   }
 
   function paintPluginHighlight(frame) {

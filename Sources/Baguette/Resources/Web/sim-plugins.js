@@ -72,13 +72,15 @@
      * @param {HTMLElement} [opts.mount]     where the rail + panel attach (default document.body)
      * @param {() => boolean} [opts.isBooted]
      * @param {(frame:object|null) => void} [opts.onHighlight]
+     * @param {(point:{x:number,y:number}) => void} [opts.onTap]  device points
      * @param {(msg:string) => void} [opts.log]
      */
-    constructor({ udid, mount, isBooted, onHighlight, log }) {
+    constructor({ udid, mount, isBooted, onHighlight, onTap, log }) {
       this.udid = udid;
       this.mount = mount || document.body;
       this.isBooted = isBooted || (() => true);
       this.onHighlight = onHighlight || (() => {});
+      this.onTap = onTap || (() => {});
       this.log = log || (() => {});
       this.plugins = [];
       this.openPanelID = null;
@@ -401,9 +403,10 @@
         this.renderShell(pluginName, panel, '<div class="plugin-status">Nothing to report</div>');
         return;
       }
+      const action = new window.Baguette._PluginRowAction(rowAction);
       const items = rows.map((row, index) => {
         const color = SEVERITY_COLOR[row.severity] || SEVERITY_COLOR.info;
-        const clickable = rowAction && row.frame ? ' plugin-row-clickable' : '';
+        const clickable = action.actionable(row) ? ' plugin-row-clickable' : '';
         return '<li class="plugin-row' + clickable + '" data-index="' + index + '">'
              + '<span class="plugin-dot" style="background:' + color + '"></span>'
              + '<span class="plugin-row-text">'
@@ -422,11 +425,14 @@
         if (!li) return;
         const row = rows[Number(li.dataset.index)];
         if (!row) return;
+        const intent = action.intent(row);
+        if (!intent) return;   // an inert row stays inert, selection included
         for (const other of list.querySelectorAll('.plugin-row')) {
           other.classList.toggle('plugin-row-active', other === li);
         }
-        if (rowAction === 'highlight') this.onHighlight(row.frame || null);
-        if (rowAction === 'copy' && row.copy) navigator.clipboard.writeText(row.copy);
+        if (intent.kind === 'highlight') this.onHighlight(intent.frame);
+        if (intent.kind === 'tap') this.onTap(intent.point);
+        if (intent.kind === 'copy') navigator.clipboard.writeText(intent.text);
       });
     }
 
