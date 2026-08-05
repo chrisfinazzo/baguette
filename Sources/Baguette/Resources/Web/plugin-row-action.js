@@ -33,6 +33,7 @@
      * @returns {{kind:'highlight', frame:object}
      *          |{kind:'tap', point:{x:number,y:number}}
      *          |{kind:'copy', text:string}
+     *          |{kind:'run', command:string, args:object}
      *          |null}
      */
     intent(row) {
@@ -44,6 +45,11 @@
           return row.frame ? { kind: 'tap', point: PluginRowAction.centre(row.frame) } : null;
         case 'copy':
           return row.copy ? { kind: 'copy', text: row.copy } : null;
+        case 'run':
+          // No frame required — a settings row has no on-screen rect,
+          // and demanding one would make every such row inert. Args
+          // default to {} so the caller has a single shape to post.
+          return row.run ? { kind: 'run', command: row.run, args: row.args || {} } : null;
         default:
           return null;
       }

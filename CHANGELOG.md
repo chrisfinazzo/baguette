@@ -12,6 +12,28 @@ For releases prior to this changelog, see the
 
 ### Added
 
+- **Interface settings — appearance, contrast, text size.** The three
+  accessibility-display settings a simulator exposes: light / dark appearance,
+  Increase Contrast, and content size (Dynamic Type, including the five
+  "Larger Accessibility Sizes" where layouts actually break). `baguette
+  interface appearance|contrast|text-size --udid <UDID> [<value>]` — each leaf
+  reads with no value and sets with one, mirroring `simctl ui` itself. Over
+  HTTP as `GET /simulators/:udid/interface.json` and `POST
+  /simulators/:udid/interface` (any subset; answers with the resulting state).
+  The gotcha worth preserving: a read can answer `unknown` (device not booted)
+  or `unsupported`, and simctl exits 0 for both — they're states to show, not
+  failures, so reads return them. They're also not instructions, so setting one
+  is refused before anything spawns. Plugins reach it under the new `interface`
+  capability. See [`docs/features/interface.md`](docs/features/interface.md).
+- **`rowAction: "run"` — plugin panels you can operate.** A row may name one of
+  its own plugin's commands plus `args` to call it with; clicking invokes it and
+  re-renders the panel from the answer, so the panel shows what the device
+  reports rather than what the click assumed. `args` ride the stdin context
+  (absent when no row invoked the command, so existing plugins see the context
+  they always did), and a row can only reach a command in its own plugin. Still
+  no plugin code in the page — the click is an HTTP call to the same endpoint
+  the panel opens with. The bundled a11y plugin uses it for a **Display & Text
+  Size** picker beside its audit.
 - **Plugin system.** Third-party plugins add domain-specific affordances
   (an Expo reload button, an accessibility audit, a deep-link bar) without
   touching baguette's core. A plugin is a directory with a

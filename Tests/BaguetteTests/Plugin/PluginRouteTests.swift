@@ -46,6 +46,14 @@ struct PluginRouteTests {
         #expect(PluginRoute.capability(path: "/simulators.json") == .simulators)
     }
 
+    @Test func `appearance, contrast and text size demand interface`() {
+        // One capability for the whole `simctl ui` family: a plugin that
+        // can darken the screen can already restyle it, so splitting
+        // read from write would be a distinction without a difference.
+        #expect(PluginRoute.capability(path: "/simulators/U/interface") == .interface)
+        #expect(PluginRoute.capability(path: "/simulators/U/interface.json") == .interface)
+    }
+
     @Test func `a real udid is carried in the path like any other segment`() {
         #expect(
             PluginRoute.capability(path: "/simulators/AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/input")

@@ -209,6 +209,18 @@ Wired (use freely):
   Frames are in the same units as `tap` / `swipe` wire fields, so
   reading `frame.x + frame.width/2`, `frame.y + frame.height/2`
   back into a `tap` envelope just works.
+- `interface` — the accessibility-display family: light / dark
+  appearance, Increase Contrast, and content size (Dynamic Type,
+  including the five accessibility sizes). CLI: `baguette interface
+  appearance|contrast|text-size --udid <X> [<value>]` — no value reads,
+  a value sets. HTTP: `GET /simulators/<X>/interface.json` and
+  `POST /simulators/<X>/interface` (any subset, answers the resulting
+  state). Backed by `xcrun simctl ui` (not a HID path). **A read on a
+  device that isn't booted answers `unknown` and exits 0** — a state to
+  check for, not a failure; `unsupported` means the runtime lacks the
+  setting. Neither can be set. Pairs with `describe-ui`: change the
+  conditions, re-dump the tree, compare. See
+  [`docs/features/interface.md`](../../docs/features/interface.md).
 - `logs` — stream the booted simulator's unified log line-by-line
   to stdout. CLI: `baguette logs --udid <X> [--level info|debug|default]
   [--style default|compact|json|ndjson|syslog] [--predicate ...]

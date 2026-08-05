@@ -43,13 +43,20 @@ extension Server {
         router.post("/plugins/:id/commands/:cmd") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let qualified = Self.qualifiedCommandParam(r)
+            // A `rowAction: "run"` click posts the row's own args here.
+            // Opening a panel posts nothing, which stays a valid
+            // invocation — hence a body that's absent, empty or
+            // unparseable all mean "no args" rather than an error.
+            let buffer = try? await r.body.collect(upTo: 64 * 1024)
+            let args = Self.parseCommandArgs(body: buffer.map { String(buffer: $0) } ?? "")
             let outcome = await Self.runPlugin(
                 qualified: qualified,
                 context: PluginDispatch.Context(
                     serverURL: origin,
                     udid: r.uri.queryParameters.get("udid").map { String($0) },
                     // Replaced by a per-invocation grant inside dispatch.
-                    token: ""
+                    token: "",
+                    args: args
                 ),
                 plugins: plugins,
                 grants: grants
@@ -129,6 +136,22 @@ extension Server {
         let id = String(parts[1]).removingPercentEncoding ?? ""
         let command = String(parts[3]).removingPercentEncoding ?? ""
         return "\(id):\(command)"
+    }
+
+    /// Pull a `rowAction: "run"` click's arguments off the request body.
+    ///
+    /// Everything ambiguous means "no args": an absent body (a panel
+    /// being opened), an empty object, or JSON we can't read. That's
+    /// deliberate — a click that carries nothing is a normal
+    /// invocation, not a client error, and the command decides what to
+    /// do without arguments.
+    static func parseCommandArgs(body: String) -> [String: Any]? {
+        guard let data = body.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let args = object["args"] as? [String: Any],
+              !args.isEmpty
+        else { return nil }
+        return args
     }
 
     /// Whether the caller is claiming to be a plugin at all.
@@ -260,6 +283,10 @@ extension ResultRow {
         var out: [String: Any] = ["title": title, "severity": severity.rawValue]
         if let subtitle { out["subtitle"] = subtitle }
         if let copy { out["copy"] = copy }
+        // Round-tripped verbatim: the browser sends `run` + `args` back
+        // to the command that authored them. baguette is the postman.
+        if let run { out["run"] = run }
+        if let args { out["args"] = args.object }
         if let frame {
             out["frame"] = [
                 "x": frame.origin.x, "y": frame.origin.y,

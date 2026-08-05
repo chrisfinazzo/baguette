@@ -60,10 +60,12 @@ A plugin is a directory containing `baguette-plugin.json`:
   - `highlight` — box the row's `frame` on the live screen
   - `tap` — tap the centre of the row's `frame` on the device
   - `copy` — put the row's `copy` string on the clipboard
+  - `run` — invoke the command named by the row's `run`, passing its
+    `args`, and re-render the panel from the answer
 
   A row missing what the action needs isn't clickable: no `frame` for
-  `highlight` / `tap`, no `copy` for `copy`. An unknown `rowAction` is
-  inert rather than resolved to the nearest match.
+  `highlight` / `tap`, no `copy` for `copy`, no `run` for `run`. An
+  unknown `rowAction` is inert rather than resolved to the nearest match.
 
 Contributions are namespaced by plugin: `a11y:audit`. Two plugins can
 both ship a `reload`.
@@ -104,9 +106,55 @@ The command prints **one JSON object** on stdout and exits:
   its centre with no conversion. Omit the frame and a `highlight` /
   `tap` row isn't clickable.
 - `copy` is the string a `rowAction: "copy"` row puts on the clipboard.
+- `run` names one of *this plugin's* command ids, and `args` is an
+  object handed to it — see below. `args` without `run` is an error, not
+  a silently-inert row.
 - `{ "ok": false, "message": "…" }` reports the plugin's own failure;
   baguette shows the message. Printing non-JSON is an error, not an
   empty result — a panel that renders nothing reads as "all clear".
+
+## Panels you can operate — `rowAction: "run"`
+
+The other three row actions are things the *host* does with a row's
+data. `run` hands control back to the plugin, which is what turns a
+panel from a report into a control surface:
+
+```jsonc
+// manifest
+{ "id": "display", "title": "Display & Text Size", "icon": "wrench",
+  "body": { "kind": "list", "source": "display", "rowAction": "run" } }
+```
+
+```json
+// what the command prints
+{ "ok": true, "rows": [
+  { "title": "● Light" },
+  { "title": "○ Dark", "run": "display", "args": { "appearance": "dark" } }
+] }
+```
+
+Clicking *Dark* calls `display` again with those `args`. The command
+applies the change and prints the new state; the panel re-renders from
+that answer — so what you see is what the device reports, not what the
+click assumed. The already-selected row carries no `run`, so re-applying
+a setting doesn't cost a subprocess.
+
+`args` arrive in the **stdin context**, not the environment (env values
+are strings, so a nested object would have to be flattened and parsed
+back):
+
+```json
+{ "command": "a11y:display", "url": "…", "token": "…", "udid": "…",
+  "args": { "appearance": "dark" } }
+```
+
+The field is **absent** when no row invoked the command, so a command
+written before `run` existed sees exactly the context it always did.
+
+A row can only name a command in its own plugin — the plugin id comes
+from the panel's own `source`, never from the row — and this is still an
+HTTP call to the same command endpoint the panel opens with. No plugin
+code runs in the page.
 
 ## The rail
 
@@ -135,6 +183,7 @@ closed set, and it is **enforced**, not documentation:
 | `input` | `POST /simulators/:udid/input` — gestures, keys, buttons |
 | `screenshot` | `GET /simulators/:udid/screenshot.jpg` |
 | `logs` | `WS /simulators/:udid/logs` |
+| `interface` | `GET /simulators/:udid/interface.json`, `POST /simulators/:udid/interface` — appearance, contrast, text size |
 | `status-bar` | `GET`/`POST`/`DELETE /simulators/:udid/status-bar` |
 | `location` | `POST`/`DELETE /simulators/:udid/location` |
 | `files` | `POST /simulators/:udid/files` — install apps, add media |

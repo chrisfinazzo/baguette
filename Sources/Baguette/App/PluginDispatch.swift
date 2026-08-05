@@ -25,11 +25,33 @@ enum PluginDispatch {
         let udid: String?
         /// Per-session token the plugin-API routes check.
         let token: String
+        /// Arguments from the row that invoked this command, when one
+        /// did. Absent for a panel simply being opened, which is every
+        /// invocation that predates `rowAction: "run"`.
+        let args: PluginArgs?
 
-        init(serverURL: String, udid: String?, token: String) {
+        init(serverURL: String, udid: String?, token: String, args: [String: Any]? = nil) {
             self.serverURL = serverURL
             self.udid = udid
             self.token = token
+            self.args = args.flatMap(PluginArgs.init)
+        }
+
+        private init(serverURL: String, udid: String?, token: String, args: PluginArgs?) {
+            self.serverURL = serverURL
+            self.udid = udid
+            self.token = token
+            self.args = args
+        }
+
+        /// The same context re-issued with a per-invocation grant token.
+        ///
+        /// A copy rather than a rebuild on purpose: spelling the fields
+        /// out at the call site is how `args` got dropped on the way to
+        /// the plugin the first time, and any field added later would
+        /// have been dropped the same way.
+        func withToken(_ token: String) -> Context {
+            Context(serverURL: serverURL, udid: udid, token: token, args: args)
         }
     }
 
@@ -113,9 +135,7 @@ enum PluginDispatch {
         let issuedToken = grants?.issue(
             plugin: plugin.id, capabilities: plugin.manifest.capabilities
         )
-        let runContext = issuedToken.map {
-            Context(serverURL: context.serverURL, udid: context.udid, token: $0)
-        } ?? context
+        let runContext = issuedToken.map { context.withToken($0) } ?? context
         defer { if let issuedToken { grants?.revoke(issuedToken) } }
 
         let child = subprocess()
@@ -217,13 +237,20 @@ enum PluginDispatch {
 
     /// Same context as the environment, in structured form, for
     /// plugins that would rather read stdin than `process.env`.
-    private static func contextJSON(_ qualifiedCommand: String, _ context: Context) -> Data {
+    ///
+    /// `args` ride this channel rather than the environment: env values
+    /// are strings, so a nested object would have to be flattened and
+    /// the plugin would parse back what it just sent. Absent entirely
+    /// when there are none, so a command written before `rowAction:
+    /// "run"` existed sees exactly the context it always did.
+    static func contextJSON(_ qualifiedCommand: String, _ context: Context) -> Data {
         var dict: [String: Any] = [
             "command": qualifiedCommand,
             "url": context.serverURL,
             "token": context.token,
         ]
         if let udid = context.udid { dict["udid"] = udid }
+        if let args = context.args { dict["args"] = args.object }
         return (try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])) ?? Data()
     }
 }

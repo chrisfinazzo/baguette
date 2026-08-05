@@ -57,6 +57,12 @@ protocol Simulator: Sendable {
     /// invocation is stateless.
     func statusBar() -> any StatusBar
 
+    /// Read or set this simulator's interface settings — appearance
+    /// style (light / dark), Increase Contrast, and content size
+    /// (Dynamic Type). Each call returns a fresh handle; the underlying
+    /// `simctl ui` invocation is stateless.
+    func interface() -> any Interface
+
     /// Drive this simulator's simulated GPS location — pin a single
     /// point, run a moving route, or clear back to the live value. Each
     /// call returns a fresh handle; the underlying `simctl location`

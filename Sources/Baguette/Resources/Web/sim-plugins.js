@@ -359,11 +359,32 @@
       }
 
       const [id, cmd] = String(body.source).split(':');
+      await this.invoke(pluginName, panel, id, cmd, null);
+    }
+
+    /**
+     * Run one of a plugin's commands and render the answer into the
+     * open panel. Both the panel's own `source` and a `rowAction:
+     * "run"` click land here, so a row that changes something re-renders
+     * from the command's fresh output rather than from what the browser
+     * assumed would happen.
+     *
+     * @param {string} id       plugin id
+     * @param {string} cmd      command id within that plugin
+     * @param {object|null} args  arguments from the clicked row, if any
+     */
+    async invoke(pluginName, panel, id, cmd, args) {
+      const body = panel.body || {};
       let payload;
       try {
         const url = '/plugins/' + encodeURIComponent(id) + '/commands/' + encodeURIComponent(cmd)
                   + '?udid=' + encodeURIComponent(this.udid);
-        const res = await fetch(url, { method: 'POST' });
+        const init = { method: 'POST' };
+        if (args) {
+          init.headers = { 'content-type': 'application/json' };
+          init.body = JSON.stringify({ args });
+        }
+        const res = await fetch(url, init);
         payload = await res.json();
       } catch (error) {
         this.renderShell(pluginName, panel, this.statusHTML('Could not reach the server: ' + error));
@@ -433,6 +454,13 @@
         if (intent.kind === 'highlight') this.onHighlight(intent.frame);
         if (intent.kind === 'tap') this.onTap(intent.point);
         if (intent.kind === 'copy') navigator.clipboard.writeText(intent.text);
+        if (intent.kind === 'run') {
+          // The row names a command within its own plugin; the plugin
+          // id comes from the panel's own source, so a row can never
+          // reach into a different plugin.
+          const pluginID = String((panel.body || {}).source || '').split(':')[0];
+          this.invoke(pluginName, panel, pluginID, intent.command, intent.args);
+        }
       });
     }
 

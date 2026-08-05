@@ -34,6 +34,8 @@ enum PluginRoute {
         case "describe-ui.json":  return .describeUI
         case "input":             return .input
         case "status-bar":        return .statusBar
+        case "interface",
+             "interface.json":    return .interface
         case "location":          return .location
         case "files":             return .files
         case "logs":              return .logs

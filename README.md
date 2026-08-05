@@ -195,6 +195,16 @@ baguette <command> [options]
                landscape-right|portrait-      no NSView, host stays headless)
                upside-down>
 
+  # Interface settings (accessibility display family)
+  interface appearance --udid <UDID> [light|dark]
+  interface contrast   --udid <UDID> [enabled|disabled]
+  interface text-size  --udid <UDID> [increment|decrement|<category>]
+                                             Read with no value, set with one.
+                                             12 Dynamic Type categories incl. the
+                                             5 accessibility sizes. A shut-down
+                                             device reads "unknown" — a state,
+                                             not an error.
+
   # Frames + screenshots
   stream     --udid <UDID> [--fps 60] [--format mjpeg|avcc]
                                              Stream frames on stdout
@@ -334,6 +344,8 @@ rejected.
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
 | `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG (`?quality=&scale=`) |
+| `GET`  | `/simulators/:udid/interface.json`         | appearance + contrast + content size |
+| `POST` | `/simulators/:udid/interface`              | set any subset; answers with the resulting state |
 | `GET`  | `/simulators/:udid/describe-ui.json`       | accessibility tree over HTTP (`?x=&y=` hit-tests a point) |
 | `POST` | `/simulators/:udid/input`                  | one gesture envelope — same JSON `baguette input` takes |
 | `GET`  | `/plugins.json`                            | installed plugin manifests   |
@@ -642,6 +654,10 @@ feature lives in one place across both layers.
 │   │   ├── Orientation/              Orientation + DeviceOrientation values
 │   │   ├── Logs/                     LogFilter + LogStream + Subprocess
 │   │   │                             collaborator
+│   │   ├── Interface/                Interface (appearance / contrast /
+│   │   │                             content size) + InterfaceAppearance /
+│   │   │                             InterfaceContrast / ContentSize /
+│   │   │                             ContentSizeChange / InterfaceUpdate
 │   │   ├── Plugin/                   PluginManifest / Plugin / Plugins aggregate +
 │   │   │                             Contribution / PanelBody / PluginResult +
 │   │   │                             PluginCapability / PluginGrants /
@@ -678,6 +694,7 @@ feature lives in one place across both layers.
 │   │   │                             TokenDispatcher bridge)
 │   │   ├── Orientation/              PurpleWorkspacePortOrientation (GSEvent)
 │   │   ├── Logs/                     SimDeviceLogStream + HostSubprocess
+│   │   ├── Interface/                SimctlInterface (`simctl ui`)
 │   │   ├── Plugin/                   FileSystemPlugins + PluginRoot (bundled /
 │   │   │                             installed / --plugin-dir lookup)
 │   │   ├── Bakery/                   FileSystemBakeries + GitCheckout (shallow,

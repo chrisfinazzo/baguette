@@ -22,6 +22,12 @@ enum PluginCapability: String, Equatable, Sendable, CaseIterable, Comparable {
     case logs
     /// Read or override the status bar.
     case statusBar = "status-bar"
+    /// Read or set the interface settings — appearance style, Increase
+    /// Contrast, content size. One capability for the whole `simctl ui`
+    /// family: a plugin that can darken the screen can already restyle
+    /// it, so splitting read from write would be a distinction without
+    /// a difference.
+    case interface
     /// Read or set the simulated location.
     case location
     /// Install apps / add media to the device.

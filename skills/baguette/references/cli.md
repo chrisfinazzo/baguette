@@ -295,6 +295,36 @@ packed into a stored zip in-page and posted as `<Name>.app.zip`. See
 directory directly but not a `.zip`; generic docs (`.pdf`, `.json`, …)
 have no home on a simulator and are refused.
 
+## Appearance, contrast, text size — `interface`
+
+```bash
+baguette interface appearance --udid <UDID>                        # read → light | dark | unknown
+baguette interface appearance --udid <UDID> dark                   # set
+baguette interface contrast   --udid <UDID> enabled                # Increase Contrast
+baguette interface text-size  --udid <UDID> accessibility-large    # Dynamic Type
+baguette interface text-size  --udid <UDID> increment              # one step larger
+```
+
+| Leaf         | Values                                                              | simctl verb         |
+|--------------|---------------------------------------------------------------------|---------------------|
+| `appearance` | `light`, `dark`                                                     | `ui … appearance`   |
+| `contrast`   | `enabled`, `disabled`                                               | `ui … increase_contrast` |
+| `text-size`  | `increment`, `decrement`, or one of 12 categories                   | `ui … content_size` |
+
+Every leaf reads with no value and sets with one. The 12 categories run
+`extra-small` → `extra-extra-extra-large`, then the five accessibility
+sizes `accessibility-medium` → `accessibility-extra-extra-extra-large`.
+
+**A read on a device that isn't booted answers `unknown`, and exits 0.**
+That's a state, not a failure — check for it rather than treating a
+successful read as a real value. `unsupported` means the runtime has no
+such setting. Neither can be *set*: `interface appearance unknown` is a
+usage error, caught before simctl runs.
+
+Useful for accessibility work: flip to dark / contrast on / an
+accessibility text size, then re-run `describe-ui` and compare. See
+[`docs/features/interface.md`](../../docs/features/interface.md).
+
 ## Simulated GPS location — `location`
 
 ```bash

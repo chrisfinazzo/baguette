@@ -132,6 +132,7 @@ struct Server: Sendable {
 
         registerPluginRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerBakeryRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in

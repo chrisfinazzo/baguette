@@ -100,6 +100,9 @@ protocols at the boundaries the App layer wires up.
 | Chrome | `DeviceChrome` | value | bezel layout from `chrome.json` — insets, corner radius, button anchors |
 | Chrome | `DeviceProfile` | value | `profile.plist` parse result (chromeIdentifier) |
 | Chrome | `Chromes` | aggregate | `@Mockable` protocol — `assets(forDeviceName:)` returns `DeviceChromeAssets` |
+| Interface | `Interface` | port | `@Mockable` protocol — read/set × appearance, Increase Contrast, content size. Backed by `simctl ui` |
+| Interface | `InterfaceAppearance` / `InterfaceContrast` | value | `light`/`dark`, `enabled`/`disabled`, plus the `unknown` / `unsupported` a device answers when it can't say. Those two have no `argument` — readable states, never instructions |
+| Interface | `ContentSize` / `ContentSizeChange` | value | the 12 Dynamic Type categories; a separate change type because setting also accepts `increment` / `decrement`, which reading never answers |
 | Plugin | `PluginManifest` | value | parsed `baguette-plugin.json` — name, apiVersion, declared `capabilities`, contributions. Rejects an unknown icon or capability at parse time |
 | Plugin | `Plugin` | value | a manifest plus the directory it was read from (the command's cwd) |
 | Plugin | `Plugins` | aggregate | `@Mockable` protocol — `all()`, `resolve(qualifiedCommand:)`, default-impl `listJSON` |
@@ -135,6 +138,7 @@ mocks at the port boundary.
 | Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
 | Chrome | `ChromeStore` | `FileSystemChromeStore` | reads `/Library/Developer/CoreSimulator/.../profile.plist` + `/Library/Developer/DeviceKit/Chrome/...` |
 | Chrome | `PDFRasterizer` | `CoreGraphicsPDFRasterizer` | turns composite PDFs into RGBA PNG |
+| Interface | `Interface` | `SimctlInterface` | `xcrun simctl ui` — argv + exit handshake pure, spawn via `Subprocess` |
 | Plugin | `Plugins` | `FileSystemPlugins` | scans plugin roots for `baguette-plugin.json`; later roots shadow earlier ones |
 | Plugin | — | `PluginRoot` | resolves plugin roots: bundled → installed (`~/.baguette/plugins`) → `--plugin-dir` |
 | Bakery | `Bakeries` | `FileSystemBakeries` | `bakeries.json` / `installed.json` under `BaguetteHome` |
@@ -302,6 +306,8 @@ POST /simulators/:udid/boot                 simulator.boot()
 POST /simulators/:udid/shutdown             simulator.shutdown()
 GET  /simulators/:udid/chrome.json          DeviceChromeAssets.layoutJSON()
 GET  /simulators/:udid/bezel.png            composite.data
+GET  /simulators/:udid/interface.json       appearance + contrast + content size
+POST /simulators/:udid/interface            set any subset, answer the result
 GET  /simulators/:udid/describe-ui.json     Accessibility.describeAll / describeAt
 POST /simulators/:udid/input                GestureDispatcher (one envelope)
 WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher

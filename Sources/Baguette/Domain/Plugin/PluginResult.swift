@@ -58,19 +58,29 @@ struct ResultRow: Equatable, Sendable {
     let frame: Rect?
     /// Payload for `RowAction.copy`.
     let copy: String?
+    /// Command id to invoke for `RowAction.run` — one of the ids this
+    /// plugin contributes. Absent on the rows that just report.
+    let run: String?
+    /// Arguments handed to that command, in the context JSON it reads
+    /// on stdin. Only meaningful alongside `run`.
+    let args: PluginArgs?
 
     init(
         title: String,
         subtitle: String? = nil,
         severity: RowSeverity = .info,
         frame: Rect? = nil,
-        copy: String? = nil
+        copy: String? = nil,
+        run: String? = nil,
+        args: [String: Any]? = nil
     ) {
         self.title = title
         self.subtitle = subtitle
         self.severity = severity
         self.frame = frame
         self.copy = copy
+        self.run = run
+        self.args = args.flatMap(PluginArgs.init)
     }
 
     static func parsing(dict: [String: Any], index: Int) throws -> ResultRow {
@@ -86,12 +96,35 @@ struct ResultRow: Equatable, Sendable {
             severity = parsed
         }
 
+        // `run` / `args` travel together: arguments addressed to no
+        // command are a bug worth naming, because silently dropping them
+        // leaves a row that looks clickable and does nothing.
+        var run: String?
+        if let rawRun = dict["run"] {
+            guard let id = rawRun as? String, !id.isEmpty else {
+                throw PluginResultError.malformedRun(index: index)
+            }
+            run = id
+        }
+
+        var args: [String: Any]?
+        if let rawArgs = dict["args"] {
+            guard run != nil else { throw PluginResultError.argsWithoutRun(index: index) }
+            guard let object = rawArgs as? [String: Any],
+                  PluginArgs(object) != nil else {
+                throw PluginResultError.malformedArgs(index: index)
+            }
+            args = object
+        }
+
         return ResultRow(
             title: title,
             subtitle: dict["subtitle"] as? String,
             severity: severity,
             frame: try frameValue(dict["frame"], index: index),
-            copy: dict["copy"] as? String
+            copy: dict["copy"] as? String,
+            run: run,
+            args: args
         )
     }
 
@@ -128,11 +161,20 @@ enum PluginResultError: Error, Equatable, CustomStringConvertible {
     case rowMissingTitle(index: Int)
     case unknownSeverity(name: String, index: Int)
     case malformedFrame(index: Int)
+    case malformedRun(index: Int)
+    case malformedArgs(index: Int)
+    case argsWithoutRun(index: Int)
 
     var description: String {
         switch self {
         case .malformedJSON:
             return "plugin did not print a JSON object on stdout"
+        case .malformedRun(let index):
+            return "row \(index) has a \"run\" that isn't a non-empty command id"
+        case .malformedArgs(let index):
+            return "row \(index) has \"args\" that isn't a JSON object"
+        case .argsWithoutRun(let index):
+            return "row \(index) has \"args\" but no \"run\" naming the command to pass them to"
         case .rowMissingTitle(let index):
             return "row \(index) has no non-empty \"title\""
         case .unknownSeverity(let name, let index):

@@ -108,6 +108,16 @@ enum RowAction: String, Equatable, Sendable, CaseIterable {
     case tap
     /// Copy the row's `copy` string to the clipboard.
     case copy
+    /// Invoke the command named by the row's `run`, passing its `args`,
+    /// and re-render the panel from the answer.
+    ///
+    /// The other three are things the *host* does with a row's data.
+    /// This one hands control back to the plugin, which is what turns a
+    /// panel from a report into something you can operate: a settings
+    /// list can offer "Dark" and have picking it actually apply.
+    /// Still no plugin code in the page — the click is an HTTP call to
+    /// the same command endpoint the panel already opens with.
+    case run
 }
 
 /// When a contribution is offered. A closed set, evaluated by the host

@@ -43,6 +43,41 @@ test('a copy row carries the text the plugin nominated', () => {
   );
 });
 
+test('a run row asks for its own command to be invoked with its args', () => {
+  // The only action that hands control back to the plugin: the row
+  // names a command and the arguments to call it with, and the panel
+  // re-renders from whatever that command answers.
+  const Action = PluginRowAction();
+  assert.deepEqual(
+    new Action('run').intent({ title: 'Dark', run: 'set', args: { appearance: 'dark' } }),
+    { kind: 'run', command: 'set', args: { appearance: 'dark' } }
+  );
+});
+
+test('a run row without args still invokes its command', () => {
+  // "Reset to defaults" needs no arguments; args default to an empty
+  // object so the caller has one shape to post.
+  const Action = PluginRowAction();
+  assert.deepEqual(
+    new Action('run').intent({ title: 'Reset', run: 'reset' }),
+    { kind: 'run', command: 'reset', args: {} }
+  );
+});
+
+test('a run row naming no command is inert', () => {
+  const Action = PluginRowAction();
+  assert.equal(new Action('run').intent({ title: 'Dark' }), null);
+  assert.equal(new Action('run').actionable({ title: 'Dark' }), false);
+  assert.equal(new Action('run').actionable({ title: 'Dark', run: 'set' }), true);
+});
+
+test('a run row does not need a frame to be clickable', () => {
+  // Clickability follows the action: a settings row has no on-screen
+  // rect, and demanding one would make every row inert.
+  const Action = PluginRowAction();
+  assert.equal(new Action('run').actionable({ run: 'set' }), true);
+});
+
 test('a row with nothing to act on means nothing happens', () => {
   // A plugin may return rows that carry no frame — the docs say such a
   // row simply isn't clickable, rather than clicking doing something
