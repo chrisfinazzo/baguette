@@ -126,23 +126,60 @@ closed set, and it is **enforced**, not documentation:
 | `describe-ui` | `GET /simulators/:udid/describe-ui.json` |
 | `input` | `POST /simulators/:udid/input` — gestures, keys, buttons |
 | `screenshot` | `GET /simulators/:udid/screenshot.jpg` |
-| `logs`, `status-bar`, `location`, `files`, `simulators` | the matching routes |
+| `logs` | `WS /simulators/:udid/logs` |
+| `status-bar` | `GET`/`POST`/`DELETE /simulators/:udid/status-bar` |
+| `location` | `POST`/`DELETE /simulators/:udid/location` |
+| `files` | `POST /simulators/:udid/files` — install apps, add media |
+| `simulators` | `GET /simulators.json` |
 
 **Least privilege by default**: a manifest that declares nothing gets
 nothing. An unknown capability is a parse error, so typos surface at
 `baguette plugin validate` rather than as a confusing runtime `403`.
 
+That table is the *whole* plugin surface. Routes it doesn't name —
+booting a device, orientation, the camera source, installing another
+plugin — are reachable by no capability at all, so no manifest can ask
+for them. A route added to baguette later is closed to plugins until
+someone puts it in the table: the drift direction is always toward less
+authority, never more.
+
 How it's enforced: each command invocation is handed its **own** token
 carrying exactly that plugin's declared set, revoked the moment the
-command exits. A plugin that didn't declare `input` gets
+command exits. The check runs in front of every route, not inside the
+handful that remember to ask. A plugin that didn't declare `input` gets
 
 ```json
 {"ok":false,"error":"this plugin did not declare the \"input\" capability"}
 ```
 
-with HTTP `403` — even though its token is otherwise valid. A shared
-session secret couldn't do this: every plugin would present the same
-credential, so the server could never tell who was calling.
+with HTTP `403` — even though its token is otherwise valid, and even
+though it could read the accessibility tree a moment earlier. Presenting
+a stale or invented token is refused too, rather than being treated as
+"no token". A shared session secret couldn't do any of this: every
+plugin would present the same credential, so the server could never tell
+who was calling.
+
+`logs` is the one WebSocket route, so its refusal is a failed upgrade
+(`400`) rather than a `403` carrying that JSON — there's no body to put
+it in once the handshake is turned down.
+
+### What capabilities are not
+
+They govern **the plugin API** — what a plugin can ask *baguette* to do
+in its name. They are not a sandbox around the plugin's process.
+
+A plugin's command is a real program running as you (see the top of this
+page). Nothing stops it from running `curl` against the same server, or
+`baguette tap` directly, or reading your files — exactly as any program
+you install can. Baguette's HTTP API is deliberately reachable by local
+non-browser callers, and a plugin is a local non-browser caller.
+
+So read the capability list as **a declaration of intent, enforced at
+the API boundary**: it tells you what the plugin means to do, `baguette
+plugin show` puts that in front of you before you install, and the
+server holds the plugin to it on every call it makes through the
+documented contract. The consent that actually protects you is the one
+you give when you trust the bakery.
 
 `baguette plugin show <name>` prints the capabilities before you install.
 

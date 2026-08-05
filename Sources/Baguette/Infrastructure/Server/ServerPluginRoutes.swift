@@ -73,14 +73,12 @@ extension Server {
         // powerful capability — it can tap through anything — so it is
         // never implied and must be declared.
         router.post("/simulators/:udid/input") { r, _ in
-            let presented = r.headers[HTTPField.Name("X-Baguette-Token")!]
-            if !grants.allows(token: presented, capability: .input) {
-                if presented != nil {
-                    return Self.pluginError(
-                        "this plugin did not declare the \"input\" capability", status: .forbidden
-                    )
-                }
-                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            // A plugin's grant was already checked against `input` by
+            // `PluginGrantMiddleware`; reaching here means it declared
+            // the capability. A caller with no grant still has to be a
+            // trusted browser (or a local non-browser client).
+            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                return rejected
             }
             let buffer = try? await r.body.collect(upTo: 64 * 1024)
             let body = buffer.map { String(buffer: $0) } ?? ""
@@ -96,17 +94,10 @@ extension Server {
 
         router.get("/simulators/:udid/describe-ui.json") { r, _ in
             // Either a trusted browser, or a plugin whose grant carries
-            // `describe-ui`. A plugin that didn't declare it is refused
-            // even though it holds a valid token for something else.
-            let presented = r.headers[HTTPField.Name("X-Baguette-Token")!]
-            if !grants.allows(token: presented, capability: .describeUI) {
-                if presented != nil {
-                    return Self.pluginError(
-                        "this plugin did not declare the \"describe-ui\" capability",
-                        status: .forbidden
-                    )
-                }
-                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            // `describe-ui` — the middleware already turned away one
+            // that didn't, even holding a valid token for something else.
+            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                return rejected
             }
             let udid = Self.udidParam(r)
             let x = r.uri.queryParameters.get("x").flatMap { Double($0) }
@@ -138,6 +129,16 @@ extension Server {
         let id = String(parts[1]).removingPercentEncoding ?? ""
         let command = String(parts[3]).removingPercentEncoding ?? ""
         return "\(id):\(command)"
+    }
+
+    /// Whether the caller is claiming to be a plugin at all.
+    ///
+    /// Only ever asked *after* `PluginGrantMiddleware` has run, so a
+    /// `true` here means a live grant that already cleared this route —
+    /// never an invented token.
+    static func presentsGrant(_ request: Request) -> Bool {
+        let token = request.headers[HTTPField.Name("X-Baguette-Token")!]
+        return !(token ?? "").isEmpty
     }
 
     /// `{"ok":false,"error":…}` — the shape every plugin-facing route

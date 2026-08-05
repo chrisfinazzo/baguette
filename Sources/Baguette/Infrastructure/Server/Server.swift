@@ -99,6 +99,13 @@ struct Server: Sendable {
         if !allowedHosts.isEmpty {
             router.add(middleware: AllowedHostsCORSMiddleware(allowedHosts: allowedHosts))
         }
+        // Capability enforcement sits in front of every route rather than
+        // inside the handful that thought to ask. A plugin presenting a
+        // grant gets exactly the routes its manifest declared and nothing
+        // else — including routes nobody has mapped to a capability yet,
+        // which are closed by construction. Requests with no grant are
+        // untouched here and still answer to the origin checks below.
+        router.add(middleware: PluginGrantMiddleware(grants: self.grants))
         let rejectUntrustedBrowser: @Sendable (Request) -> Response? = { request in
             Self.rejectUntrustedBrowserRequest(
                 request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
@@ -2149,6 +2156,39 @@ struct Server: Sendable {
         if allowedHosts.contains(lower) { return true }
         return allowedHosts.contains {
             $0.hasPrefix("*.") && lower.hasSuffix($0.dropFirst())
+        }
+    }
+
+    /// Refuses a plugin any route its manifest didn't declare.
+    ///
+    /// In front of every route on purpose. The alternative — each
+    /// handler remembering to ask — is how `screenshot`, `logs`,
+    /// `status-bar`, `location`, `files` and `simulators` ended up
+    /// declarable but unchecked: the capability existed, the question
+    /// was never asked, and the manifest was documentation pretending to
+    /// be a rule. Here the question is asked once and a route that
+    /// nobody mapped is refused rather than allowed.
+    ///
+    /// Only requests that present a grant are affected. Everything else
+    /// passes straight through to the per-route origin checks, so the
+    /// browser and `curl` behave exactly as they did before.
+    struct PluginGrantMiddleware<Context: RequestContext>: RouterMiddleware {
+        let grants: PluginGrants
+
+        func handle(
+            _ request: Request,
+            context: Context,
+            next: (Request, Context) async throws -> Response
+        ) async throws -> Response {
+            let presented = request.headers[HTTPField.Name("X-Baguette-Token")!]
+            switch PluginAccess.decide(
+                token: presented, path: request.uri.path, grants: grants
+            ) {
+            case .anonymous, .granted:
+                return try await next(request, context)
+            case .refused(let message):
+                return Server.pluginError(message, status: .forbidden)
+            }
         }
     }
 
