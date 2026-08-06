@@ -121,6 +121,22 @@ struct SimctlInterfaceTests {
         }
     }
 
+    @Test func `a spawn that never starts surfaces its own error`() async throws {
+        // Distinct from a non-zero exit: the process didn't run at all
+        // (missing xcrun, fork failure). The caller shouldn't see this
+        // as a device that answered.
+        struct SpawnRefused: Error {}
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, onBytes: .any, onExit: .any
+        ).willThrow(SpawnRefused())
+        given(sub).terminate().willReturn()
+        let interface = SimctlInterface(udid: "U", subprocess: sub)
+
+        await #expect(throws: SpawnRefused.self) { try await interface.appearance() }
+        await #expect(throws: SpawnRefused.self) { try await interface.setAppearance(.dark) }
+    }
+
     @Test func `a failed read is reported rather than read as unknown`() async throws {
         // A spawn that failed is a different thing from a device that
         // answered "unknown", and callers should be able to tell them

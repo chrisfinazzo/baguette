@@ -78,4 +78,54 @@ struct GitCheckoutTests {
             _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"))
         }
     }
+
+    // MARK: - pull
+
+    @Test func `pull fast-forwards in place and reports the new commit`() async throws {
+        // What `bakery update` runs. `--ff-only` so an update can never
+        // produce a merge commit in a cache directory nobody looks at,
+        // and `-C` so it operates on the clone rather than the cwd.
+        let (git, captures) = makeCheckout(commit: "deadbee")
+        let commit = try await git.pull(at: URL(fileURLWithPath: "/tmp/cache/acme/tools"))
+
+        #expect(commit == "deadbee")
+        #expect(captures.calls.first == [
+            "-C", "/tmp/cache/acme/tools", "pull", "--depth", "1", "--ff-only",
+        ])
+        #expect(captures.calls.last == ["-C", "/tmp/cache/acme/tools", "rev-parse", "HEAD"])
+    }
+
+    @Test func `a pull that cannot fast-forward throws instead of pinning the old commit`() async throws {
+        // A force-push upstream fails `--ff-only`. Reporting the stale
+        // commit would record an update that didn't happen.
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, workingDirectory: .any,
+            environment: .any, stdin: .any, onBytes: .any, onExit: .any
+        ).willProduce { _, args, _, _, _, _, onExit in
+            onExit(args.contains("pull") ? 1 : 0)
+        }
+        given(sub).terminate().willReturn()
+        let git = GitCheckout(subprocess: { sub })
+
+        await #expect(throws: (any Error).self) {
+            _ = try await git.pull(at: URL(fileURLWithPath: "/tmp/cache/acme/tools"))
+        }
+    }
+
+    @Test func `a git that cannot be spawned surfaces its own error`() async throws {
+        // Distinct from a non-zero exit — git never ran.
+        struct SpawnRefused: Error {}
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, workingDirectory: .any,
+            environment: .any, stdin: .any, onBytes: .any, onExit: .any
+        ).willThrow(SpawnRefused())
+        given(sub).terminate().willReturn()
+        let git = GitCheckout(subprocess: { sub })
+
+        await #expect(throws: SpawnRefused.self) {
+            _ = try await git.pull(at: URL(fileURLWithPath: "/tmp/cache/acme/tools"))
+        }
+    }
 }

@@ -23,31 +23,31 @@ enum PluginRoot {
     /// Directory name inside the SPM resource bundle.
     static let bundleDirectoryName = "Plugins"
 
+    /// How far above the executable to look for a package root. Three
+    /// levels covers `.build/<triple>/<config>/`; the rest is slack for
+    /// deeper layouts (a test bundle sits three levels lower again).
+    static let searchDepth = 8
+
     static func bundled() -> URL? {
         if let override = ProcessInfo.processInfo.environment["BAGUETTE_PLUGIN_DIR"] {
             let url = URL(fileURLWithPath: override)
             return isDirectory(url) ? url : nil
         }
-        if let dev = sourceTreeRoot() { return dev }
-        return sidecarRoot()
+        guard let exeDir = executableDirectory() else { return nil }
+        return sourceTreeRoot(startingAt: exeDir) ?? sidecarRoot(nextTo: exeDir)
     }
 
-    // MARK: - private
-
-    private static func isDirectory(_ url: URL) -> Bool {
-        var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-            && isDir.boolValue
-    }
-
-    /// Walk up from the executable looking for the package's bundled
-    /// plugins. Only matches when running out of `.build/`; returns
-    /// nil for a release install. Mirrors `WebRoot.sourceTreeRoot`.
-    private static func sourceTreeRoot() -> URL? {
-        var info = Dl_info()
-        guard dladdr(#dsohandle, &info) != 0, let cstr = info.dli_fname else { return nil }
-        var url = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
-        for _ in 0..<6 {
+    /// Walk up from `startingAt` looking for the package's bundled
+    /// plugins. Only matches when running out of `.build/`; returns nil
+    /// for a release install, and gives up after `depth` levels rather
+    /// than climbing to `/` and adopting somebody else's `Sources/`.
+    ///
+    /// Takes its starting point rather than calling `dladdr` itself, so
+    /// the walk — the part that can actually be wrong — is testable
+    /// against a synthetic tree. Mirrors `WebRoot.sourceTreeRoot`.
+    static func sourceTreeRoot(startingAt directory: URL, depth: Int = searchDepth) -> URL? {
+        var url = directory
+        for _ in 0..<depth {
             let candidate = url.appendingPathComponent(sourceTreePath)
             if isDirectory(candidate) { return candidate }
             url = url.deletingLastPathComponent()
@@ -55,15 +55,31 @@ enum PluginRoot {
         return nil
     }
 
-    private static func sidecarRoot() -> URL? {
-        var info = Dl_info()
-        guard dladdr(#dsohandle, &info) != 0, let cstr = info.dli_fname else { return nil }
-        let exeDir = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
-        let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
+    /// The SPM resource bundle sitting beside the executable. Resolved
+    /// by path rather than through `Bundle.module`, which `fatalError`s
+    /// when the bundle is missing — a binary-only install should get
+    /// "no bundled plugins", not a crash.
+    static func sidecarRoot(nextTo directory: URL) -> URL? {
+        let bundleURL = directory.appendingPathComponent("Baguette_Baguette.bundle")
         guard FileManager.default.fileExists(atPath: bundleURL.path),
               let bundle = Bundle(url: bundleURL),
               let resources = bundle.resourceURL else { return nil }
         let candidate = resources.appendingPathComponent(bundleDirectoryName)
         return isDirectory(candidate) ? candidate : nil
+    }
+
+    // MARK: - private
+
+    static func isDirectory(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+            && isDir.boolValue
+    }
+
+    /// Where this binary lives. The one irreducible call — integration-only.
+    private static func executableDirectory() -> URL? {
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0, let cstr = info.dli_fname else { return nil }
+        return URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
     }
 }
