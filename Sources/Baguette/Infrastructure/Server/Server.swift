@@ -527,6 +527,7 @@ struct Server: Sendable {
                 udid: Self.udidParam(context.request),
                 format: context.request.uri.queryParameters.get("format")
                     .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
+                displayQuery: context.request.uri.queryParameters.get("display"),
                 simulators: simulators,
                 inbound: inbound,
                 outbound: outbound
@@ -616,8 +617,12 @@ struct Server: Sendable {
     /// the folders on disk.
     static let staticAssetSubdirectories = [
         "baguette",
+        "baguette/carplay",
         "baguette/gestures",
         "baguette/parts",
+        "carplay-frames",
+        "carplay-frames/cupra",
+        "carplay-frames/plain",
         "devices",
         "farm",
         "vendor/leaflet",
@@ -1416,8 +1421,18 @@ struct Server: Sendable {
             sink: sink,
             quality: 0.7
         )
-        let screen = RenderedScreen(source: sim.screen(), scene: scene)
-        let input = sim.input()
+        // 3D stays phone-only; ignore any display=carplay on these routes.
+        let bound: (screen: any Screen, input: any Input)
+        do {
+            bound = try StreamDisplayPlan.phoneOnly.bind(to: sim)
+        } catch {
+            try? await outbound.write(.text(
+                #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return
+        }
+        let screen = RenderedScreen(source: bound.screen, scene: scene)
+        let input = bound.input
         let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
         do {
@@ -1482,6 +1497,7 @@ struct Server: Sendable {
     private static func streamWS(
         udid: String,
         format: StreamFormat,
+        displayQuery: String?,
         simulators: any Simulators,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
@@ -1491,12 +1507,23 @@ struct Server: Sendable {
             return
         }
 
+        let displayPlan = StreamDisplayPlan.from(query: displayQuery)
+        let bound: (screen: any Screen, input: any Input)
+        do {
+            bound = try displayPlan.bind(to: sim)
+        } catch {
+            try? await outbound.write(.text(
+                #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return
+        }
+
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
-        let screen = sim.screen()
+        let screen = bound.screen
         // One Input for the whole session — the paste keystroke must
         // reuse the same warmed HID services the gestures ride.
-        let input = sim.input()
+        let input = bound.input
         let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
 

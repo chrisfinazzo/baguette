@@ -10,20 +10,24 @@ import ObjectiveC
 ///
 /// Multi-descriptor: simulators expose secondary planes / overlays. We
 /// register on every `com.apple.framebuffer.display` descriptor and pick
-/// whichever currently has the largest live surface area each tick.
+/// a surface each tick — largest area by default, or the plane closest
+/// to an optional `DisplayBinding` size when one is supplied.
 final class SimulatorKitScreen: Screen, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
+    private let binding: DisplayBinding?
     private let queue = DispatchQueue(label: "baguette.screen", qos: .userInteractive)
 
     private var ioClient: NSObject?
     private var descriptors: [NSObject] = []
     private var callbackUUIDs: [ObjectIdentifier: NSUUID] = [:]
     private var onFrame: (@Sendable (IOSurface) -> Void)?
+    private var idleTimer: DispatchSourceTimer?
 
-    init(udid: String, host: any DeviceHost) {
+    init(udid: String, host: any DeviceHost, binding: DisplayBinding? = nil) {
         self.udid = udid
         self.host = host
+        self.binding = binding
     }
 
     private func resolveDevice() -> NSObject? {
@@ -43,9 +47,12 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
         }
         self.ioClient = io
         try wireFramebuffer()
+        startIdleFloorIfNeeded()
     }
 
     func stop() {
+        idleTimer?.cancel()
+        idleTimer = nil
         let unregSel = NSSelectorFromString("unregisterScreenCallbacksWithUUID:")
         for desc in descriptors {
             if let uuid = callbackUUIDs[ObjectIdentifier(desc)],
@@ -61,14 +68,43 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
 
     // MARK: - private
 
+    private func startIdleFloorIfNeeded() {
+        let kind = binding?.kind ?? .phone
+        guard ScreenIdleFloor.isEnabled(for: kind) else { return }
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(
+            deadline: .now(),
+            repeating: .nanoseconds(Int(ScreenIdleFloor.intervalNanoseconds))
+        )
+        timer.setEventHandler { [weak self] in
+            self?.captureLatest()
+        }
+        timer.resume()
+        idleTimer = timer
+    }
+
     private func wireFramebuffer() throws {
         guard let io = ioClient else { throw ScreenError.ioUnavailable }
 
-        // Lazy ports population.
-        io.perform(NSSelectorFromString("updateIOPorts"))
+        var         candidates = findFramebufferDescriptors(io: io)
+        if IOPortsRefresh.shouldUpdate(hasFramebufferDisplayPorts: !candidates.isEmpty) {
+            io.perform(NSSelectorFromString("updateIOPorts"))
+            candidates = findFramebufferDescriptors(io: io)
+        }
+        guard !candidates.isEmpty else { throw ScreenError.noFramebuffer }
+        descriptors = candidates
 
+        for desc in candidates {
+            try registerCallbacks(on: desc)
+        }
+        // Surfaces often populate only after callbacks are registered —
+        // pull once now and let the idle floor keep pulling.
+        queue.async { [weak self] in self?.captureLatest() }
+    }
+
+    private func findFramebufferDescriptors(io: NSObject) -> [NSObject] {
         guard let ports = io.value(forKey: "deviceIOPorts") as? [NSObject] else {
-            throw ScreenError.noFramebuffer
+            return []
         }
 
         let pidSel = NSSelectorFromString("portIdentifier")
@@ -85,12 +121,7 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
             else { continue }
             candidates.append(desc)
         }
-        guard !candidates.isEmpty else { throw ScreenError.noFramebuffer }
-        descriptors = candidates
-
-        for desc in candidates {
-            try registerCallbacks(on: desc)
-        }
+        return candidates
     }
 
     private func registerCallbacks(on desc: NSObject) throws {
@@ -124,23 +155,25 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
         )
     }
 
-    /// Picks the descriptor whose live surface has the largest area —
-    /// secondary planes / overlays are typically smaller than the main
-    /// screen — and forwards the IOSurface to `onFrame`.
+    /// Picks the descriptor for this screen's plane and forwards its
+    /// IOSurface to `onFrame`. CarPlay bindings never fall back to the
+    /// phone plane — missing external surfaces emit nothing.
     private func captureLatest() {
         let surfSel = NSSelectorFromString("framebufferSurface")
-        var best: IOSurface?
-        var bestArea = 0
+        var surfaces: [(IOSurface, Size)] = []
         for desc in descriptors {
             guard let surfObj = desc.perform(surfSel)?.takeUnretainedValue() else { continue }
             let surf = unsafeBitCast(surfObj, to: IOSurface.self)
-            let area = IOSurfaceGetWidth(surf) * IOSurfaceGetHeight(surf)
-            if area > bestArea {
-                best = surf
-                bestArea = area
-            }
+            let w = IOSurfaceGetWidth(surf)
+            let h = IOSurfaceGetHeight(surf)
+            guard w > 0, h > 0 else { continue }
+            surfaces.append((surf, Size(width: Double(w), height: Double(h))))
         }
-        if let best { onFrame?(best) }
+        guard let index = FramebufferSurfacePick.index(
+            binding: binding,
+            candidates: surfaces.map(\.1)
+        ) else { return }
+        onFrame?(surfaces[index].0)
     }
 }
 

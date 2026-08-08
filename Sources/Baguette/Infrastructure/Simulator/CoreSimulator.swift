@@ -84,6 +84,14 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         IndigoHIDInput(udid: udid, host: host)
     }
 
+    func displays() -> any Displays {
+        SimulatorKitDisplays(udid: udid, host: host)
+    }
+
+    func externalDisplays() -> any ExternalDisplays {
+        HostExternalDisplays(udid: udid)
+    }
+
     func accessibility() -> any Accessibility {
         AXPTranslatorAccessibility(udid: udid, host: host)
     }

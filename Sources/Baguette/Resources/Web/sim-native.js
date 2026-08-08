@@ -32,6 +32,9 @@
 
   // --- State -------------------------------------------------------
   let session = null;
+  let carplaySession = null;
+  let carplayScreen = null;
+  let carplayFrame = null;  // Baguette._CarPlayFrame mount (brand chrome)
   let sim = null;           // Baguette SDK Simulator
   let logPanel = null;
   let axInspector = null;
@@ -436,6 +439,7 @@
     };
     session = new window.StreamSession({
       udid, format, version: 'v2',
+      display: 'phone',
       canvas: sim.canvas,
       onSize: (w, h) => {
         lastPaintedSize = { w, h };
@@ -451,12 +455,102 @@
       onText: onStreamText,
     });
     session.start();
+    // CarPlay is mostly static; H.264 starves without an IDR cadence
+    // the guest doesn't produce. MJPEG paints the first JPEG seed and
+    // holds it — matches sim_carplay's reliable CarPlay path.
+    void startCarPlaySession('mjpeg');
     reflectFormat(format);
     // Restore the cached orientation across format-swap remounts,
     // so reopening the session doesn't snap the device back to
     // portrait while the simulator is still landscape.
     if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
     mountAxInspector();
+  }
+
+  // CarPlay pane: own StreamSession (?display=carplay) + Screen gestures
+  // that send only on that socket. Brand chrome mounts via
+  // `_CarPlayFrame` (registry under /carplay-frames/); plain rect is
+  // the fallback when the registry/scripts are unavailable.
+  const CARPLAY_DEFAULT_SIZE = { width: 800, height: 450 };
+
+  function resolveCarPlayBrand() {
+    const q = new URLSearchParams(location.search).get('frame');
+    if (q) return q;
+    const el = document.getElementById('nativeCarPlayFrame');
+    return (el && el.dataset.frameBrand) || 'plain';
+  }
+
+  async function ensureCarPlayFrameMounted() {
+    const anchor = document.getElementById('nativeCarPlayFrame');
+    if (!anchor) return null;
+    const B = window.Baguette;
+    // Prefer plain rect until brand chrome is proven with live frames —
+    // async Cupra mount was racing the stream onto a detached canvas.
+    const brand = resolveCarPlayBrand();
+    if (brand === 'plain' || !B || !B._CarPlayFrameRegistry || !B._CarPlayFrame) {
+      const canvas = document.getElementById('nativeCarPlayCanvas');
+      return canvas ? { screenArea: anchor, canvas } : null;
+    }
+    if (carplayFrame && carplayFrame.ports().canvas) {
+      return carplayFrame.ports();
+    }
+    try {
+      const packed = await B._CarPlayFrameRegistry.load(resolveCarPlayBrand());
+      if (carplayFrame) carplayFrame.detach();
+      carplayFrame = new B._CarPlayFrame(packed.definition, {
+        assetBaseUrl: packed.assetBaseUrl,
+      });
+      return carplayFrame.mount(anchor);
+    } catch (err) {
+      console.warn('[native:carplay] frame mount failed; using plain rect', err);
+      const canvas = document.getElementById('nativeCarPlayCanvas');
+      return canvas ? { screenArea: anchor, canvas } : null;
+    }
+  }
+
+  async function startCarPlaySession(format) {
+    if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
+    if (!window.StreamSession) return;
+
+    const ports = await ensureCarPlayFrameMounted();
+    if (!ports || !ports.canvas || !ports.screenArea) return;
+
+    // Remount replaces the canvas; drop the old Screen so gestures
+    // rebind to the cutout.
+    if (carplayScreen) {
+      try { carplayScreen.detach(); } catch (_) { /* ignore */ }
+      carplayScreen = null;
+    }
+    ensureCarPlayInput(ports.screenArea, ports.canvas);
+
+    carplaySession = new window.StreamSession({
+      udid, format, version: 'v2',
+      display: 'carplay',
+      canvas: ports.canvas,
+      onSize: (w, h) => {
+        if (carplayScreen) {
+          carplayScreen.def.rect.width = w;
+          carplayScreen.def.rect.height = h;
+          carplayScreen.transport.setScreenSize(w, h);
+        }
+      },
+      onLog: (msg) => console.log('[native:carplay]', msg),
+    });
+    carplaySession.start();
+  }
+
+  function ensureCarPlayInput(screenArea, canvas) {
+    if (carplayScreen || !window.Baguette || !window.Baguette._Screen) return;
+    const transport = new window.Baguette._Transport({
+      send: (payload) => carplaySession && carplaySession.send(payload),
+      log: (msg) => console.log('[native:carplay]', msg),
+    });
+    carplayScreen = new window.Baguette._Screen(
+      { rect: { width: CARPLAY_DEFAULT_SIZE.width, height: CARPLAY_DEFAULT_SIZE.height } },
+      transport,
+      { getOrientation: () => 'landscape-right', log: (msg) => console.log('[native:carplay]', msg) }
+    );
+    carplayScreen.bindDOM({ screenArea, canvas });
   }
 
   // --- Power card ----------------------------------------------------
@@ -1066,6 +1160,10 @@
     window.addEventListener('beforeunload', () => {
       try { hidePowerCard(); } catch (_) { /* ignore */ }
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
+      try { if (carplaySession) carplaySession.stop(); } catch (_) { /* ignore */ }
+      try { if (carplayScreen) carplayScreen.detach(); } catch (_) { /* ignore */ }
+      try { if (carplayFrame) carplayFrame.detach(); } catch (_) { /* ignore */ }
+      carplayFrame = null;
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
       try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
