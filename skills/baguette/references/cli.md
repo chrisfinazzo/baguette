@@ -295,6 +295,17 @@ packed into a stored zip in-page and posted as `<Name>.app.zip`. See
 directory directly but not a `.zip`; generic docs (`.pdf`, `.json`, …)
 have no home on a simulator and are refused.
 
+## Shake — `shake`
+
+```bash
+baguette shake --udid <UDID>   # UIKit motionShake on the frontmost app → simctl spawn notifyutil -p com.apple.UIKit.SimulatorShake
+```
+
+Device action (not a gesture): the frontmost responder gets
+`motionBegan/Ended` with `UIEventSubtypeMotionShake`. iOS-only. Also on
+`serve` as `POST /simulators/<UDID>/shake`. See
+[`docs/features/shake.md`](../../../docs/features/shake.md).
+
 ## Simulated GPS location — `location`
 
 ```bash

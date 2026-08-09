@@ -296,6 +296,18 @@ tree, or skip the image and act on the labels and frames directly.
 
 These do not exist for `baguette input` (no stream there).
 
+## Shake HTTP route
+
+Device action, not a gesture verb — fires a UIKit `motionShake` on the
+booted simulator's frontmost app:
+
+```http
+POST /simulators/<UDID>/shake
+```
+
+Response: `{"ok":true}`; `404` unknown udid; `500 shake failed (simctl
+error)`. iOS-only. See [`docs/features/shake.md`](../../../docs/features/shake.md).
+
 ## 3D render HTTP routes
 
 3D rendering is HTTP, not a WebSocket gesture verb:
