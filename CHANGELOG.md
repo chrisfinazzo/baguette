@@ -12,6 +12,17 @@ For releases prior to this changelog, see the
 
 ---
 
+## [0.1.89] - 2026-08-09
+
+### Changed
+* feat(carplay): dual-pane phone + CarPlay streaming by @Eyadkelleh in https://github.com/tddworks/baguette/pull/45
+
+## New Contributors
+* @Eyadkelleh made their first contribution in https://github.com/tddworks/baguette/pull/45
+
+
+---
+
 ## [0.1.88] - 2026-08-01
 
 ### Fixed
@@ -453,7 +464,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.88...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.89...HEAD
+[0.1.89]: https://github.com/tddworks/baguette/compare/v0.1.88...v0.1.89
 [0.1.88]: https://github.com/tddworks/baguette/compare/v0.1.87...v0.1.88
 [0.1.87]: https://github.com/tddworks/baguette/compare/v0.1.86...v0.1.87
 [0.1.86]: https://github.com/tddworks/baguette/compare/v0.1.85...v0.1.86
