@@ -951,6 +951,17 @@
           + '/orientation?value=' + encodeURIComponent(value);
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
     };
+
+    // Shake — fires a UIKit motionShake on the frontmost app
+    // (shake-to-undo etc). POSTs to `/simulators/<udid>/shake`; the
+    // server delegates to `simulator.shake().shake()`, backed by
+    // `simctl spawn notifyutil`. Unlike rotate there's no visual state
+    // to mirror — the motion event lives entirely in the guest — so
+    // this is a pure fire-and-forget POST.
+    window.__nativeShake = () => {
+      const url = '/simulators/' + encodeURIComponent(udid) + '/shake';
+      fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
+    };
   }
 
   // Surface a selected AX node in the floating `#nativeAxHost`
