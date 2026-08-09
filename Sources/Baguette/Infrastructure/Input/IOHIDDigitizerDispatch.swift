@@ -76,13 +76,14 @@ enum IOHIDDigitizerDispatch {
     /// wrapper around `down` → hold → `up` for the common case.
     static func tap(point: CGPoint, holdSeconds: Double,
                     edge: Edge = .none, identifier: UInt32,
+                    target: UInt32 = IndigoHIDTouchTarget.phone,
                     on client: AnyObject) -> Bool {
         guard send(point: point, identifier: identifier, phase: .down,
-                   edge: edge, on: client) else { return false }
+                   edge: edge, target: target, on: client) else { return false }
         let holdUs = UInt32(max(0.02, holdSeconds) * 1_000_000)
         usleep(holdUs)
         return send(point: point, identifier: identifier, phase: .up,
-                    edge: edge, on: client)
+                    edge: edge, target: target, on: client)
     }
 
     /// Continuous swipe from `start` to `end` over `steps`
@@ -93,9 +94,10 @@ enum IOHIDDigitizerDispatch {
                       steps: Int = 10, stepMs: UInt32 = 16,
                       dwellMs: UInt32 = 0,
                       edge: Edge = .none, identifier: UInt32,
+                      target: UInt32 = IndigoHIDTouchTarget.phone,
                       on client: AnyObject) -> Bool {
         guard send(point: start, identifier: identifier, phase: .down,
-                   edge: edge, on: client) else { return false }
+                   edge: edge, target: target, on: client) else { return false }
         var ok = 0
         for i in 1...steps {
             usleep(stepMs * 1000)
@@ -103,7 +105,7 @@ enum IOHIDDigitizerDispatch {
             let p = CGPoint(x: start.x + (end.x - start.x) * t,
                             y: start.y + (end.y - start.y) * t)
             if send(point: p, identifier: identifier, phase: .move,
-                    edge: edge, on: client) { ok += 1 }
+                    edge: edge, target: target, on: client) { ok += 1 }
         }
         // Hold at end so iOS picks App Switcher over Home for slow
         // drags from the bottom edge. Resending move events at the
@@ -113,13 +115,13 @@ enum IOHIDDigitizerDispatch {
             let pulses = max(1, Int(dwellMs / 50))
             for _ in 0..<pulses {
                 _ = send(point: end, identifier: identifier, phase: .move,
-                         edge: edge, on: client)
+                         edge: edge, target: target, on: client)
                 usleep(50_000)
             }
         }
         usleep(stepMs * 1000)
         return send(point: end, identifier: identifier, phase: .up,
-                    edge: edge, on: client) && ok >= steps / 2
+                    edge: edge, target: target, on: client) && ok >= steps / 2
     }
 
     // MARK: - core
@@ -128,7 +130,9 @@ enum IOHIDDigitizerDispatch {
     /// `false` if any step fails — symbol resolution, IOHIDEvent
     /// construction, wrapper rejection, or message build.
     static func send(point: CGPoint, identifier: UInt32, phase: Phase,
-                     edge: Edge, on client: AnyObject) -> Bool {
+                     edge: Edge,
+                     target: UInt32 = IndigoHIDTouchTarget.phone,
+                     on client: AnyObject) -> Bool {
         guard ensureSymbols() else { return false }
         guard let parent = makeDigitizerEvent(point: point,
                                               identifier: identifier,
@@ -141,7 +145,7 @@ enum IOHIDDigitizerDispatch {
             wrapTrackpad(event: parent)
         }
         guard let raw else { return false }
-        patch(message: raw, edge: edge)
+        patch(message: raw, edge: edge, target: target)
         sendMessage(raw, to: client)
         return true
     }
@@ -199,11 +203,11 @@ enum IOHIDDigitizerDispatch {
         return wrapFn(raw)
     }
 
-    /// Patch the two byte slots the trackpad wrapper leaves
-    /// uninitialised. Both must be set for iOS to consume the
-    /// touch correctly.
-    private static func patch(message msg: UnsafeMutableRawPointer, edge: Edge) {
-        let target: UInt32 = 0x32  // IndigoHIDTouchTarget
+    /// Patch the byte slots the trackpad wrapper leaves
+    /// uninitialised. Both target records must be set for iOS to
+    /// consume the touch correctly.
+    static func patch(message msg: UnsafeMutableRawPointer, edge: Edge,
+                      target: UInt32 = IndigoHIDTouchTarget.phone) {
         msg.storeBytes(of: target, toByteOffset: 0x6c, as: UInt32.self)
         let size = malloc_size(msg)
         if size >= 0x110 {

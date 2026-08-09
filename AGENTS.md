@@ -119,3 +119,17 @@ Chicago-school state-based throughout. Every external boundary is an `@Mockable`
 - `README.md` — quickstart, full CLI reference, wire protocol JSON examples.
 - `docs/ARCHITECTURE.md` — end-to-end tap-to-`UITouch` flow, layer diagrams, route table.
 - `Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` — the 9-arg recipe.
+
+
+## Learned User Preferences
+
+- Prefers pstack (`/poteto-mode` and related skills) for non-trivial baguette work; when other models are rate-limited, restrict pstack roles to composer-2.5 and cursor-grok-4.5-medium.
+- For CarPlay in the serve UI: side-by-side dual-pane (phone next to CarPlay), plain 2D rect chrome first, Figma/3D dash later, leave driving/zoom to the CarPlay app, and auto-enable CarPlay on stream start.
+
+## Learned Workspace Facts
+
+- pstack is enabled in `.cursor/settings.json`; per-role model overrides live in `~/.cursor/rules/pstack-models.mdc`.
+- Planned CarPlay support treats CarPlay as a second display surface (external framebuffer + separate HID target), not embedding CarPlay Simulator.app; dual-pane prefers two WebSocket streams (`phone` and `carplay`).
+- Phone Indigo HID digitizer `0x32` does not deliver touches to CarPlay; CarPlay HID must use `IndigoHIDTargetForScreen` from the live connected screen id (creatable screen id is not always the connected id).
+- CarPlay enablement on the host simulator is via I/O → External Displays → CarPlay (AppleScript / Accessibility).
+- A prior CarPlay spike lives at `~/Developer/sim_carplay` (enablement, ~800×480 external capture, HID target derivation).

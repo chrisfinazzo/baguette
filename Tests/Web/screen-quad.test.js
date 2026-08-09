@@ -102,3 +102,44 @@ test('contentRect letterboxes top/bottom when the box is wider than the content'
   assert.equal(rect.left, 50);
   assert.equal(rect.top, 0);
 });
+
+test('mapClientPointFromContain maps through pillarbox gutters (Cupra-like)', () => {
+  const SQ = ScreenQuad();
+  const canvas = {
+    width: 800, height: 480,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 255.3, height: 100 }),
+  };
+  const size = { width: 800, height: 480 };
+  const content = SQ.contentRect(canvas);
+  const clientX = content.left + (160 / 800) * content.width;
+  const clientY = content.top + (140 / 480) * content.height;
+  const point = SQ.mapClientPointFromContain(canvas, clientX, clientY, size);
+  assert.ok(Math.abs(point.x - 160) < 0.5, `x: ${point.x} vs 160`);
+  assert.ok(Math.abs(point.y - 140) < 0.5, `y: ${point.y} vs 140`);
+  assert.equal(point.inside, true);
+});
+
+test('mapClientPointFromContain maps like the full box when aspects match', () => {
+  const SQ = ScreenQuad();
+  const canvas = {
+    width: 800, height: 480,
+    getBoundingClientRect: () => ({ left: 10, top: 20, width: 800, height: 480 }),
+  };
+  const size = { width: 800, height: 480 };
+  const point = SQ.mapClientPointFromContain(canvas, 410, 260, size);
+  assert.ok(Math.abs(point.x - 400) < 0.5, `x: ${point.x} vs 400`);
+  assert.ok(Math.abs(point.y - 240) < 0.5, `y: ${point.y} vs 240`);
+  assert.equal(point.inside, true);
+});
+
+test('mapClientPointFromContain reports gutter clicks as outside', () => {
+  const SQ = ScreenQuad();
+  const canvas = {
+    width: 800, height: 480,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 255.3, height: 100 }),
+  };
+  const size = { width: 800, height: 480 };
+  const content = SQ.contentRect(canvas);
+  const point = SQ.mapClientPointFromContain(canvas, content.left - 1, content.top + 50, size);
+  assert.equal(point.inside, false);
+});
