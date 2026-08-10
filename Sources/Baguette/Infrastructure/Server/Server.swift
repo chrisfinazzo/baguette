@@ -149,6 +149,22 @@ struct Server: Sendable {
             }
         }
 
+        // Shake — `POST` fires a UIKit motionShake via
+        // `simulator.shake().shake()`, backed by `simctl spawn
+        // notifyutil`. Pure dispatch lives in `Server.applyShake` for
+        // unit testing.
+        router.post("/simulators/:udid/shake") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            switch await Self.applyShake(udid: Self.udidParam(r), simulators: simulators) {
+            case .ok:
+                return jsonOK
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON("shake failed (simctl error)", status: .internalServerError)
+            }
+        }
+
         // Status bar — `POST` sets overrides from a JSON body,
         // `DELETE` clears them. Backed by `simctl status_bar`; pure
         // parse + dispatch lives in `Server.applyStatusBar` /
@@ -688,6 +704,32 @@ struct Server: Sendable {
             return .unknownDevice
         }
         return sim.orientation().set(orientation) ? .ok : .dispatchFailed
+    }
+
+    /// Outcome of `applyShake` — one case per HTTP-status branch the
+    /// shake route maps to.
+    enum ShakeOutcome: Equatable {
+        case ok
+        case unknownDevice
+        case dispatchFailed
+    }
+
+    /// Pure dispatch for `POST /simulators/:udid/shake`. Split from the
+    /// route closure so unit tests can drive every branch
+    /// (`MockSimulators` + `MockShake`) without booting Hummingbird.
+    static func applyShake(
+        udid: String,
+        simulators: any Simulators
+    ) async -> ShakeOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        do {
+            try await sim.shake().shake()
+            return .ok
+        } catch {
+            return .dispatchFailed
+        }
     }
 
     /// Outcome of the status-bar routes — one case per HTTP-status

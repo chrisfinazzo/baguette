@@ -1530,6 +1530,23 @@
             <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
           </svg>
         </button>
+        <!-- Shake — fires a UIKit motionShake on the frontmost app
+             (shake-to-undo, shake-to-report). Momentary, like Home /
+             App switcher. POSTs to `/simulators/<udid>/shake`; the
+             server delegates to `simulator.shake().shake()`, backed by
+             `simctl spawn notifyutil`. -->
+        <button class="ico-btn" title="Shake device"
+                aria-label="Shake device"
+                onclick="window.__nativeShake && window.__nativeShake()">
+          <!-- Phone glyph flanked by motion arcs — reads as a device
+               shaking side to side. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <rect x="9" y="3" width="6" height="18" rx="1.6"/>
+            <path d="M5 8.5c-1.2 2-1.2 5 0 7"/>
+            <path d="M19 8.5c1.2 2 1.2 5 0 7"/>
+          </svg>
+        </button>
       </div>
       </div><!-- /.tb-scroll -->
 

@@ -112,6 +112,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         SimctlLocation(udid: udid)
     }
 
+    func shake() -> any Shake {
+        SimctlShake(udid: udid)
+    }
+
     func pasteboard() -> any Pasteboard {
         SimctlPasteboard(udid: udid)
     }

@@ -88,6 +88,12 @@ protocol Simulator: Sendable {
     /// video). Each call returns a fresh handle; the underlying `simctl
     /// addmedia` invocation is stateless.
     func photos() -> any PhotoLibrary
+
+    /// Deliver a motion shake to the booted simulator — the same signal
+    /// as Simulator.app's "Device → Shake". Each call returns a fresh
+    /// handle; the underlying `simctl spawn notifyutil` invocation is
+    /// stateless.
+    func shake() -> any Shake
 }
 
 /// `Simulator.State` lifted to a top-level enum so the protocol can
