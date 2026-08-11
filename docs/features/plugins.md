@@ -207,17 +207,28 @@ closed set, and it is **enforced**, not documentation:
 | `interface` | `GET /simulators/:udid/interface.json`, `POST /simulators/:udid/interface` — appearance, contrast, text size |
 | `status-bar` | `GET`/`POST`/`DELETE /simulators/:udid/status-bar` |
 | `location` | `POST`/`DELETE /simulators/:udid/location` |
-| `files` | `POST /simulators/:udid/files` — install apps, add media |
+| `apps` | `POST /simulators/:udid/apps` — install an app |
+| `media` | `POST /simulators/:udid/media` — add photos / videos |
 | `simulators` | `GET /simulators.json` |
+
+`apps` and `media` are deliberately separate: one puts a picture in the
+photo library, the other puts an executable on the device. A plugin that
+seeds test images shouldn't have to be trusted to install software.
+
+The browser's drag-and-drop endpoint, `POST /simulators/:udid/files`,
+takes either and works out which from the file — convenient for a person
+who picked the file, useless as a boundary. It is reachable by **no**
+capability, so plugins use the two routes above and say which power they
+mean.
 
 **Least privilege by default**: a manifest that declares nothing gets
 nothing. An unknown capability is a parse error, so typos surface at
 `baguette plugin validate` rather than as a confusing runtime `403`.
 
 That table is the *whole* plugin surface. Routes it doesn't name —
-booting a device, orientation, the camera source, installing another
-plugin — are reachable by no capability at all, so no manifest can ask
-for them. A route added to baguette later is closed to plugins until
+booting a device, orientation, the camera source, the drag-and-drop
+upload, installing another plugin — are reachable by no capability at
+all, so no manifest can ask for them. A route added to baguette later is closed to plugins until
 someone puts it in the table: the drift direction is always toward less
 authority, never more.
 

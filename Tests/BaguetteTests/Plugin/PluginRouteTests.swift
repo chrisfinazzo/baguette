@@ -34,8 +34,21 @@ struct PluginRouteTests {
         #expect(PluginRoute.capability(path: "/simulators/U/location") == .location)
     }
 
-    @Test func `putting files on the device demands files`() {
-        #expect(PluginRoute.capability(path: "/simulators/U/files") == .files)
+    @Test func `installing an app and adding media are separate powers`() {
+        // Putting a photo in the library and installing an executable
+        // are not the same authority, and bundling them meant a plugin
+        // that wanted to seed test images had to be trusted to install
+        // software.
+        #expect(PluginRoute.capability(path: "/simulators/U/apps") == .apps)
+        #expect(PluginRoute.capability(path: "/simulators/U/media") == .media)
+    }
+
+    @Test func `the browser's drag-and-drop upload is closed to plugins`() {
+        // `/files` routes by extension, so the capability it demands
+        // would depend on the bytes rather than the path — and a
+        // content-dependent check is exactly what this table exists to
+        // avoid. Plugins name the kind they mean.
+        #expect(PluginRoute.capability(path: "/simulators/U/files") == nil)
     }
 
     @Test func `the log feed demands logs`() {

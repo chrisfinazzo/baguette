@@ -73,7 +73,7 @@ For releases prior to this changelog, see the
   one plugin from another. The check runs in front of every route instead of
   inside the handful that remembered to ask, so all eight capabilities are
   enforced — `describe-ui`, `input`, `screenshot`, `logs`, `status-bar`,
-  `location`, `files`, `simulators` — and routes no capability names (booting a
+  `location`, `apps`, `media`, `simulators` — and routes no capability names (booting a
   device, the camera source, installing another plugin) are closed to plugins
   by construction. A route added later stays closed until it's mapped.
 - **`POST /simulators/:udid/input`.** The gesture pipeline over HTTP, taking

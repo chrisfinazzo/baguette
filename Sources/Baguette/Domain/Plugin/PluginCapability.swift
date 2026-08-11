@@ -30,8 +30,15 @@ enum PluginCapability: String, Equatable, Sendable, CaseIterable, Comparable {
     case interface
     /// Read or set the simulated location.
     case location
-    /// Install apps / add media to the device.
-    case files
+    /// Install an app on the device.
+    ///
+    /// Kept apart from `media` because they are not the same authority:
+    /// one puts a picture in the photo library, the other puts an
+    /// executable on the device. A plugin that wants to seed test images
+    /// shouldn't have to be trusted to install software.
+    case apps
+    /// Add photos or videos to the device's library.
+    case media
     /// List simulators and their state.
     case simulators
 

@@ -39,7 +39,8 @@ struct PluginAccessTests {
     @Test func `a plugin holding one capability cannot reach a route gated by another`() {
         let grants = PluginGrants()
         let token = grants.issue(plugin: "a11y", capabilities: [.describeUI])
-        for path in ["/simulators/U/screenshot.jpg", "/simulators/U/files", "/simulators.json"] {
+        for path in ["/simulators/U/screenshot.jpg", "/simulators/U/apps",
+                     "/simulators/U/media", "/simulators.json"] {
             guard case .refused = PluginAccess.decide(token: token, path: path, grants: grants) else {
                 Issue.record("\(path) should be refused"); return
             }
@@ -55,11 +56,19 @@ struct PluginAccessTests {
         // whole set still doesn't reach a route outside the table.
         let grants = PluginGrants()
         let token = grants.issue(plugin: "greedy", capabilities: PluginCapability.allCases)
-        let access = PluginAccess.decide(token: token, path: "/simulators/U/boot", grants: grants)
-        guard case .refused(let message) = access else {
-            Issue.record("expected .refused, got \(access)"); return
+        for path in [
+            "/simulators/U/boot",
+            // The browser's drag-and-drop upload, which decides between
+            // installing an app and adding a photo from the bytes. No
+            // manifest can ask for it — plugins say which they mean.
+            "/simulators/U/files",
+        ] {
+            let access = PluginAccess.decide(token: token, path: path, grants: grants)
+            guard case .refused(let message) = access else {
+                Issue.record("\(path) should be refused, got \(access)"); return
+            }
+            #expect(message.contains("no capability"))
         }
-        #expect(message.contains("no capability"))
     }
 
     // MARK: - callers that aren't plugins
