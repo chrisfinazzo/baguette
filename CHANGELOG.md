@@ -82,6 +82,38 @@ For releases prior to this changelog, see the
   capability. A worked example ships in
   [`examples/expo-bakery/`](examples/expo-bakery/) — an installable two-plugin
   bakery that sends the React Native ⌘R / ⌘D dev chords.
+- **Plugin contract hardening, ahead of freezing `apiVersion: 1`.** An
+  omitted `apiVersion` now means 1 permanently rather than "whatever this
+  build supports", so the day the ceiling moves, manifests written before the
+  field existed aren't silently reinterpreted. Unknown icons resolve to a
+  default glyph instead of refusing the manifest — a plugin naming a newer
+  icon works on an older baguette, and since the author's string is replaced
+  rather than escaped, untrusted text still never reaches the page.
+  `plugin validate` reports the substitution so a typo isn't swallowed.
+- **`apps` and `media` replace the `files` capability.** Putting a photo in
+  the library and putting an executable on the device aren't the same
+  authority. Splitting them meant splitting the route, because the required
+  capability is derived from the path alone — that's what makes an unmapped
+  route closed rather than open. `POST /simulators/:udid/files` keeps
+  classifying by extension for the browser's drag-and-drop and is now
+  reachable by no capability at all; plugins use `/apps` and `/media`.
+- **The pinned commit is now a demand, not a note.** A bakery's recorded sha
+  used to only describe what a shallow clone happened to fetch, so a source
+  trusted months ago quietly delivered its current contents. Installs now
+  fetch the pinned commit by name and verify they landed on it; a remote that
+  no longer serves it fails rather than falling back to HEAD.
+- **`baguette bakery outdated`.** Asks each trusted remote what it points at
+  now — one `ls-remote` each, no clone — and reports which have moved. It only
+  reports: nothing changes until you run `bakery update`, since an update that
+  applied itself would let a source accepted once ship you anything later. An
+  unreachable remote is reported as unreachable, never as up to date.
+- **Installing a plugin is CLI-only; `POST /bakeries/install` is gone.**
+  Preview still runs in the browser — it clones into the cache and reads a
+  menu. Installing writes files into a directory baguette later executes from,
+  and the only thing in front of a browser route is a set of origin
+  heuristics. The `accept:true` flag wasn't independent consent either: the
+  modal set the flag the server checked. The rail now previews and hands over
+  the command to run.
 - **Every spawned child is bounded.** `Subprocess` grows a `kill()`
   alongside `terminate()`. SIGTERM is a request a child may trap or ignore,
   and when it does its exit handler never fires — so a plugin command could

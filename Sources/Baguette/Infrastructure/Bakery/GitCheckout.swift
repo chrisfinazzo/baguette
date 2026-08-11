@@ -83,6 +83,24 @@ final class GitCheckout: Checkout, @unchecked Sendable {
         return try await revParse(at: directory)
     }
 
+    func head(of ref: BakeryRef) async throws -> String {
+        // `ls-remote` is a single ref advertisement — no objects, no
+        // working tree, no cache directory touched.
+        let out = try await run(["ls-remote", ref.cloneURL, "HEAD"])
+        // "<sha>\trefs/heads/main" — take the sha off the first line.
+        // An empty answer means the remote advertised nothing, which is
+        // a failure to resolve rather than an empty commit.
+        let first = out.split(whereSeparator: \.isNewline).first ?? ""
+        let sha = first.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+        guard !sha.isEmpty else {
+            throw GitCheckoutError.gitFailed(
+                arguments: ["ls-remote", ref.cloneURL, "HEAD"], status: 0,
+                output: "remote advertised no HEAD"
+            )
+        }
+        return sha
+    }
+
     // MARK: - private
 
     private func revParse(at directory: URL) async throws -> String {

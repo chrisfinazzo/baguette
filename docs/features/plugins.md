@@ -327,6 +327,7 @@ baguette plugin install a11y
 baguette plugin install tddworks/baguette-plugins/a11y
 
 baguette bakery list                 # trusted sources + pinned commits
+baguette bakery outdated             # ask each remote whether it has moved
 baguette plugin list                 # installed plugins + provenance
 baguette plugin update               # re-pull + re-install at latest
 baguette plugin remove a11y
@@ -368,6 +369,21 @@ If the bakery no longer serves the pinned commit — rewritten history, a
 force-push — the install **fails** rather than falling back to HEAD.
 Re-add the bakery to look at what it holds now and trust that instead.
 Moving the pin forward deliberately is what `update` is for.
+
+`baguette bakery outdated` asks each trusted remote what it points at
+now (one `ls-remote` each — no clone, no files touched) and reports
+which have moved:
+
+```text
+github.com/acme/tools   a1b2c3d → f9e8d7c  update available
+github.com/other/pack   up to date  @9f8e7d6
+```
+
+It only *reports*. Nothing on your machine changes until you run
+`bakery update`, because an update that applied itself would let a
+source you accepted once ship you anything afterwards — which is the
+thing the pin exists to prevent. A remote it can't reach is reported as
+unreachable, never as up to date.
 
 ```text
 ~/.baguette/                          # or $BAGUETTE_HOME

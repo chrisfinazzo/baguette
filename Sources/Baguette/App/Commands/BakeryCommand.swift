@@ -1,14 +1,14 @@
 import ArgumentParser
 import Foundation
 
-/// `baguette bakery <add|list|remove|update>` — manage the trusted
-/// sources plugins come from. A bakery is any git repo with a
+/// `baguette bakery <add|list|outdated|remove|update>` — manage the
+/// trusted sources plugins come from. A bakery is any git repo with a
 /// `baguette.json` at its root.
 struct BakeryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bakery",
         abstract: "Add and manage trusted sources of plugins",
-        subcommands: [Add.self, List.self, Remove.self, Update.self]
+        subcommands: [Add.self, List.self, Outdated.self, Remove.self, Update.self]
     )
 
     /// The `~/.baguette` root, shared by every subcommand and with the
@@ -90,6 +90,40 @@ struct BakeryCommand: AsyncParsableCommand {
             let ref = try BakeryRef.parse(reference)
             try FileSystemBakeries(home: BakeryCommand.home).forget(bakeryID: ref.bakery.cacheSubpath)
             print("✓ forgot \(ref.bakery.cacheSubpath) (its installed plugins remain)")
+        }
+    }
+
+    // MARK: - outdated
+
+    struct Outdated: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "outdated",
+            abstract: "Check trusted bakeries for commits newer than the ones you pinned"
+        )
+
+        func run() async throws {
+            let registry = FileSystemBakeries(home: BakeryCommand.home)
+            let checkout = GitCheckout()
+            let trusted = try registry.bakeries()
+            guard !trusted.isEmpty else { print("No bakeries added."); return }
+
+            var updates: [BakeryUpdate] = []
+            for bakery in trusted {
+                // One unreachable remote must not stop the sweep — the
+                // other bakeries still have answers worth printing.
+                let head = try? await checkout.head(of: BakeryRef.parse(bakery.url))
+                updates.append(
+                    BakeryUpdate(id: bakery.id, pinned: bakery.commit, head: head)
+                )
+            }
+
+            for update in updates { print(update.line) }
+
+            let moved = updates.filter { $0.state == .available }
+            guard !moved.isEmpty else { return }
+            print("")
+            print("Re-pin with: baguette bakery update <owner/repo>")
+            print("Nothing changes on your machine until you do.")
         }
     }
 

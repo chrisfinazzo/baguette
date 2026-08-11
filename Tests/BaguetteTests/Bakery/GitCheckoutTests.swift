@@ -119,6 +119,32 @@ struct GitCheckoutTests {
         }
     }
 
+    // MARK: - asking the remote without cloning
+
+    @Test func `head asks ls-remote and reads the sha off the answer`() async throws {
+        // `bakery outdated` needs the remote's current commit, and
+        // cloning every trusted bakery to find out would be absurd.
+        let sub = MockSubprocess()
+        let captures = Captures()
+        given(sub).run(
+            executable: .any, arguments: .any, workingDirectory: .any,
+            environment: .any, stdin: .any, onBytes: .any, onExit: .any
+        ).willProduce { _, args, _, _, _, onBytes, onExit in
+            captures.calls.append(args)
+            onBytes(Data("9f8e7d6c5b4a\trefs/heads/main\n".utf8))
+            onExit(0)
+        }
+        given(sub).terminate().willReturn()
+        given(sub).kill().willReturn()
+        let git = GitCheckout(subprocess: { sub })
+
+        let head = try await git.head(of: try BakeryRef.parse("acme/tools"))
+        #expect(head == "9f8e7d6c5b4a")
+        let call = try #require(captures.calls.first)
+        #expect(call.contains("ls-remote"))
+        #expect(call.contains("https://github.com/acme/tools.git"))
+    }
+
     // MARK: - the pin
 
     @Test func `an unpinned clone reports whatever HEAD was`() async throws {

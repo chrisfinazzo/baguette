@@ -25,6 +25,16 @@ struct CommandParsingTests {
         ])
     }
 
+    @Test func `bakery exposes the whole source lifecycle`() {
+        // Pinned so a verb can't be added without a deliberate edit
+        // here — `outdated` in particular is the only way a user learns
+        // a trusted source has moved, and it must not quietly vanish.
+        #expect(
+            Set(BakeryCommand.configuration.subcommands.map { $0.configuration.commandName })
+                == Set(["add", "list", "outdated", "remove", "update"])
+        )
+    }
+
     @Test func `baguette root exposes version`() {
         #expect(Baguette.configuration.version == baguetteVersion)
         #expect(!baguetteVersion.isEmpty)

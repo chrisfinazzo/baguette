@@ -29,6 +29,12 @@ protocol Checkout: Sendable {
 
     /// Re-pull an existing clone in place, returning the new commit.
     func pull(at directory: URL) async throws -> String
+
+    /// What the remote's default branch points at right now, without
+    /// cloning anything. Backs `bakery outdated`, which would otherwise
+    /// have to clone every trusted source to answer a question about
+    /// one sha.
+    func head(of ref: BakeryRef) async throws -> String
 }
 
 /// Where a bakery's files landed, and at what commit.
