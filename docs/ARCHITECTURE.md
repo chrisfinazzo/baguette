@@ -56,6 +56,13 @@ Subprocess consumers typically spawn one persistent `baguette input
 (framework resolution) and the IndigoHID pipeline has a ~40 ms
 per-session warmup that should only happen once.
 
+> **"Host plugin" here means a program that embeds baguette** — an
+> editor or agent host driving it over stdin. That's the opposite
+> direction from a **baguette plugin**, which baguette spawns and which
+> calls *back* into a running `serve` over HTTP. Same word, opposite
+> arrow; see [`features/plugins.md`](features/plugins.md) for the
+> second one.
+
 ## Three-layer code split
 
 Cross-layer imports flow strictly inward: App depends on Domain +
@@ -93,6 +100,20 @@ protocols at the boundaries the App layer wires up.
 | Chrome | `DeviceChrome` | value | bezel layout from `chrome.json` — insets, corner radius, button anchors |
 | Chrome | `DeviceProfile` | value | `profile.plist` parse result (chromeIdentifier) |
 | Chrome | `Chromes` | aggregate | `@Mockable` protocol — `assets(forDeviceName:)` returns `DeviceChromeAssets` |
+| Interface | `Interface` | port | `@Mockable` protocol — read/set × appearance, Increase Contrast, content size. Backed by `simctl ui` |
+| Interface | `InterfaceAppearance` / `InterfaceContrast` | value | `light`/`dark`, `enabled`/`disabled`, plus the `unknown` / `unsupported` a device answers when it can't say. Those two have no `argument` — readable states, never instructions |
+| Interface | `ContentSize` / `ContentSizeChange` | value | the 12 Dynamic Type categories; a separate change type because setting also accepts `increment` / `decrement`, which reading never answers |
+| Plugin | `PluginManifest` | value | parsed `baguette-plugin.json` — name, apiVersion, declared `capabilities`, contributions. Rejects an unknown icon or capability at parse time |
+| Plugin | `Plugin` | value | a manifest plus the directory it was read from (the command's cwd) |
+| Plugin | `Plugins` | aggregate | `@Mockable` protocol — `all()`, `resolve(qualifiedCommand:)`, default-impl `listJSON` |
+| Plugin | `PluginCapability` | value | the closed set a manifest may declare |
+| Plugin | `PluginGrants` | collaborator | mints one unguessable token per command invocation carrying that plugin's set; revokes it on exit |
+| Plugin | `PluginRoute` | value | which capability a path demands — closed table, so an unmapped route is unreachable by any plugin |
+| Plugin | `PluginAccess` | value | the decision: `anonymous` (no grant — origin checks decide) / `granted` / `refused(message)` |
+| Bakery | `BakeryRef` | value | `owner/repo`, `owner/repo/plugin`, a git URL or `file://`, normalized to host/owner/repo |
+| Bakery | `BakeryMenu` | value | a repo's `baguette.json` — the plugins it offers, each path constrained to stay inside the repo |
+| Bakery | `TrustDecision` | value | whether a source is already trusted, so consent is asked once |
+| Bakery | `InstallPlan` | value | what to copy where, resolved against `BaguetteHome` |
 | Common | `Point` / `Size` / `Insets` / `Rect` | value | coordinate primitives |
 
 Adding a new gesture is one `Gesture`-conforming struct in
@@ -117,7 +138,13 @@ mocks at the port boundary.
 | Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
 | Chrome | `ChromeStore` | `FileSystemChromeStore` | reads `/Library/Developer/CoreSimulator/.../profile.plist` + `/Library/Developer/DeviceKit/Chrome/...` |
 | Chrome | `PDFRasterizer` | `CoreGraphicsPDFRasterizer` | turns composite PDFs into RGBA PNG |
+| Interface | `Interface` | `SimctlInterface` | `xcrun simctl ui` — argv + exit handshake pure, spawn via `Subprocess` |
+| Plugin | `Plugins` | `FileSystemPlugins` | scans plugin roots for `baguette-plugin.json`; later roots shadow earlier ones |
+| Plugin | — | `PluginRoot` | resolves plugin roots: bundled → installed (`~/.baguette/plugins`) → `--plugin-dir` |
+| Bakery | `Bakeries` | `FileSystemBakeries` | `bakeries.json` / `installed.json` under `BaguetteHome` |
+| Bakery | `Checkout` | `GitCheckout` | shallow, non-interactive `git` — no submodules, pinned to a commit |
 | Server | — | `Server` | Hummingbird HTTP + WebSocket server for `baguette serve` |
+| Server | — | `PluginGrantMiddleware` | asks `PluginAccess` in front of every route, so a plugin's grant is checked once rather than per-handler |
 | Server | — | `WebRoot` | resolves `Resources/Web/` via env override → source tree → `Bundle.module` |
 
 `StdoutSink` and `WebSocketFrameSink` both conform to `FrameSink`
@@ -279,9 +306,30 @@ POST /simulators/:udid/boot                 simulator.boot()
 POST /simulators/:udid/shutdown             simulator.shutdown()
 GET  /simulators/:udid/chrome.json          DeviceChromeAssets.layoutJSON()
 GET  /simulators/:udid/bezel.png            composite.data
+GET  /simulators/:udid/interface.json       appearance + contrast + content size
+POST /simulators/:udid/interface            set any subset, answer the result
+GET  /simulators/:udid/describe-ui.json     Accessibility.describeAll / describeAt
+POST /simulators/:udid/input                GestureDispatcher (one envelope)
 WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher
+GET  /plugins.json                          Plugins.listJSON
+POST /plugins/:id/commands/:cmd?udid=       PluginDispatch → the plugin's rows
+GET  /bakeries.json                         trusted sources + pinned commits
+POST /bakeries/preview                      BakeryInstall.preview (trusts nothing)
+                                            (no install route — that's CLI-only, by design)
 GET  /<file>.{html,js,css,…}                Resources/Web/<file>
 ```
+
+`describe-ui.json` and `input` are the two routes a plugin subprocess
+lives on: the accessibility tree and the gesture pipeline were both
+WebSocket-only, which put them out of reach of a one-shot command. Both
+answer `curl` and both are capability-gated.
+
+Every request passes `PluginGrantMiddleware` first. A request carrying
+no grant is *anonymous* — the origin checks decide, exactly as before
+plugins existed. A request carrying one may only touch the routes its
+manifest declared, and a route no capability names (`boot`, `shutdown`,
+`orientation`, the `/plugins` and `/bakeries` surfaces) is unreachable
+by any plugin, so a plugin can't run other plugins or install new ones.
 
 No `/api/` prefix; UDID always in the path; format distinguished by
 file extension. Static UI siblings live at the root so
@@ -309,6 +357,15 @@ one responsibility:
 | `stream-session.js` | `StreamSession` — WS lifetime + paint loop |
 | `sim-list.js` | list page renderer + boot/shutdown buttons |
 | `sim-stream.js` | orchestrator — wires the above on Stream click |
+| `sim-plugins.js` | `PluginPanels` — the plugins rail, flyout, panels and add-a-bakery modal, drawn entirely with host markup |
+| `plugin-row-action.js` | `PluginRowAction` — what clicking a plugin row means (highlight / tap / copy), split out so it's testable without a DOM |
+
+Nothing a plugin ships reaches this page — no plugin script, CSS or
+markup. A manifest names an icon from a host-owned set and every string
+from `/plugins.json` goes through `escapeHTML` or `textContent`. That
+constraint is what keeps the server's Origin / `Sec-Fetch-Site` /
+DNS-rebind checks meaningful: a same-origin plugin script would make
+all of them moot.
 
 Each file is a single-purpose IIFE that exposes one class or factory
 on `window`. Adding a new format is one new file in
@@ -359,6 +416,9 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 
 - [`../README.md`](../README.md) — quickstart, CLI reference, wire
   protocol.
+- [`features/plugins.md`](features/plugins.md) — the plugin contract:
+  manifest schema, the command's JSON answer, the capability table and
+  what it does and doesn't guarantee, bakery distribution.
 - `../Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` —
   the 9-arg `IndigoHIDMessageForMouseNSEvent` recipe, heavily
   commented.

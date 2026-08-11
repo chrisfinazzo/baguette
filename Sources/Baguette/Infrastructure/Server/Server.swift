@@ -39,26 +39,36 @@ struct Server: Sendable {
     let chromes: any Chromes
     let models: any DeviceModels
     let deviceRenderer: any DeviceRenderer
+    let plugins: any Plugins
     let host: String
     let port: Int
     let allowedHosts: Set<String>
+    /// Capability grants, one per plugin-command invocation. A plugin
+    /// subprocess authenticates with the token it was handed, which
+    /// carries exactly its manifest's declared capabilities and dies
+    /// with the command. See `PluginGrants`.
+    let grants: PluginGrants
 
     init(
         simulators: any Simulators,
         chromes: any Chromes,
         models: any DeviceModels = DeviceModelCatalog.empty,
         deviceRenderer: any DeviceRenderer = RealityKitDeviceRenderer(),
+        plugins: any Plugins = FileSystemPlugins(roots: []),
         host: String = "127.0.0.1",
         port: Int = 8421,
-        allowedHosts: [String] = []
+        allowedHosts: [String] = [],
+        grants: PluginGrants = PluginGrants()
     ) {
         self.simulators = simulators
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
+        self.plugins = plugins
         self.host = host
         self.port = port
         self.allowedHosts = Set(allowedHosts.map { $0.lowercased() })
+        self.grants = grants
     }
 
     func run() async throws {
@@ -89,6 +99,13 @@ struct Server: Sendable {
         if !allowedHosts.isEmpty {
             router.add(middleware: AllowedHostsCORSMiddleware(allowedHosts: allowedHosts))
         }
+        // Capability enforcement sits in front of every route rather than
+        // inside the handful that thought to ask. A plugin presenting a
+        // grant gets exactly the routes its manifest declared and nothing
+        // else — including routes nobody has mapped to a capability yet,
+        // which are closed by construction. Requests with no grant are
+        // untouched here and still answer to the origin checks below.
+        router.add(middleware: PluginGrantMiddleware(grants: self.grants))
         let rejectUntrustedBrowser: @Sendable (Request) -> Response? = { request in
             Self.rejectUntrustedBrowserRequest(
                 request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
@@ -112,6 +129,10 @@ struct Server: Sendable {
 
         // Stream page — same sim.html, JS routes the inner view based on URL.
         router.get("/simulators/:udid") { _, _ in Self.staticAsset("sim.html") }
+
+        registerPluginRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerBakeryRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in
@@ -264,58 +285,30 @@ struct Server: Sendable {
         // and `Server.addFile` routes by extension to the right device
         // collection (apps → install, media → Photos). Anything with no
         // home on a simulator is refused with 415, never swallowed.
+        //
+        // Browser-only. Because it classifies by extension, the
+        // authority it confers would depend on the bytes — so it is the
+        // one upload route `PluginRoute` maps to nothing. Plugins use
+        // `/apps` and `/media` below, which say which power they mean.
         router.post("/simulators/:udid/files") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let udid = Self.udidParam(r)
-            // Strip any path components from the client-supplied name so
-            // `?name=../../etc/x` can't escape the temp directory.
-            let rawName = String(r.uri.queryParameters.get("name") ?? "upload")
-            let filename = (rawName as NSString).lastPathComponent
-            let nameURL = URL(fileURLWithPath: filename)
+            return await Self.handleUpload(r, simulators: simulators, allowing: .all)
+        }
 
-            // Cheap reject before reading the body: if the extension has
-            // no home on a simulator, don't bother uploading megabytes.
-            guard AppBundle.at(nameURL) != nil || AppArchive.at(nameURL) != nil
-                || MediaItem.at(nameURL) != nil else {
-                return errorJSON(
-                    "no home for .\(nameURL.pathExtension) on a simulator (apps, zipped apps, and media only)",
-                    status: .unsupportedMediaType
-                )
+        // The two narrow halves, each guarded by its own capability.
+        // Same plumbing, different answer to "what may land here".
+        router.post("/simulators/:udid/apps") { [simulators] r, _ in
+            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                return rejected
             }
-            guard let buffer = try? await r.body.collect(upTo: Self.maxUploadBytes) else {
-                return errorJSON("upload too large (max \(Self.maxUploadBytes / (1 << 20)) MiB) or unreadable", status: .badRequest)
-            }
+            return await Self.handleUpload(r, simulators: simulators, allowing: .apps)
+        }
 
-            // Materialise into a unique temp dir (preserving the name so
-            // the extension — and simctl's bundle detection — survives),
-            // dispatch, then clean up regardless of outcome.
-            let dir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("baguette-upload-\(UUID().uuidString)")
-            let tempURL = dir.appendingPathComponent(filename)
-            defer { try? FileManager.default.removeItem(at: dir) }
-            do {
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                try Data(buffer: buffer).write(to: tempURL)
-            } catch {
-                return errorJSON("could not stage upload: \(error)", status: .internalServerError)
+        router.post("/simulators/:udid/media") { [simulators] r, _ in
+            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                return rejected
             }
-
-            switch await Self.addFile(udid: udid, path: tempURL, simulators: simulators) {
-            case .installed:
-                return Response(status: .ok, headers: [.contentType: "application/json"],
-                                body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"app\"}")))
-            case .added:
-                return Response(status: .ok, headers: [.contentType: "application/json"],
-                                body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"media\"}")))
-            case .unsupported(let ext):
-                return errorJSON("no home for .\(ext) on a simulator (apps, zipped apps, and media only)", status: .unsupportedMediaType)
-            case .badArchive(let reason):
-                return errorJSON(reason, status: .unsupportedMediaType)
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(udid)", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON("file upload failed (simctl error — is the device booted?)", status: .internalServerError)
-            }
+            return await Self.handleUpload(r, simulators: simulators, allowing: .media)
         }
 
         // Camera source upload: an image / video the simulator's camera
@@ -987,6 +980,11 @@ struct Server: Sendable {
         case installed              // an app → simctl install
         case added                  // media → simctl addmedia
         case unsupported(ext: String)
+        /// The file has a home on a simulator, just not through *this*
+        /// route — an app posted to `/media`, or a photo to `/apps`.
+        /// Distinct from `.unsupported` because the fix is different:
+        /// use the other endpoint, don't convert the file.
+        case wrongKind(ext: String)
         case badArchive(reason: String)   // a zip that isn't a packed .app
         case unknownDevice
         case dispatchFailed
@@ -999,24 +997,107 @@ struct Server: Sendable {
     /// rather than silently dropped. Split from the route closure so
     /// unit tests drive every branch with `MockSimulators` + `MockApps`
     /// / `MockPhotoLibrary`.
+    /// The upload plumbing `/files`, `/apps` and `/media` share:
+    /// sanitise the client-supplied name, reject an extension with no
+    /// home *before* reading megabytes, stage into a unique temp dir,
+    /// dispatch, then clean up whatever happened.
+    ///
+    /// Only `allowing` differs between the three, which is the point —
+    /// the routes are the same act under different authority, so they
+    /// should not be three copies that can drift apart.
+    static func handleUpload(
+        _ r: Request, simulators: any Simulators, allowing kinds: UploadKinds
+    ) async -> Response {
+        let udid = Self.udidParam(r)
+        // Strip any path components from the client-supplied name so
+        // `?name=../../etc/x` can't escape the temp directory.
+        let rawName = String(r.uri.queryParameters.get("name") ?? "upload")
+        let filename = (rawName as NSString).lastPathComponent
+        let nameURL = URL(fileURLWithPath: filename)
+
+        // Cheap reject before reading the body: if the extension has no
+        // home on a simulator — or no home on *this* route — don't
+        // bother uploading megabytes to find out.
+        let isApp = AppBundle.at(nameURL) != nil || AppArchive.at(nameURL) != nil
+        let isMedia = MediaItem.at(nameURL) != nil
+        guard isApp || isMedia else {
+            return errorJSON(
+                "no home for .\(nameURL.pathExtension) on a simulator (apps, zipped apps, and media only)",
+                status: .unsupportedMediaType
+            )
+        }
+        guard (isApp && kinds.contains(.apps)) || (isMedia && kinds.contains(.media)) else {
+            return errorJSON(Self.wrongKindMessage(ext: nameURL.pathExtension.lowercased(), allowed: kinds),
+                             status: .unsupportedMediaType)
+        }
+        guard let buffer = try? await r.body.collect(upTo: Self.maxUploadBytes) else {
+            return errorJSON("upload too large (max \(Self.maxUploadBytes / (1 << 20)) MiB) or unreadable", status: .badRequest)
+        }
+
+        // Materialise into a unique temp dir (preserving the name so
+        // the extension — and simctl's bundle detection — survives),
+        // dispatch, then clean up regardless of outcome.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-upload-\(UUID().uuidString)")
+        let tempURL = dir.appendingPathComponent(filename)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try Data(buffer: buffer).write(to: tempURL)
+        } catch {
+            return errorJSON("could not stage upload: \(error)", status: .internalServerError)
+        }
+
+        switch await Self.addFile(udid: udid, path: tempURL, simulators: simulators, allowing: kinds) {
+        case .installed:
+            return Response(status: .ok, headers: [.contentType: "application/json"],
+                            body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"app\"}")))
+        case .added:
+            return Response(status: .ok, headers: [.contentType: "application/json"],
+                            body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"media\"}")))
+        case .unsupported(let ext):
+            return errorJSON("no home for .\(ext) on a simulator (apps, zipped apps, and media only)", status: .unsupportedMediaType)
+        case .wrongKind(let ext):
+            return errorJSON(Self.wrongKindMessage(ext: ext, allowed: kinds), status: .unsupportedMediaType)
+        case .badArchive(let reason):
+            return errorJSON(reason, status: .unsupportedMediaType)
+        case .unknownDevice:
+            return errorJSON("unknown udid: \(udid)", status: .notFound)
+        case .dispatchFailed:
+            return errorJSON("file upload failed (simctl error — is the device booted?)", status: .internalServerError)
+        }
+    }
+
+    /// Names the endpoint that *would* have taken it, so the fix is
+    /// obvious rather than "415, good luck".
+    static func wrongKindMessage(ext: String, allowed: UploadKinds) -> String {
+        allowed.contains(.apps)
+            ? ".\(ext) is media, not an app — POST it to /media"
+            : ".\(ext) is an app, not media — POST it to /apps"
+    }
+
     static func addFile(
         udid: String,
         path: URL,
-        simulators: any Simulators
+        simulators: any Simulators,
+        allowing kinds: UploadKinds = .all
     ) async -> AddFileOutcome {
         guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
             return .unknownDevice
         }
         do {
             if let app = AppBundle.at(path) {
+                guard kinds.contains(.apps) else { return .wrongKind(ext: path.pathExtension.lowercased()) }
                 try await sim.apps().install(app)
                 return .installed
             }
             if let archive = AppArchive.at(path) {
+                guard kinds.contains(.apps) else { return .wrongKind(ext: path.pathExtension.lowercased()) }
                 try await sim.apps().install(archive: archive)
                 return .installed
             }
             if let media = MediaItem.at(path) {
+                guard kinds.contains(.media) else { return .wrongKind(ext: path.pathExtension.lowercased()) }
                 try await sim.photos().add(media)
                 return .added
             }
@@ -2087,7 +2168,7 @@ struct Server: Sendable {
 
     /// Pull the UDID out of a `/simulators/<udid>/<verb>` request.
     /// `<verb>` is the last segment, `<udid>` the one before.
-    private static func udidParam(_ request: Request) -> String {
+    static func udidParam(_ request: Request) -> String {
         let parts = request.uri.path.split(separator: "/")
         guard parts.count >= 3 else { return "" }
         return String(parts[parts.count - 2]).removingPercentEncoding ?? ""
@@ -2205,6 +2286,39 @@ struct Server: Sendable {
         if allowedHosts.contains(lower) { return true }
         return allowedHosts.contains {
             $0.hasPrefix("*.") && lower.hasSuffix($0.dropFirst())
+        }
+    }
+
+    /// Refuses a plugin any route its manifest didn't declare.
+    ///
+    /// In front of every route on purpose. The alternative — each
+    /// handler remembering to ask — is how `screenshot`, `logs`,
+    /// `status-bar`, `location`, `files` and `simulators` ended up
+    /// declarable but unchecked: the capability existed, the question
+    /// was never asked, and the manifest was documentation pretending to
+    /// be a rule. Here the question is asked once and a route that
+    /// nobody mapped is refused rather than allowed.
+    ///
+    /// Only requests that present a grant are affected. Everything else
+    /// passes straight through to the per-route origin checks, so the
+    /// browser and `curl` behave exactly as they did before.
+    struct PluginGrantMiddleware<Context: RequestContext>: RouterMiddleware {
+        let grants: PluginGrants
+
+        func handle(
+            _ request: Request,
+            context: Context,
+            next: (Request, Context) async throws -> Response
+        ) async throws -> Response {
+            let presented = request.headers[HTTPField.Name("X-Baguette-Token")!]
+            switch PluginAccess.decide(
+                token: presented, path: request.uri.path, grants: grants
+            ) {
+            case .anonymous, .granted:
+                return try await next(request, context)
+            case .refused(let message):
+                return Server.pluginError(message, status: .forbidden)
+            }
         }
     }
 

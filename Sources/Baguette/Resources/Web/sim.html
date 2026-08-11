@@ -62,6 +62,12 @@
 <script src="/sim-status-bar.js"></script>
 <script src="/sim-file-drop.js"></script>
 <script src="/sim-3d.js"></script>
+<!-- Plugin contributions. Renders manifest-declared toolbar buttons +
+     panels from /plugins.json. Host-rendered only: no plugin script,
+     CSS or markup is ever loaded into this page. `plugin-row-action.js`
+     carries the click semantics and must load first. -->
+<script src="/plugin-row-action.js"></script>
+<script src="/sim-plugins.js"></script>
 <!-- Leaflet (vendored) + the location map picker. Leaflet must load
      before sim-location.js, which is itself lazy-used by sim-native.js
      on first open of the location card. -->

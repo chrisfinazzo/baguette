@@ -296,6 +296,50 @@ tree, or skip the image and act on the labels and frames directly.
 
 These do not exist for `baguette input` (no stream there).
 
+## Interface settings HTTP routes
+
+Appearance / contrast / text size are HTTP, not gesture verbs:
+
+```http
+GET  /simulators/<UDID>/interface.json
+POST /simulators/<UDID>/interface
+Content-Type: application/json
+```
+
+```json
+{"appearance": "dark", "increaseContrast": "enabled", "contentSize": "increment"}
+```
+
+Every field is optional — set one without restating the others. Both the
+GET and the POST answer the **resulting** state:
+
+```json
+{"appearance": "dark", "contentSize": "extra-large", "increaseContrast": "enabled"}
+```
+
+`appearance` is `light | dark`, `increaseContrast` is `enabled |
+disabled`, `contentSize` is `increment | decrement` or one of the 12
+categories (`extra-small` … `extra-extra-extra-large`, then
+`accessibility-medium` … `accessibility-extra-extra-extra-large`).
+
+A **read** may also answer `unknown` (device not booted) or
+`unsupported`. Those are states, not errors — and they can't be sent
+back as a setting; a body naming one is refused with `400` rather than
+half-applied. Plugins need the `interface` capability.
+
+Each setting is its own spawn with no rollback, so a `POST` that breaks
+partway says which ones landed rather than implying none did:
+
+```json
+{"ok": false, "applied": ["appearance"], "error": "simctlFailed(status: 3)"}
+```
+
+`500`; application stops at the first failure. The same `applied` shape
+comes back with `200` and `"ok": true` when every setter succeeded but
+the read-back afterwards didn't — the change stuck, the resulting state
+is just unavailable. A normal success returns the settings themselves
+and never an `applied` list.
+
 ## Shake HTTP route
 
 Device action, not a gesture verb — fires a UIKit `motionShake` on the

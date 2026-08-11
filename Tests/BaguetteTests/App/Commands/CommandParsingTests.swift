@@ -21,8 +21,18 @@ struct CommandParsingTests {
             "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "render-3d", "describe-ui", "logs", "serve",
             "orientation", "shake", "status-bar", "location", "install", "add-media",
-            "diag-digitizer-trackpad", "lifetime",
+            "plugin", "bakery", "diag-digitizer-trackpad", "lifetime", "interface",
         ])
+    }
+
+    @Test func `bakery exposes the whole source lifecycle`() {
+        // Pinned so a verb can't be added without a deliberate edit
+        // here — `outdated` in particular is the only way a user learns
+        // a trusted source has moved, and it must not quietly vanish.
+        #expect(
+            Set(BakeryCommand.configuration.subcommands.map { $0.configuration.commandName })
+                == Set(["add", "list", "outdated", "remove", "update"])
+        )
     }
 
     @Test func `baguette root exposes version`() {
@@ -174,6 +184,56 @@ struct CommandParsingTests {
         let names = StatusBarCommand.configuration.subcommands.map { $0.configuration.commandName }
         #expect(Set(names) == ["override", "clear"])
         #expect(StatusBarCommand.configuration.commandName == "status-bar")
+    }
+
+    // MARK: - interface
+
+    @Test func `interface lists one leaf per simctl ui option`() {
+        let names = InterfaceCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["appearance", "contrast", "text-size"])
+        #expect(InterfaceCommand.configuration.commandName == "interface")
+    }
+
+    @Test func `interface appearance parses a value to set`() throws {
+        let cmd = try InterfaceCommand.Appearance.parse(["--udid", "U", "dark"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.value == .dark)
+    }
+
+    @Test func `interface appearance with no value is a read`() throws {
+        // The same leaf reads and writes, matching `simctl ui` itself —
+        // no separate `get` verb to remember.
+        let cmd = try InterfaceCommand.Appearance.parse(["--udid", "U"])
+        #expect(cmd.value == nil)
+    }
+
+    @Test func `interface appearance rejects a value that can only be read`() {
+        // "unknown" is an answer simctl gives, not one it takes.
+        #expect(throws: (any Error).self) {
+            try InterfaceCommand.Appearance.parse(["--udid", "U", "unknown"])
+        }
+    }
+
+    @Test func `interface contrast parses enabled and disabled`() throws {
+        #expect(try InterfaceCommand.Contrast.parse(["--udid", "U", "enabled"]).value == .enabled)
+        #expect(try InterfaceCommand.Contrast.parse(["--udid", "U", "disabled"]).value == .disabled)
+        #expect(try InterfaceCommand.Contrast.parse(["--udid", "U"]).value == nil)
+    }
+
+    @Test func `interface text-size takes a category or a relative step`() throws {
+        #expect(
+            try InterfaceCommand.TextSize.parse(["--udid", "U", "accessibility-large"]).value
+                == .size(.accessibilityLarge)
+        )
+        #expect(try InterfaceCommand.TextSize.parse(["--udid", "U", "increment"]).value == .increment)
+        #expect(try InterfaceCommand.TextSize.parse(["--udid", "U", "decrement"]).value == .decrement)
+        #expect(try InterfaceCommand.TextSize.parse(["--udid", "U"]).value == nil)
+    }
+
+    @Test func `interface text-size rejects a size that isn't a category`() {
+        #expect(throws: (any Error).self) {
+            try InterfaceCommand.TextSize.parse(["--udid", "U", "gigantic"])
+        }
     }
 
     @Test func `status-bar override parses every field into a typed override`() throws {

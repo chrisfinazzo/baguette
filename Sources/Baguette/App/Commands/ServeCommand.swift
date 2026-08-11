@@ -1,7 +1,8 @@
 import ArgumentParser
 import Foundation
 
-/// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …] [--allowed-hosts …]`
+/// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …]`
+/// `             [--allowed-hosts …] [--plugin-dir …] [--no-plugins]`
 ///
 /// Boots the standalone simulator UI. Open `http://<host>:<port>/`
 /// in a browser and the simulator picker loads — no SPA dependency,
@@ -24,6 +25,15 @@ struct ServeCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Additional Host/Origin value to trust (repeatable; \"*.example.com\" matches subdomains)")
     var allowedHosts: [String] = []
 
+    @Option(
+        name: .customLong("plugin-dir"),
+        help: "Extra directory of plugins; repeatable. Shadows installed plugins of the same name."
+    )
+    var pluginDirs: [String] = []
+
+    @Flag(name: .customLong("no-plugins"), help: "Ignore every installed plugin, including bundled ones.")
+    var noPlugins = false
+
     func run() async throws {
         // A device driven over `serve` is lost the moment Simulator.app
         // closes its window, which is easy to trigger by accident when
@@ -34,6 +44,12 @@ struct ServeCommand: AsyncParsableCommand {
         }
 
         let models = try LiveDeviceModels(rootURLs: DeviceModelRoots.standard())
+
+        let plugins: any Plugins = noPlugins
+            ? FileSystemPlugins(roots: [])
+            : FileSystemPlugins.standard(extraRoots: pluginDirs.map { URL(fileURLWithPath: $0) })
+
+
         let server = Server(
             simulators: CoreSimulators(deviceSetPath: deviceSet),
             chromes: LiveChromes(
@@ -42,10 +58,14 @@ struct ServeCommand: AsyncParsableCommand {
             ),
             models: models,
             deviceRenderer: RealityKitDeviceRenderer(),
+            plugins: plugins,
             host: host,
             port: port,
             allowedHosts: allowedHosts
         )
+        for plugin in (try? plugins.all()) ?? [] {
+            log("plugin: \(plugin.id) \(plugin.manifest.version)")
+        }
         try await server.run()
     }
 }

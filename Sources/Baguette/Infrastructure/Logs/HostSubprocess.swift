@@ -55,11 +55,30 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
         )
     }
 
+    func run(
+        executable: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        environment: [String: String],
+        stdin: Data,
+        onBytes: @escaping @Sendable (Data) -> Void,
+        onExit:  @escaping @Sendable (Int32) -> Void
+    ) throws {
+        try run(
+            executable: executable, arguments: arguments,
+            standardInput: Pipe(), stdinData: stdin,
+            workingDirectory: workingDirectory, environment: environment,
+            onBytes: onBytes, onExit: onExit
+        )
+    }
+
     private func run(
         executable: URL,
         arguments: [String],
         standardInput: Any,
         stdinData: Data?,
+        workingDirectory: URL? = nil,
+        environment: [String: String]? = nil,
         onBytes: @escaping @Sendable (Data) -> Void,
         onExit:  @escaping @Sendable (Int32) -> Void
     ) throws {
@@ -70,7 +89,10 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
         process.standardOutput = pipe
         process.standardError  = pipe
         process.standardInput  = standardInput
-        process.environment = ProcessInfo.processInfo.environment
+        // A caller-supplied environment replaces the parent's rather
+        // than merging into it — see the `Subprocess` doc comment.
+        process.environment = environment ?? ProcessInfo.processInfo.environment
+        if let workingDirectory { process.currentDirectoryURL = workingDirectory }
 
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let bytes = handle.availableData
@@ -105,6 +127,25 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
         let pipe = self.pipe
         lock.unlock()
         if let proc, proc.isRunning { proc.terminate() }
+        closePipe(pipe)
+    }
+
+    func kill() {
+        lock.lock()
+        let proc = self.process
+        let pipe = self.pipe
+        lock.unlock()
+        // `Process` offers no SIGKILL of its own: `terminate()` sends
+        // SIGTERM and `interrupt()` sends SIGINT, and a child is free
+        // to trap either. Signalling the pid directly is the only way
+        // to guarantee `terminationHandler` — and so `onExit` — fires.
+        if let proc, proc.isRunning {
+            Darwin.kill(proc.processIdentifier, SIGKILL)
+        }
+        closePipe(pipe)
+    }
+
+    private func closePipe(_ pipe: Pipe?) {
         pipe?.fileHandleForReading.readabilityHandler = nil
         try? pipe?.fileHandleForReading.close()
         try? pipe?.fileHandleForWriting.close()

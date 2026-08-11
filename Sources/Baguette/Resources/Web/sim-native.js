@@ -38,6 +38,7 @@
   let sim = null;           // Baguette SDK Simulator
   let logPanel = null;
   let axInspector = null;
+  let pluginPanels = null;   // PluginPanels — manifest-declared plugin UI
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let locationPanel = null;  // LocationPanel — simctl location map picker
@@ -465,6 +466,9 @@
     // portrait while the simulator is still landscape.
     if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
     mountAxInspector();
+    // Once only — `startSession` re-runs on every format swap, and
+    // re-mounting would append a second copy of every plugin button.
+    if (!pluginPanels) mountPlugins();
   }
 
   // CarPlay pane: own StreamSession (?display=carplay) + Screen gestures
@@ -778,6 +782,64 @@
         }
       },
     });
+  }
+
+  // Plugin contributions — a separate rail on the right edge, drawn by
+  // the host from /plugins.json. Kept apart from the device toolbar on
+  // purpose: baguette ships the toolbar, plugins are code you
+  // installed, and the split is a trust signal. `onHighlight` converts
+  // a row's device-point frame into a box over the live screen; the
+  // frame arrives in the same units as gesture coordinates, so the
+  // only maths is the display scale.
+  function mountPlugins() {
+    if (!window.PluginPanels || !sim) return;
+    pluginPanels = new window.PluginPanels({
+      udid,
+      mount: document.getElementById('simNativeView') || document.body,
+      isBooted: () => true,
+      onHighlight: (frame) => paintPluginHighlight(frame),
+      onTap: (point) => tapForPlugin(point),
+      log: (msg) => console.log('[plugin]', msg),
+    });
+    pluginPanels.load();
+  }
+
+  // A `rowAction: "tap"` row, dispatched down the same socket every
+  // other gesture uses. Wire shape matches GestureRegistry's `tap`:
+  // device-point coordinates plus the device-point screen size — the
+  // row's frame already arrives in that space, so there's nothing to
+  // convert.
+  function tapForPlugin(point) {
+    if (!session || !sim || !sim.screen || !sim.screen.size) return;
+    const size = sim.screen.size;
+    session.send({
+      type: 'tap',
+      x: point.x, y: point.y,
+      width: size.width, height: size.height,
+    });
+  }
+
+  function paintPluginHighlight(frame) {
+    let box = document.getElementById('nativePluginHighlight');
+    if (!frame) { if (box) box.remove(); return; }
+    if (!sim || !sim.screenArea) return;
+
+    const area = sim.screenArea;
+    const device = sim.screen.size;
+    if (!device || !device.width || !device.height) return;
+    const scaleX = area.clientWidth / device.width;
+    const scaleY = area.clientHeight / device.height;
+
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'nativePluginHighlight';
+      box.className = 'plugin-highlight';
+      area.appendChild(box);
+    }
+    box.style.left   = (frame.x * scaleX) + 'px';
+    box.style.top    = (frame.y * scaleY) + 'px';
+    box.style.width  = (frame.width * scaleX) + 'px';
+    box.style.height = (frame.height * scaleY) + 'px';
   }
 
   function reflectFormat(format) {

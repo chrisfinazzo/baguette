@@ -12,6 +12,119 @@ For releases prior to this changelog, see the
 
 ### Added
 
+- **Interface settings — appearance, contrast, text size.** The three
+  accessibility-display settings a simulator exposes: light / dark appearance,
+  Increase Contrast, and content size (Dynamic Type, including the five
+  "Larger Accessibility Sizes" where layouts actually break). `baguette
+  interface appearance|contrast|text-size --udid <UDID> [<value>]` — each leaf
+  reads with no value and sets with one, mirroring `simctl ui` itself. Over
+  HTTP as `GET /simulators/:udid/interface.json` and `POST
+  /simulators/:udid/interface` (any subset; answers with the resulting state).
+  The gotcha worth preserving: a read can answer `unknown` (device not booted)
+  or `unsupported`, and simctl exits 0 for both — they're states to show, not
+  failures, so reads return them. They're also not instructions, so setting one
+  is refused before anything spawns. Plugins reach it under the new `interface`
+  capability. See [`docs/features/interface.md`](docs/features/interface.md).
+- **`rowAction: "run"` — plugin panels you can operate.** A row may name one of
+  its own plugin's commands plus `args` to call it with; clicking invokes it and
+  re-renders the panel from the answer, so the panel shows what the device
+  reports rather than what the click assumed. `args` ride the stdin context
+  (absent when no row invoked the command, so existing plugins see the context
+  they always did), and a row can only reach a command in its own plugin. Still
+  no plugin code in the page — the click is an HTTP call to the same endpoint
+  the panel opens with. The bundled a11y plugin uses it for a **Display & Text
+  Size** picker beside its audit.
+- **Plugin system.** Third-party plugins add domain-specific affordances
+  (an Expo reload button, an accessibility audit, a deep-link bar) without
+  touching baguette's core. A plugin is a directory with a
+  `baguette-plugin.json` manifest declaring toolbar/panel contributions
+  backed by a command baguette runs as a subprocess — cwd pinned, fresh
+  environment carrying `BAGUETTE_URL`/`BAGUETTE_UDID`/`BAGUETTE_TOKEN`, a
+  timeout, and a one-line JSON answer. Nothing a plugin ships is ever loaded
+  into baguette's process or the served page. Plugins render in a dedicated
+  **plugins rail** on the focus-mode screen, deliberately separate from the
+  device toolbar so an installed plugin can't be mistaken for a core control.
+  Each plugin takes **one** rail slot however many tools it ships: a
+  multi-tool plugin collapses behind a single entry that expands on hover
+  into a flyout naming each tool. A manifest may declare a top-level
+  `icon` for that collapsed entry, defaulting to its first panel's.
+  A bundled accessibility-audit plugin ships in the binary as a reference.
+  CLI: `baguette plugin list | show | validate | run`. See
+  [`docs/features/plugins.md`](docs/features/plugins.md).
+- **Bakeries — plugin distribution.** A *bakery* is any git repo with a
+  `baguette.json` menu at its root. Trust a source once
+  (`baguette bakery add owner/repo`), then install any plugin it offers
+  (`baguette plugin install <name>`, or `owner/repo/name` directly), from the
+  CLI or the plugins rail's **+ Add** modal. Trust is per bakery — accepting
+  one means accepting that its plugins run as programs with your permissions —
+  and installing only copies files; nothing runs until you activate a plugin.
+  Everything pins to a commit; fetches are shallow, non-interactive, and pull
+  no submodules. Full lifecycle: `bakery add | list | remove | update`,
+  `plugin install | remove | update`.
+- **Enforced plugin capabilities.** A manifest's `capabilities` list is now a
+  real permission boundary rather than documentation. Each command invocation
+  receives its own token carrying exactly the plugin's declared set, revoked
+  when the command exits; a plugin that didn't declare a capability gets a
+  `403` on the matching route even though its token is otherwise valid. Least
+  privilege by default — declaring nothing grants nothing — and an unknown
+  capability is a parse error, so typos surface at `baguette plugin validate`.
+  `baguette plugin show` prints what a plugin may do before you install it.
+  This replaces the shared session token, which by construction could not tell
+  one plugin from another. The check runs in front of every route instead of
+  inside the handful that remembered to ask, so all eight capabilities are
+  enforced — `describe-ui`, `input`, `screenshot`, `logs`, `status-bar`,
+  `location`, `apps`, `media`, `simulators` — and routes no capability names (booting a
+  device, the camera source, installing another plugin) are closed to plugins
+  by construction. A route added later stays closed until it's mapped.
+- **`POST /simulators/:udid/input`.** The gesture pipeline over HTTP, taking
+  the same envelope the stream socket and `baguette input` accept, so a plugin
+  can drive the device without holding a WebSocket open. Gated by the `input`
+  capability. A worked example ships in
+  [`examples/expo-bakery/`](examples/expo-bakery/) — an installable two-plugin
+  bakery that sends the React Native ⌘R / ⌘D dev chords.
+- **Plugin contract hardening, ahead of freezing `apiVersion: 1`.** An
+  omitted `apiVersion` now means 1 permanently rather than "whatever this
+  build supports", so the day the ceiling moves, manifests written before the
+  field existed aren't silently reinterpreted. Unknown icons resolve to a
+  default glyph instead of refusing the manifest — a plugin naming a newer
+  icon works on an older baguette, and since the author's string is replaced
+  rather than escaped, untrusted text still never reaches the page.
+  `plugin validate` reports the substitution so a typo isn't swallowed.
+- **`apps` and `media` replace the `files` capability.** Putting a photo in
+  the library and putting an executable on the device aren't the same
+  authority. Splitting them meant splitting the route, because the required
+  capability is derived from the path alone — that's what makes an unmapped
+  route closed rather than open. `POST /simulators/:udid/files` keeps
+  classifying by extension for the browser's drag-and-drop and is now
+  reachable by no capability at all; plugins use `/apps` and `/media`.
+- **The pinned commit is now a demand, not a note.** A bakery's recorded sha
+  used to only describe what a shallow clone happened to fetch, so a source
+  trusted months ago quietly delivered its current contents. Installs now
+  fetch the pinned commit by name and verify they landed on it; a remote that
+  no longer serves it fails rather than falling back to HEAD.
+- **`baguette bakery outdated`.** Asks each trusted remote what it points at
+  now — one `ls-remote` each, no clone — and reports which have moved. It only
+  reports: nothing changes until you run `bakery update`, since an update that
+  applied itself would let a source accepted once ship you anything later. An
+  unreachable remote is reported as unreachable, never as up to date.
+- **Installing a plugin is CLI-only; `POST /bakeries/install` is gone.**
+  Preview still runs in the browser — it clones into the cache and reads a
+  menu. Installing writes files into a directory baguette later executes from,
+  and the only thing in front of a browser route is a set of origin
+  heuristics. The `accept:true` flag wasn't independent consent either: the
+  modal set the flag the server checked. The rail now previews and hands over
+  the command to run.
+- **Every spawned child is bounded.** `Subprocess` grows a `kill()`
+  alongside `terminate()`. SIGTERM is a request a child may trap or ignore,
+  and when it does its exit handler never fires — so a plugin command could
+  hold `PluginDispatch.run` open forever, leaving the serve route unanswered
+  and the per-invocation capability grant live for as long as the child chose
+  to run. The deadline now escalates to the signal that can't be refused after
+  a grace period, and reports the outcome as a timeout rather than blaming the
+  plugin for exiting on a signal the host sent. `GitCheckout` gained a deadline
+  too: `GIT_TERMINAL_PROMPT=0` only rules out a credential hang, so a remote
+  that connected and then stalled held a `POST /bakeries/preview` task open
+  indefinitely.
 - **Shake gesture.** `baguette shake --udid <UDID>`, `POST
   /simulators/<UDID>/shake` on `serve`, and a shake button in the serve
   UI toolbar (next to Home / App switcher, mirroring the rotate button)
@@ -36,7 +149,6 @@ For releases prior to this changelog, see the
 
 ## New Contributors
 * @Eyadkelleh made their first contribution in https://github.com/tddworks/baguette/pull/45
-
 
 ---
 

@@ -46,6 +46,64 @@ struct FileRoutesTests {
         verify(photos).add(.value(MediaItem(path: URL(fileURLWithPath: "/tmp/up/shot.png")))).called(1)
     }
 
+    // MARK: - what a given route will accept
+
+    @Test func `the media route refuses an app`() async {
+        // `/media` carries the `media` capability. Installing software
+        // through it would let a plugin trusted only to add photos put
+        // an executable on the device.
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let apps = MockApps()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).apps().willReturn(apps)
+
+        let outcome = await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/MyApp.ipa"),
+            simulators: host, allowing: .media
+        )
+        #expect(outcome == .wrongKind(ext: "ipa"))
+        verify(apps).install(.any).called(0)
+    }
+
+    @Test func `the apps route refuses a photo`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let photos = MockPhotoLibrary()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).photos().willReturn(photos)
+
+        let outcome = await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/shot.png"),
+            simulators: host, allowing: .apps
+        )
+        #expect(outcome == .wrongKind(ext: "png"))
+        verify(photos).add(.any).called(0)
+    }
+
+    @Test func `the browser's drag-and-drop route still takes either`() async {
+        // `/files` is the one entry point that classifies for you, which
+        // is why it is closed to plugins entirely.
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let apps = MockApps()
+        let photos = MockPhotoLibrary()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).apps().willReturn(apps)
+        given(sim).photos().willReturn(photos)
+        given(apps).install(.any).willReturn(())
+        given(photos).add(.any).willReturn(())
+
+        #expect(await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/MyApp.ipa"),
+            simulators: host, allowing: .all
+        ) == .installed)
+        #expect(await Server.addFile(
+            udid: "U", path: URL(fileURLWithPath: "/tmp/up/shot.png"),
+            simulators: host, allowing: .all
+        ) == .added)
+    }
+
     @Test func `a file with no home on a simulator is refused`() async {
         let host = MockSimulators()
         let sim = MockSimulator()
