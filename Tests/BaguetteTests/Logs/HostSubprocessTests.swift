@@ -15,6 +15,23 @@ import Foundation
 @Suite("HostSubprocess")
 struct HostSubprocessTests {
 
+    /// How long to wait for a real child to report its exit.
+    ///
+    /// Deliberately far longer than any of these spawns needs. It is a
+    /// backstop against hanging the suite forever, **not** an assertion
+    /// about speed — every wait returns the moment the child's exit
+    /// callback fires, so a generous bound costs nothing when the
+    /// machine is idle.
+    ///
+    /// It has to be generous because these are the only tests here that
+    /// depend on the OS scheduling something. Swift Testing runs suites
+    /// in parallel, and this package's media suites do real AVFoundation
+    /// decode/encode — on a two-core CI runner they saturate it, and a
+    /// SIGTERM round-trip that takes milliseconds locally has been seen
+    /// to take over ten seconds there. Tight deadlines here fail on load
+    /// rather than on behaviour, and do it invisibly on a dev machine.
+    static let childDeadline: Duration = .seconds(90)
+
     @Test func `stdout reaches the byte handler and the exit code is reported`() async throws {
         let run = try await Self.spawn(
             executable: "/bin/echo", arguments: ["hello from the child"]
@@ -121,13 +138,17 @@ struct HostSubprocessTests {
 
         try subprocess.run(
             executable: URL(fileURLWithPath: "/bin/sleep"),
-            arguments: ["30"],
+            // Must outlast the deadline below by a wide margin: a child
+            // that exits *on its own* would report status 0 and fail
+            // this test for a reason that has nothing to do with
+            // `terminate()`.
+            arguments: ["300"],
             onBytes: { _ in },
             onExit: { status in finished.complete(status) }
         )
         subprocess.terminate()
 
-        let status = try await finished.value(timeout: .seconds(10))
+        let status = try await finished.value(timeout: Self.childDeadline)
         // Signalled, not a clean exit.
         #expect(status != 0)
     }
@@ -195,7 +216,7 @@ struct HostSubprocessTests {
             )
         }
 
-        let status = try await finished.value(timeout: .seconds(15))
+        let status = try await finished.value(timeout: Self.childDeadline)
         // The readability handler can fire after termination; give the
         // last chunk a moment to land rather than racing it.
         try? await Task.sleep(for: .milliseconds(60))
