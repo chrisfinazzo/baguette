@@ -113,10 +113,40 @@ struct BakeryInstallTests {
 
     // MARK: - fixture environment
 
+    // MARK: - the pin
+
+    @Test func `installing from an already-trusted bakery asks for its recorded commit`() async throws {
+        // Trust was granted to a specific commit. Taking HEAD on the
+        // second install would mean a bakery accepted months ago
+        // silently delivers whatever it holds today — the pin only means
+        // anything if it's what we actually fetch.
+        let env = try Env()
+        _ = try await env.install.install(ref: try BakeryRef.parse("acme/tools"), requested: "hello")
+        #expect(env.pins.value == [nil])          // first contact: nothing to demand
+
+        _ = try await env.install.install(ref: try BakeryRef.parse("acme/tools"), requested: "hello")
+        #expect(env.pins.value == [nil, "c0ffee"])
+    }
+
+    final class Pins: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen: [String?] = []
+        func record(_ commit: String?) {
+            lock.lock(); defer { lock.unlock() }
+            seen.append(commit)
+        }
+        var value: [String?] {
+            lock.lock(); defer { lock.unlock() }
+            return seen
+        }
+    }
+
     struct Env {
         let home: URL
         let install: BakeryInstall
         let registry: FileSystemBakeries
+        /// The `at:` argument of each clone, in order.
+        let pins = Pins()
 
         init(writeMenu: Bool = true) throws {
             home = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -126,7 +156,9 @@ struct BakeryInstallTests {
 
             let checkout = MockCheckout()
             let homeCopy = home
-            given(checkout).clone(.any, into: .any).willProduce { _, into in
+            let pinsCopy = pins
+            given(checkout).clone(.any, into: .any, at: .any).willProduce { _, into, at in
+                pinsCopy.record(at)
                 try Env.writeBakery(into: into, withMenu: writeMenu)
                 return CheckoutResult(directory: into, commit: "c0ffee")
             }

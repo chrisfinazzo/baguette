@@ -19,7 +19,12 @@ struct GitCheckoutTests {
     /// A mock that answers each spawn: clone exits 0, `rev-parse`
     /// prints the commit. Matched by whether the argv contains
     /// "rev-parse".
-    private func makeCheckout(commit: String = "abc123", cloneExit: Int32 = 0) -> (GitCheckout, Captures) {
+    /// `pinnedHead` models a clone whose default branch already sits on
+    /// the pinned sha, so no extra fetch is needed. Leave it nil and
+    /// `rev-parse` always answers `commit`.
+    private func makeCheckout(
+        commit: String = "abc123", cloneExit: Int32 = 0, pinnedHead: String? = nil
+    ) -> (GitCheckout, Captures) {
         let sub = MockSubprocess()
         let captures = Captures()
         given(sub).run(
@@ -29,13 +34,14 @@ struct GitCheckoutTests {
             captures.calls.append(args)
             captures.environments.append(env)
             if args.contains("rev-parse") {
-                onBytes(Data("\(commit)\n".utf8))
+                onBytes(Data("\(pinnedHead ?? commit)\n".utf8))
                 onExit(0)
             } else {
                 onExit(cloneExit)
             }
         }
         given(sub).terminate().willReturn()
+        given(sub).kill().willReturn()
         return (GitCheckout(subprocess: { sub }), captures)
     }
 
@@ -43,7 +49,7 @@ struct GitCheckoutTests {
         let (git, captures) = makeCheckout()
         let ref = try BakeryRef.parse("acme/tools")
         let dest = URL(fileURLWithPath: "/tmp/cache/github.com/acme/tools")
-        _ = try await git.clone(ref, into: dest)
+        _ = try await git.clone(ref, into: dest, at: nil)
 
         let clone = try #require(captures.calls.first)
         #expect(clone.contains("clone"))
@@ -60,13 +66,13 @@ struct GitCheckoutTests {
         // GIT_TERMINAL_PROMPT=0 turns a private/missing repo into an
         // immediate failure instead of a hang on a credential prompt.
         let (git, captures) = makeCheckout()
-        _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"))
+        _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil)
         #expect(captures.environments.first??["GIT_TERMINAL_PROMPT"] == "0")
     }
 
     @Test func `clone reports the pinned commit via rev-parse`() async throws {
         let (git, captures) = makeCheckout(commit: "deadbeef")
-        let result = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"))
+        let result = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil)
         #expect(result.commit == "deadbeef")
         // Second call resolves HEAD in the freshly cloned dir.
         #expect(captures.calls.last?.contains("rev-parse") == true)
@@ -75,7 +81,7 @@ struct GitCheckoutTests {
     @Test func `a failed clone throws rather than reporting a bogus commit`() async throws {
         let (git, _) = makeCheckout(cloneExit: 128)
         await #expect(throws: (any Error).self) {
-            _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"))
+            _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil)
         }
     }
 
@@ -110,6 +116,107 @@ struct GitCheckoutTests {
 
         await #expect(throws: (any Error).self) {
             _ = try await git.pull(at: URL(fileURLWithPath: "/tmp/cache/acme/tools"))
+        }
+    }
+
+    // MARK: - the pin
+
+    @Test func `an unpinned clone reports whatever HEAD was`() async throws {
+        // First contact with a bakery: there's nothing to demand yet, so
+        // we take the default branch and record what we got. That
+        // recorded sha is what every later fetch is held to.
+        let (git, captures) = makeCheckout(commit: "deadbeef")
+        let result = try await git.clone(
+            try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil
+        )
+        #expect(result.commit == "deadbeef")
+        #expect(captures.calls.allSatisfy { !$0.contains("checkout") })
+    }
+
+    @Test func `a pinned clone whose branch has moved fetches the pin by name`() async throws {
+        // The recorded commit has to *constrain* what we fetch, not just
+        // describe it. A shallow clone of a moving branch hands back
+        // whatever HEAD is today, so the pin is asked for by name and
+        // checked out.
+        let captures = Captures()
+        let sub = MockSubprocess()
+        let revParseCount = Counter()
+        given(sub).run(
+            executable: .any, arguments: .any, workingDirectory: .any,
+            environment: .any, stdin: .any, onBytes: .any, onExit: .any
+        ).willProduce { _, args, _, _, _, onBytes, onExit in
+            captures.calls.append(args)
+            if args.contains("rev-parse") {
+                // The branch has moved on; only after checking the pin
+                // out are we standing on it.
+                let landed = revParseCount.next() == 0 ? "f00d999" : "aaaa111"
+                onBytes(Data("\(landed)\n".utf8))
+            }
+            onExit(0)
+        }
+        given(sub).terminate().willReturn()
+        given(sub).kill().willReturn()
+        let git = GitCheckout(subprocess: { sub })
+
+        let result = try await git.clone(
+            try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: "aaaa111"
+        )
+        #expect(result.commit == "aaaa111")
+        let fetch = try #require(captures.calls.first { $0.contains("fetch") })
+        #expect(fetch.contains("aaaa111"))
+        #expect(captures.calls.contains { $0.contains("checkout") })
+    }
+
+    @Test func `a pinned clone already sitting on the pin fetches nothing extra`() async throws {
+        // The common case — the bakery hasn't moved since it was
+        // trusted. Paying for a second network round-trip to confirm
+        // what the clone already told us would be waste.
+        let (git, captures) = makeCheckout(commit: "aaaa111", pinnedHead: "aaaa111")
+        let result = try await git.clone(
+            try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: "aaaa111"
+        )
+        #expect(result.commit == "aaaa111")
+        #expect(captures.calls.allSatisfy { !$0.contains("fetch") })
+        #expect(captures.calls.allSatisfy { !$0.contains("checkout") })
+    }
+
+    final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func next() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            let current = value
+            value += 1
+            return current
+        }
+    }
+
+    @Test func `a pin the remote will not serve fails rather than silently taking HEAD`() async throws {
+        // The dangerous failure: the bakery force-pushed the pinned
+        // commit away, and we quietly install whatever replaced it.
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, workingDirectory: .any,
+            environment: .any, stdin: .any, onBytes: .any, onExit: .any
+        ).willProduce { _, args, _, _, _, onBytes, onExit in
+            if args.contains("rev-parse") {
+                onBytes(Data("f00d999\n".utf8))   // never the pinned sha
+                onExit(0)
+            } else if args.contains("fetch") {
+                onExit(128)                       // remote refuses the sha
+            } else {
+                onExit(0)
+            }
+        }
+        given(sub).terminate().willReturn()
+        given(sub).kill().willReturn()
+        let git = GitCheckout(subprocess: { sub })
+
+        await #expect(throws: GitCheckoutError.self) {
+            _ = try await git.clone(
+                try BakeryRef.parse("acme/tools"),
+                into: URL(fileURLWithPath: "/tmp/x"), at: "aaaa111"
+            )
         }
     }
 

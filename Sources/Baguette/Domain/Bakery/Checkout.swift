@@ -13,8 +13,19 @@ import Mockable
 @Mockable
 protocol Checkout: Sendable {
     /// Shallow-clone `ref` into `directory`, returning the directory
-    /// and the commit that was pinned.
-    func clone(_ ref: BakeryRef, into directory: URL) async throws -> CheckoutResult
+    /// and the commit that landed.
+    ///
+    /// `commit` is the pin. Pass `nil` on first contact — there is
+    /// nothing to demand yet, so the default branch is taken and what
+    /// arrived is reported back to be recorded. Pass a recorded sha
+    /// afterwards and that exact commit is fetched: a shallow clone of
+    /// a moving branch otherwise hands back whatever HEAD is today, so
+    /// without this the recorded sha would only ever *describe* what we
+    /// happened to get rather than constrain it.
+    ///
+    /// Throws if the remote won't serve the pin — a bakery that force-
+    /// pushed it away must not quietly become whatever replaced it.
+    func clone(_ ref: BakeryRef, into directory: URL, at commit: String?) async throws -> CheckoutResult
 
     /// Re-pull an existing clone in place, returning the new commit.
     func pull(at directory: URL) async throws -> String

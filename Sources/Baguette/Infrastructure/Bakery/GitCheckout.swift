@@ -43,7 +43,7 @@ final class GitCheckout: Checkout, @unchecked Sendable {
         self.grace = grace
     }
 
-    func clone(_ ref: BakeryRef, into directory: URL) async throws -> CheckoutResult {
+    func clone(_ ref: BakeryRef, into directory: URL, at commit: String?) async throws -> CheckoutResult {
         // Fresh clone: remove any stale cache dir so `git clone` doesn't
         // refuse a non-empty target.
         try? FileManager.default.removeItem(at: directory)
@@ -51,8 +51,31 @@ final class GitCheckout: Checkout, @unchecked Sendable {
             at: directory.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         try await run(["clone", "--depth", "1", ref.cloneURL, directory.path])
-        let commit = try await revParse(at: directory)
-        return CheckoutResult(directory: directory, commit: commit)
+        let head = try await revParse(at: directory)
+
+        // Unpinned: first contact, so whatever the default branch points
+        // at is the answer, and the caller records it.
+        guard let commit else {
+            return CheckoutResult(directory: directory, commit: head)
+        }
+        // Already there — the branch hasn't moved since we pinned it.
+        guard head != commit else {
+            return CheckoutResult(directory: directory, commit: head)
+        }
+
+        // The branch moved. Ask for the pinned object by name; a shallow
+        // clone doesn't contain it, so it has to be fetched.
+        try await run(["-C", directory.path, "fetch", "--depth", "1", "origin", commit])
+        try await run(["-C", directory.path, "checkout", "--detach", "FETCH_HEAD"])
+
+        // Verify rather than trust: `checkout FETCH_HEAD` after a fetch
+        // that resolved something else would land us somewhere plausible
+        // and wrong, which is precisely the case this exists to catch.
+        let landed = try await revParse(at: directory)
+        guard landed == commit else {
+            throw GitCheckoutError.pinUnavailable(commit: commit, got: landed)
+        }
+        return CheckoutResult(directory: directory, commit: landed)
     }
 
     func pull(at directory: URL) async throws -> String {
@@ -166,6 +189,10 @@ enum GitCheckoutError: Error, Equatable, CustomStringConvertible {
     /// The deadline passed and we stopped git — distinct from git
     /// failing, because the remote, not the repo, is the suspect.
     case timedOut(arguments: [String], after: Duration)
+    /// The pinned commit isn't what we ended up on. Its own case
+    /// because the honest reading is "this bakery is not what you
+    /// trusted any more", not "git had a problem".
+    case pinUnavailable(commit: String, got: String)
 
     var description: String {
         switch self {
@@ -175,6 +202,12 @@ enum GitCheckoutError: Error, Equatable, CustomStringConvertible {
             return tail.isEmpty ? "\(cmd) exited \(status)" : "\(cmd) exited \(status): \(tail)"
         case .timedOut(let arguments, let after):
             return "git \(arguments.joined(separator: " ")) timed out after \(after)"
+        case .pinUnavailable(let commit, let got):
+            return """
+                this bakery no longer serves commit \(commit) (got \(got)) — \
+                it may have been rewritten or force-pushed. Re-add the bakery \
+                to trust its current contents.
+                """
         }
     }
 }

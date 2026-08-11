@@ -97,7 +97,7 @@ struct ServerBakeryRoutesTests {
             registry = FileSystemBakeries(home: home)
 
             let checkout = MockCheckout()
-            given(checkout).clone(.any, into: .any).willProduce { _, into in
+            given(checkout).clone(.any, into: .any, at: .any).willProduce { _, into, _ in
                 try BakeryInstallTests.Env.writeBakery(into: into, withMenu: true)
                 return CheckoutResult(directory: into, commit: "c0ffee")
             }

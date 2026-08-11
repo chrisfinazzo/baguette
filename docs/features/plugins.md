@@ -346,9 +346,19 @@ without a reload. Preview is safe; Install is the consented act.
 ### Trust & storage
 
 Trust is **per bakery, once** — accepting a source means accepting that
-its plugins run as programs with your permissions. Everything is pinned
-to a commit; `update` is an explicit re-pull. Fetches are shallow,
+its plugins run as programs with your permissions. Fetches are shallow,
 non-interactive (a bad URL fails fast), and pull no submodules.
+
+**The pin is a demand, not a note.** Adding a bakery records the commit
+you saw; every install from it afterwards fetches *that commit by name*
+rather than whatever the default branch points at today. Otherwise a
+source accepted months ago would quietly deliver its current contents,
+and the recorded sha would only ever describe what you happened to get.
+
+If the bakery no longer serves the pinned commit — rewritten history, a
+force-push — the install **fails** rather than falling back to HEAD.
+Re-add the bakery to look at what it holds now and trust that instead.
+Moving the pin forward deliberately is what `update` is for.
 
 ```text
 ~/.baguette/                          # or $BAGUETTE_HOME

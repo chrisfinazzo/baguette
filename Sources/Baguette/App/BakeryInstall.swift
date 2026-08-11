@@ -40,8 +40,12 @@ struct BakeryInstall {
     // MARK: - add a source
 
     /// Clone and read the menu without trusting anything.
+    ///
+    /// Deliberately unpinned: preview answers "what does this source
+    /// offer *now*", which is the question you're deciding on. `add`
+    /// then records what preview saw, and that becomes the pin.
     func preview(_ ref: BakeryRef) async throws -> Preview {
-        let result = try await checkout.clone(ref.bakery, into: cacheDir(for: ref))
+        let result = try await checkout.clone(ref.bakery, into: cacheDir(for: ref), at: nil)
         let menu = try BakeryMenu.parsing(json: try menuData(in: result.directory))
         let trusted = try registry.bakeries().contains { $0.id == ref.bakery.cacheSubpath }
         return Preview(ref: ref, commit: result.commit, menu: menu, alreadyTrusted: trusted)
@@ -69,7 +73,13 @@ struct BakeryInstall {
     /// step (the direct-install path) or reusing an already-trusted one.
     @discardableResult
     func install(ref: BakeryRef, requested: String?) async throws -> [InstalledPlugin] {
-        let result = try await checkout.clone(ref.bakery, into: cacheDir(for: ref))
+        // Install at the commit the user actually trusted, when there is
+        // one. Taking HEAD here would mean a bakery trusted months ago
+        // silently delivers whatever it holds today — the pin only means
+        // something if it's what we fetch. A source not yet trusted has
+        // no pin, so this is its first-contact clone.
+        let pinned = try registry.bakeries().first { $0.id == ref.bakery.cacheSubpath }?.commit
+        let result = try await checkout.clone(ref.bakery, into: cacheDir(for: ref), at: pinned)
         let menu = try BakeryMenu.parsing(json: try menuData(in: result.directory))
         let entries = try InstallPlan.resolve(ref: ref, requested: requested, menu: menu)
 
