@@ -11,6 +11,10 @@ import ObjectiveC
 final class IndigoHIDInput: Input, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
+    /// Digitizer routing target for this input surface. Phone defaults
+    /// to `IndigoHIDTouchTarget.phone`. CarPlay callers inject the
+    /// value from `IndigoHIDTargetForScreen(connectedScreenId)`.
+    let touchTarget: UInt32
 
     private var client: AnyObject?
     private var warmed = false
@@ -63,7 +67,6 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private var removePointerSvc: ServiceFn?
 
     // Wire constants — kept private; the user never sees these.
-    private static let touchDigitizer: UInt32 = 0x32
     private static let nsEventDown:    UInt32 = 1
     private static let nsEventUp:      UInt32 = 2
     private static let nsEventDragged: UInt32 = 6
@@ -82,9 +85,11 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private static let edgeBottom: UInt32 = 3
     private static let edgeRight:  UInt32 = 4
 
-    init(udid: String, host: any DeviceHost) {
+    init(udid: String, host: any DeviceHost,
+         touchTarget: UInt32 = IndigoHIDTouchTarget.phone) {
         self.udid = udid
         self.host = host
+        self.touchTarget = touchTarget
     }
 
     private func resolveDevice() -> NSObject? {
@@ -116,7 +121,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             point: normalised,
             holdSeconds: duration > 0 ? duration : 0.05,
             edge: .none, identifier: nextTouchIdentifier(),
-            on: c
+            target: touchTarget, on: c
         )
     }
 
@@ -133,7 +138,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             from: normStart, to: normEnd,
             steps: steps, stepMs: max(8, stepMs),
             edge: .none, identifier: nextTouchIdentifier(),
-            on: c
+            target: touchTarget, on: c
         )
     }
 
@@ -164,7 +169,8 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         }
         return IOHIDDigitizerDispatch.send(
             point: normalised, identifier: id,
-            phase: dispatchPhase, edge: dispatchEdge, on: c
+            phase: dispatchPhase, edge: dispatchEdge,
+            target: touchTarget, on: c
         )
     }
 
@@ -228,7 +234,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to:   CGPoint(x: 0.5, y: 0.58),
                 steps: 30, stepMs: 35, dwellMs: 900,
                 edge: .bottom, identifier: nextTouchIdentifier(),
-                on: c
+                target: touchTarget, on: c
             ) ? true : false
         case .swipeToHome:
             // Fast edge-flagged flick from the home indicator up
@@ -241,7 +247,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to:   CGPoint(x: 0.5, y: 0.30),
                 steps: 12, stepMs: 16, dwellMs: 0,
                 edge: .bottom, identifier: nextTouchIdentifier(),
-                on: c
+                target: touchTarget, on: c
             ) ? true : false
         case .pullDownToLockScreen:
             // Slow drag down from top-LEFT (above the dynamic
@@ -253,7 +259,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to:   CGPoint(x: 0.25, y: 0.55),
                 steps: 24, stepMs: 25, dwellMs: 0,
                 edge: .top, identifier: nextTouchIdentifier(),
-                on: c
+                target: touchTarget, on: c
             ) ? true : false
         case .pullDownToNotificationCenter:
             // Slow drag down from top-RIGHT (above the dynamic
@@ -265,7 +271,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to:   CGPoint(x: 0.75, y: 0.55),
                 steps: 24, stepMs: 25, dwellMs: 0,
                 edge: .top, identifier: nextTouchIdentifier(),
-                on: c
+                target: touchTarget, on: c
             ) ? true : false
         }
     }
@@ -276,7 +282,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             return false
         }
         let holdUs = holdMicroseconds(for: duration)
-        let target = Self.touchDigitizer
+        let target = touchTarget
         // Sort modifiers so the down/up order is deterministic; iOS
         // doesn't care, but tests + logs become reproducible.
         let mods = modifiers.sorted { $0.rawValue < $1.rawValue }
@@ -311,7 +317,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
 
     func scroll(deltaX: Double, deltaY: Double) -> Bool {
         guard let c = ensureWarm(), let sfn = scrollFn else { return false }
-        guard let msg = sfn(Self.touchDigitizer, deltaX, deltaY, 0) else { return false }
+        guard let msg = sfn(touchTarget, deltaX, deltaY, 0) else { return false }
         send(message: msg, to: c)
         return true
     }
@@ -473,12 +479,12 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 var pt2 = p2
                 msg = withUnsafePointer(to: &pt1) { p1Ref in
                     withUnsafePointer(to: &pt2) { p2Ref in
-                        mfn(p1Ref, p2Ref, Self.touchDigitizer, eventType, edge, 1.0, 1.0)
+                        mfn(p1Ref, p2Ref, touchTarget, eventType, edge, 1.0, 1.0)
                     }
                 }
             } else {
                 msg = withUnsafePointer(to: &pt1) { p1Ref in
-                    mfn(p1Ref, nil, Self.touchDigitizer, eventType, edge, 1.0, 1.0)
+                    mfn(p1Ref, nil, touchTarget, eventType, edge, 1.0, 1.0)
                 }
             }
             if msg != nil { break }
@@ -494,7 +500,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             log("[hid] press \(button.rawValue) — IndigoHIDMessageForHIDArbitrary unresolved")
             return false
         }
-        let target = Self.touchDigitizer
+        let target = touchTarget
         log("[hid] press \(button.rawValue) target=0x\(String(target, radix: 16)) page=\(usage.page) usage=\(usage.usage) hold=\(holdUs)us")
         guard let down = kfn(target, usage.page, usage.usage, 1) else {
             log("[hid] press \(button.rawValue) — down message build returned nil")
@@ -537,7 +543,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             for _ in 0..<maxAttempts {
                 msg = withUnsafePointer(to: &pt1) { p1Ref in
                     withUnsafePointer(to: &pt2) { p2Ref in
-                        mfn(p1Ref, p2Ref, Self.touchDigitizer, eventType, direction, 1.0, 1.0, size.width, size.height)
+                        mfn(p1Ref, p2Ref, touchTarget, eventType, direction, 1.0, 1.0, size.width, size.height)
                     }
                 }
                 if msg != nil { break }
@@ -546,7 +552,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         } else {
             for _ in 0..<maxAttempts {
                 msg = withUnsafePointer(to: &pt1) { p1Ref in
-                    mfn(p1Ref, nil, Self.touchDigitizer, eventType, direction, 1.0, 1.0, size.width, size.height)
+                    mfn(p1Ref, nil, touchTarget, eventType, direction, 1.0, 1.0, size.width, size.height)
                 }
                 if msg != nil { break }
                 usleep(5_000)

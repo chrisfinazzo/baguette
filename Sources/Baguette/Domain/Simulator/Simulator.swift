@@ -31,10 +31,20 @@ protocol Simulator: Sendable {
 
     /// Subscribe to this simulator's frame stream. Each call returns
     /// a fresh pipeline; multiple parallel streams are supported.
+    /// Legacy phone alias — equivalent to `displays().phone.screen()`
+    /// once Infra wires the display aggregate.
     func screen() -> any Screen
 
     /// Dispatch gestures to this simulator.
+    /// Legacy phone alias — equivalent to `displays().phone.input()`
+    /// once Infra wires the display aggregate.
     func input() -> any Input
+
+    /// Display planes for this simulator (phone + CarPlay aggregates).
+    func displays() -> any Displays
+
+    /// Host external-display panel (CarPlay enablement).
+    func externalDisplays() -> any ExternalDisplays
 
     /// Read this simulator's on-screen UI tree (labels, frames,
     /// traits). Each call returns a fresh handle; the underlying
@@ -84,6 +94,12 @@ protocol Simulator: Sendable {
     /// video). Each call returns a fresh handle; the underlying `simctl
     /// addmedia` invocation is stateless.
     func photos() -> any PhotoLibrary
+
+    /// Deliver a motion shake to the booted simulator — the same signal
+    /// as Simulator.app's "Device → Shake". Each call returns a fresh
+    /// handle; the underlying `simctl spawn notifyutil` invocation is
+    /// stateless.
+    func shake() -> any Shake
 }
 
 /// `Simulator.State` lifted to a top-level enum so the protocol can

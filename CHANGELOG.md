@@ -82,6 +82,30 @@ For releases prior to this changelog, see the
   capability. A worked example ships in
   [`examples/expo-bakery/`](examples/expo-bakery/) — an installable two-plugin
   bakery that sends the React Native ⌘R / ⌘D dev chords.
+- **Shake gesture.** `baguette shake --udid <UDID>`, `POST
+  /simulators/<UDID>/shake` on `serve`, and a shake button in the serve
+  UI toolbar (next to Home / App switcher, mirroring the rotate button)
+  deliver a motion shake to a booted simulator — UIKit fires
+  `motionShake` on the frontmost
+  responder, the same as Simulator.app's *Device → Shake*. Backed by
+  `simctl spawn <udid> notifyutil -p com.apple.UIKit.SimulatorShake`,
+  which posts the private UIKit Darwin notification into the *guest's*
+  notify namespace (a host `notify_post` never reaches the iOS guest).
+  Chosen over the native `-[SimDevice gsEventsSendShake]` /
+  `PurpleWorkspacePort` GSEvent path because the shake body bytes aren't
+  documented like orientation's — the simctl path is documented,
+  crash-free, and unit-testable end-to-end. iOS-only by design.
+  See [`docs/features/shake.md`](docs/features/shake.md).
+
+---
+
+## [0.1.89] - 2026-08-09
+
+### Changed
+* feat(carplay): dual-pane phone + CarPlay streaming by @Eyadkelleh in https://github.com/tddworks/baguette/pull/45
+
+## New Contributors
+* @Eyadkelleh made their first contribution in https://github.com/tddworks/baguette/pull/45
 
 ---
 
@@ -526,7 +550,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.88...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.89...HEAD
+[0.1.89]: https://github.com/tddworks/baguette/compare/v0.1.88...v0.1.89
 [0.1.88]: https://github.com/tddworks/baguette/compare/v0.1.87...v0.1.88
 [0.1.87]: https://github.com/tddworks/baguette/compare/v0.1.86...v0.1.87
 [0.1.86]: https://github.com/tddworks/baguette/compare/v0.1.85...v0.1.86

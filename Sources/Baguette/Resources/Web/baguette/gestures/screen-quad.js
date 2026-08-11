@@ -54,6 +54,24 @@
       };
     }
 
+    static mapClientPointFromContain(canvas, clientX, clientY, size) {
+      const rect = ScreenQuad.contentRect(canvas);
+      if (!rect.width || !rect.height) {
+        return { x: 0, y: 0, xNorm: 0, yNorm: 0, inside: false };
+      }
+      const xNorm = (clientX - rect.left) / rect.width;
+      const yNorm = (clientY - rect.top) / rect.height;
+      const inside = xNorm >= 0 && xNorm <= 1 && yNorm >= 0 && yNorm <= 1;
+      const { width, height } = size;
+      return {
+        x: xNorm * width,
+        y: yNorm * height,
+        xNorm,
+        yNorm,
+        inside,
+      };
+    }
+
     /**
      * Solves for (u,v) in [0,1]×[0,1] such that bilinear interpolation
      * of my four corners at (u,v) lands on (px,py) — the inverse of the

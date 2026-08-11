@@ -323,7 +323,18 @@ usage error, caught before simctl runs.
 
 Useful for accessibility work: flip to dark / contrast on / an
 accessibility text size, then re-run `describe-ui` and compare. See
-[`docs/features/interface.md`](../../docs/features/interface.md).
+[`docs/features/interface.md`](../../../docs/features/interface.md).
+
+## Shake — `shake`
+
+```bash
+baguette shake --udid <UDID>   # UIKit motionShake on the frontmost app → simctl spawn notifyutil -p com.apple.UIKit.SimulatorShake
+```
+
+Device action (not a gesture): the frontmost responder gets
+`motionBegan/Ended` with `UIEventSubtypeMotionShake`. iOS-only. Also on
+`serve` as `POST /simulators/<UDID>/shake`. See
+[`docs/features/shake.md`](../../../docs/features/shake.md).
 
 ## Simulated GPS location — `location`
 

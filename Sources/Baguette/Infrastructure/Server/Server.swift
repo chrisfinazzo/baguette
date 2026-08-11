@@ -170,6 +170,22 @@ struct Server: Sendable {
             }
         }
 
+        // Shake — `POST` fires a UIKit motionShake via
+        // `simulator.shake().shake()`, backed by `simctl spawn
+        // notifyutil`. Pure dispatch lives in `Server.applyShake` for
+        // unit testing.
+        router.post("/simulators/:udid/shake") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            switch await Self.applyShake(udid: Self.udidParam(r), simulators: simulators) {
+            case .ok:
+                return jsonOK
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON("shake failed (simctl error)", status: .internalServerError)
+            }
+        }
+
         // Status bar — `POST` sets overrides from a JSON body,
         // `DELETE` clears them. Backed by `simctl status_bar`; pure
         // parse + dispatch lives in `Server.applyStatusBar` /
@@ -548,6 +564,7 @@ struct Server: Sendable {
                 udid: Self.udidParam(context.request),
                 format: context.request.uri.queryParameters.get("format")
                     .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
+                displayQuery: context.request.uri.queryParameters.get("display"),
                 simulators: simulators,
                 inbound: inbound,
                 outbound: outbound
@@ -637,8 +654,12 @@ struct Server: Sendable {
     /// the folders on disk.
     static let staticAssetSubdirectories = [
         "baguette",
+        "baguette/carplay",
         "baguette/gestures",
         "baguette/parts",
+        "carplay-frames",
+        "carplay-frames/cupra",
+        "carplay-frames/plain",
         "devices",
         "farm",
         "vendor/leaflet",
@@ -704,6 +725,32 @@ struct Server: Sendable {
             return .unknownDevice
         }
         return sim.orientation().set(orientation) ? .ok : .dispatchFailed
+    }
+
+    /// Outcome of `applyShake` — one case per HTTP-status branch the
+    /// shake route maps to.
+    enum ShakeOutcome: Equatable {
+        case ok
+        case unknownDevice
+        case dispatchFailed
+    }
+
+    /// Pure dispatch for `POST /simulators/:udid/shake`. Split from the
+    /// route closure so unit tests can drive every branch
+    /// (`MockSimulators` + `MockShake`) without booting Hummingbird.
+    static func applyShake(
+        udid: String,
+        simulators: any Simulators
+    ) async -> ShakeOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        do {
+            try await sim.shake().shake()
+            return .ok
+        } catch {
+            return .dispatchFailed
+        }
     }
 
     /// Outcome of the status-bar routes — one case per HTTP-status
@@ -1437,8 +1484,18 @@ struct Server: Sendable {
             sink: sink,
             quality: 0.7
         )
-        let screen = RenderedScreen(source: sim.screen(), scene: scene)
-        let input = sim.input()
+        // 3D stays phone-only; ignore any display=carplay on these routes.
+        let bound: (screen: any Screen, input: any Input)
+        do {
+            bound = try StreamDisplayPlan.phoneOnly.bind(to: sim)
+        } catch {
+            try? await outbound.write(.text(
+                #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return
+        }
+        let screen = RenderedScreen(source: bound.screen, scene: scene)
+        let input = bound.input
         let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
         do {
@@ -1503,6 +1560,7 @@ struct Server: Sendable {
     private static func streamWS(
         udid: String,
         format: StreamFormat,
+        displayQuery: String?,
         simulators: any Simulators,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
@@ -1512,12 +1570,23 @@ struct Server: Sendable {
             return
         }
 
+        let displayPlan = StreamDisplayPlan.from(query: displayQuery)
+        let bound: (screen: any Screen, input: any Input)
+        do {
+            bound = try displayPlan.bind(to: sim)
+        } catch {
+            try? await outbound.write(.text(
+                #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return
+        }
+
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
-        let screen = sim.screen()
+        let screen = bound.screen
         // One Input for the whole session — the paste keystroke must
         // reuse the same warmed HID services the gestures ride.
-        let input = sim.input()
+        let input = bound.input
         let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
 

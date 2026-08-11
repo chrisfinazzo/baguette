@@ -79,6 +79,40 @@ struct BezelRoutesTests {
         #expect(Server.applyOrientation(udid: "U", value: "portrait", simulators: host) == .dispatchFailed)
     }
 
+    @Test func `applyShake dispatches through the simulator's shake surface`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let shake = MockShake()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).shake().willReturn(shake)
+        given(shake).shake().willReturn()
+
+        #expect(await Server.applyShake(udid: "U", simulators: host) == .ok)
+        verify(shake).shake().called(1)
+    }
+
+    @Test func `applyShake reports unknownDevice when the simulator can't be found`() async {
+        let host = MockSimulators()
+        given(host).find(udid: .value("ghost")).willReturn(nil)
+        #expect(await Server.applyShake(udid: "ghost", simulators: host) == .unknownDevice)
+    }
+
+    @Test func `applyShake reports unknownDevice when the udid is empty`() async {
+        let host = MockSimulators()
+        #expect(await Server.applyShake(udid: "", simulators: host) == .unknownDevice)
+    }
+
+    @Test func `applyShake reports dispatchFailed when the shake surface throws`() async {
+        let host = MockSimulators()
+        let sim = MockSimulator()
+        let shake = MockShake()
+        given(host).find(udid: .value("U")).willReturn(sim)
+        given(sim).shake().willReturn(shake)
+        given(shake).shake().willThrow(ShakeError.simctlFailed(status: 1))
+
+        #expect(await Server.applyShake(udid: "U", simulators: host) == .dispatchFailed)
+    }
+
     @Test func `bezelImage returns nil for an unknown udid`() {
         let chromes = MockChromes()
         let sims = MockSimulators()

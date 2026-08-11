@@ -34,7 +34,13 @@
     bindDOM({ screenArea, canvas }) {
       this.element = screenArea;
       this.canvas = canvas;
-      this.bindInteraction({ element: screenArea, overlayHost: screenArea });
+      let mapClientPoint;
+      if (canvas && getComputedStyle(canvas).objectFit === 'contain') {
+        mapClientPoint = (clientX, clientY) =>
+          root.Baguette._ScreenQuad.mapClientPointFromContain(
+              canvas, clientX, clientY, this.size);
+      }
+      this.bindInteraction({ element: screenArea, overlayHost: screenArea, mapClientPoint });
     }
 
     /**

@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "render-3d", "describe-ui", "logs", "serve",
-            "orientation", "status-bar", "location", "install", "add-media",
+            "orientation", "shake", "status-bar", "location", "install", "add-media",
             "plugin", "bakery", "diag-digitizer-trackpad", "lifetime", "interface",
         ])
     }
@@ -151,6 +151,20 @@ struct CommandParsingTests {
     @Test func `orientation rejects argv without --udid`() {
         #expect(throws: (any Error).self) {
             try OrientationCommand.parse(["portrait"])
+        }
+    }
+
+    // MARK: - shake
+
+    @Test func `shake parses --udid`() throws {
+        let cmd = try ShakeCommand.parse(["--udid", "U"])
+        #expect(cmd.options.udid == "U")
+        #expect(ShakeCommand.configuration.commandName == "shake")
+    }
+
+    @Test func `shake rejects argv without --udid`() {
+        #expect(throws: (any Error).self) {
+            try ShakeCommand.parse([])
         }
     }
 

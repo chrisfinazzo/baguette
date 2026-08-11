@@ -3,14 +3,6 @@ import Foundation
 import Mockable
 @testable import Baguette
 
-/// Unit tests for `IndigoHIDInput`'s host-resolution branch — the
-/// only branch we can exercise without a real booted simulator.
-///
-/// The actual `IndigoHIDMessageForMouseNSEvent` 9-arg dispatch
-/// path is integration-only: it links into private SimulatorKit
-/// symbols, must run on `MainActor`, and silently drops messages
-/// when its preconditions aren't met. We don't try to mock that;
-/// we exercise the gate that decides whether to even attempt it.
 @Suite("IndigoHIDInput — error paths")
 struct IndigoHIDInputErrorTests {
 

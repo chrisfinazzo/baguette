@@ -5,6 +5,7 @@
 //
 //   const session = new StreamSession({
 //     udid, format, version,
+//     display,               // optional 'phone' | 'carplay'
 //     url,                    // optional custom stream WebSocket URL
 //     canvas,
 //     onSize: (w, h) => …,    // first frame + on resize
@@ -34,13 +35,13 @@
 
   StreamSession.prototype.start = function () {
     const {
-      udid, format, version, canvas, url,
+      udid, format, version, canvas, url, display,
       onSize, onFps, onLog, onText, onOpen, onClose, onError, onPaint,
     } = this.opts;
     const ctx = canvas.getContext('2d');
     const log = onLog || (() => {});
 
-    const wsUrl = url || buildWSUrl(udid, format, version || 'v2');
+    const wsUrl = url || buildWSUrl(udid, format, version || 'v2', display);
     const socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';
     this.ws = socket;
@@ -135,12 +136,18 @@
     this.pending = null;
   };
 
-  function buildWSUrl(udid, format, version) {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${location.host}/simulators/${encodeURIComponent(udid)}/stream`
+  function buildWSUrl(udid, format, version, display) {
+    const loc = window.location;
+    const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+    let url = `${proto}//${loc.host}/simulators/${encodeURIComponent(udid)}/stream`
          + `?format=${encodeURIComponent(format)}`
          + `&version=${encodeURIComponent(version)}`;
+    if (display === 'phone' || display === 'carplay') {
+      url += `&display=${encodeURIComponent(display)}`;
+    }
+    return url;
   }
 
+  StreamSession.buildWSUrl = buildWSUrl;
   window.StreamSession = StreamSession;
 })();

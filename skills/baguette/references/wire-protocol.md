@@ -327,6 +327,18 @@ A **read** may also answer `unknown` (device not booted) or
 back as a setting; a body naming one is refused with `400` rather than
 half-applied. Plugins need the `interface` capability.
 
+## Shake HTTP route
+
+Device action, not a gesture verb — fires a UIKit `motionShake` on the
+booted simulator's frontmost app:
+
+```http
+POST /simulators/<UDID>/shake
+```
+
+Response: `{"ok":true}`; `404` unknown udid; `500 shake failed (simctl
+error)`. iOS-only. See [`docs/features/shake.md`](../../../docs/features/shake.md).
+
 ## 3D render HTTP routes
 
 3D rendering is HTTP, not a WebSocket gesture verb:

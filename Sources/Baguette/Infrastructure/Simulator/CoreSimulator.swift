@@ -84,6 +84,14 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         IndigoHIDInput(udid: udid, host: host)
     }
 
+    func displays() -> any Displays {
+        SimulatorKitDisplays(udid: udid, host: host)
+    }
+
+    func externalDisplays() -> any ExternalDisplays {
+        HostExternalDisplays(udid: udid)
+    }
+
     func accessibility() -> any Accessibility {
         AXPTranslatorAccessibility(udid: udid, host: host)
     }
@@ -106,6 +114,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
 
     func location() -> any Location {
         SimctlLocation(udid: udid)
+    }
+
+    func shake() -> any Shake {
+        SimctlShake(udid: udid)
     }
 
     func pasteboard() -> any Pasteboard {

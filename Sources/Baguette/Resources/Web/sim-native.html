@@ -84,6 +84,10 @@
       --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
       --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
     }
+    #simNativeView:not([data-theme="dark"]) .carplay-frame {
+      border-color: rgba(15, 23, 42, 0.14);
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+    }
   }
   #simNativeView[data-theme="light"] {
     --nv-page-bg:        #f1f3f6;
@@ -101,6 +105,23 @@
     --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
     --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
   }
+  #simNativeView[data-theme="light"] .carplay-frame {
+    border-color: rgba(15, 23, 42, 0.14);
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+  }
+
+  /* Phone | CarPlay side-by-side. Each column keeps its own
+     intrinsic width; the row centers in the viewport. */
+  #simNativeView .dual-pane {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    max-width: 100%;
+    max-height: 100%;
+    min-width: 0;
+  }
 
   /* SwiftUI-style VStack: toolbar pill above the device, both
      centered horizontally, stacked vertically with a small gap.
@@ -113,6 +134,89 @@
     gap: 10px;
     max-height: 100%;
     min-width: 0;
+  }
+
+  #simNativeView .carplay-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-height: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  #simNativeView .carplay-label {
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text-muted);
+    font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+
+  /* Plain landscape rect (~16:9). Mounted brands swap aspect via
+     .carplay-frame__wrapper and drop the plain border. */
+  #simNativeView .carplay-frame {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: min(720px, 42vw);
+    max-height: calc(100vh - 68px);
+    max-height: calc(100dvh - 68px);
+    background: #0a0a0c;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    outline: none;
+    flex-shrink: 1;
+  }
+  #simNativeView .carplay-frame.carplay-frame--mounted {
+    aspect-ratio: auto;
+    border-color: transparent;
+    border-radius: 0;
+    background: transparent;
+  }
+  #simNativeView .carplay-frame__wrapper {
+    position: relative;
+    width: 100%;
+    height: auto;
+    max-height: calc(100dvh - 68px);
+  }
+  #simNativeView .carplay-frame canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+    pointer-events: none;
+  }
+
+  @media (max-width: 960px) {
+    #simNativeView .dual-pane {
+      flex-direction: column;
+      gap: 16px;
+      overflow: auto;
+      max-height: 100%;
+      padding: 4px 0;
+    }
+    #simNativeView #nativeDeviceFrame,
+    #simNativeView #nativeDeviceFrame > div,
+    #simNativeView #nativeDeviceFrame img,
+    #simNativeView #nativeDeviceFrame canvas {
+      max-width: min(100%, 88vw) !important;
+    }
+    #simNativeView .carplay-frame {
+      width: min(720px, 88vw);
+    }
   }
 
   /* Toolbar pill — its own content-based width (label + controls).
@@ -149,13 +253,13 @@
   #simNativeView #nativeDeviceFrame > div {
     max-height: calc(100vh  - 68px) !important;
     max-height: calc(100dvh - 68px) !important;
-    max-width: 100% !important;
+    max-width: min(100%, 46vw) !important;
   }
   #simNativeView #nativeDeviceFrame img,
   #simNativeView #nativeDeviceFrame canvas {
     max-height: calc(100vh  - 68px) !important;
     max-height: calc(100dvh - 68px) !important;
-    max-width: 100% !important;
+    max-width: min(100%, 46vw) !important;
   }
 
   /* Device-frame rotation. The wrapper inside #nativeDeviceFrame
@@ -1249,6 +1353,7 @@
 <div id="simNativeView">
   <span class="preview-banner">PREVIEW</span>
 
+  <div class="dual-pane">
   <div class="device-column">
   <div class="top-bar" role="toolbar" aria-label="Simulator controls">
     <a class="tb-label" id="nativeBackLink" href="/simulators" title="Back to simulators">
@@ -1425,6 +1530,23 @@
             <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
           </svg>
         </button>
+        <!-- Shake — fires a UIKit motionShake on the frontmost app
+             (shake-to-undo, shake-to-report). Momentary, like Home /
+             App switcher. POSTs to `/simulators/<udid>/shake`; the
+             server delegates to `simulator.shake().shake()`, backed by
+             `simctl spawn notifyutil`. -->
+        <button class="ico-btn" title="Shake device"
+                aria-label="Shake device"
+                onclick="window.__nativeShake && window.__nativeShake()">
+          <!-- Phone glyph flanked by motion arcs — reads as a device
+               shaking side to side. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <rect x="9" y="3" width="6" height="18" rx="1.6"/>
+            <path d="M5 8.5c-1.2 2-1.2 5 0 7"/>
+            <path d="M19 8.5c1.2 2 1.2 5 0 7"/>
+          </svg>
+        </button>
       </div>
       </div><!-- /.tb-scroll -->
 
@@ -1439,6 +1561,14 @@
 
     <div id="nativeDeviceFrame"></div>
     <div id="native3DStage" class="r3d-live-stage" aria-label="Live 3D simulator"></div>
+  </div>
+
+  <div class="carplay-column" aria-label="CarPlay display">
+    <div class="carplay-label">CarPlay</div>
+    <div id="nativeCarPlayFrame" class="carplay-frame" data-frame-brand="plain" tabindex="0">
+      <canvas id="nativeCarPlayCanvas" width="800" height="480"></canvas>
+    </div>
+  </div>
   </div>
 
   <!-- Accessibility-inspector host. sim-native.js mounts an
