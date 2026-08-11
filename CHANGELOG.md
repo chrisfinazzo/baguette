@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.90] - 2026-08-11
+
 ### Added
 
 - **Interface settings — appearance, contrast, text size.** The three
@@ -593,7 +597,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.89...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.90...HEAD
+[0.1.90]: https://github.com/tddworks/baguette/compare/v0.1.89...v0.1.90
 [0.1.89]: https://github.com/tddworks/baguette/compare/v0.1.88...v0.1.89
 [0.1.88]: https://github.com/tddworks/baguette/compare/v0.1.87...v0.1.88
 [0.1.87]: https://github.com/tddworks/baguette/compare/v0.1.86...v0.1.87
