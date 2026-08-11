@@ -41,12 +41,18 @@
     clock:         '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
     document:      '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
     play:          '<path d="M8 5.5v13l11-6.5z"/>',
+    // Also what the host resolves an unrecognised icon name to, so a
+    // plugin naming a glyph added after this build still draws
+    // something deliberate. Defined below, wired in after PUZZLE.
+    puzzle:        '',
   };
 
   // The rail's own emblem — a puzzle piece. Names the rail as "the
   // plugins system" so the group reads as distinct from the toolbar.
   const PUZZLE =
     '<path d="M10 4.5a2 2 0 0 1 4 0c0 .3-.1.6-.2.9.2-.1.5-.1.7-.1h1.5a1 1 0 0 1 1 1v1.5c0 .2 0 .5-.1.7.3-.1.6-.2.9-.2a2 2 0 0 1 0 4c-.3 0-.6-.1-.9-.2.1.2.1.5.1.7v2.5a1 1 0 0 1-1 1h-2.5c-.2 0-.5 0-.7-.1.1.3.2.6.2.9a2 2 0 0 1-4 0c0-.3.1-.6.2-.9-.2.1-.5.1-.7.1H6a1 1 0 0 1-1-1v-2.5c0-.2 0-.5.1-.7-.3.1-.6.2-.9.2a2 2 0 0 1 0-4c.3 0 .6.1.9.2C5 8.6 5 8.3 5 8.1V6.4a1 1 0 0 1 1-1h1.5c.2 0 .5 0 .7.1-.1-.3-.2-.6-.2-.9z"/>';
+
+  ICONS.puzzle = PUZZLE;
 
   const SEVERITY_COLOR = { error: '#b91c1c', warn: '#b45309', info: '#64748b' };
 

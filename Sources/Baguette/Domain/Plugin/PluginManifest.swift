@@ -21,6 +21,16 @@ struct PluginManifest: Equatable, Sendable {
     /// rather than parsed leniently — see `parsing(json:)`.
     static let supportedAPIVersion = 1
 
+    /// What a manifest that omits `apiVersion` is taken to mean.
+    ///
+    /// **Pinned at 1 forever, deliberately decoupled from
+    /// `supportedAPIVersion`.** The default is a statement about what
+    /// manifests written before the field existed *meant*, not about
+    /// what this build can read. Tying it to the ceiling would mean the
+    /// day that becomes 2, every such manifest is silently reinterpreted
+    /// as a v2 manifest — and misparsed wherever v2 changed a meaning.
+    static let defaultAPIVersion = 1
+
     let name: String
     let version: String
     let apiVersion: Int
@@ -38,6 +48,12 @@ struct PluginManifest: Equatable, Sendable {
     let capabilities: [PluginCapability]
     let commands: [PluginCommand]
     let panels: [PluginPanel]
+    /// Problems that didn't stop the manifest parsing — an icon name
+    /// this build doesn't know, so far. Carried on the value rather
+    /// than thrown so an older baguette still renders a newer plugin,
+    /// while `baguette plugin validate` can still tell an author they
+    /// typed `wrentch`.
+    let warnings: [PluginManifestWarning]
 
     init(
         name: String,
@@ -47,7 +63,8 @@ struct PluginManifest: Equatable, Sendable {
         icon: PluginIcon? = nil,
         capabilities: [PluginCapability] = [],
         commands: [PluginCommand] = [],
-        panels: [PluginPanel] = []
+        panels: [PluginPanel] = [],
+        warnings: [PluginManifestWarning] = []
     ) {
         self.name = name
         self.version = version
@@ -57,6 +74,7 @@ struct PluginManifest: Equatable, Sendable {
         self.capabilities = capabilities
         self.commands = commands
         self.panels = panels
+        self.warnings = warnings
     }
 
     // MARK: - parsing
@@ -79,7 +97,7 @@ struct PluginManifest: Equatable, Sendable {
             throw PluginManifestError.malformedJSON
         }
 
-        let apiVersion = dict["apiVersion"] as? Int ?? supportedAPIVersion
+        let apiVersion = dict["apiVersion"] as? Int ?? defaultAPIVersion
         guard apiVersion <= supportedAPIVersion else {
             throw PluginManifestError.unsupportedAPIVersion(
                 declared: apiVersion, supported: supportedAPIVersion
@@ -93,16 +111,22 @@ struct PluginManifest: Equatable, Sendable {
             throw PluginManifestError.missingVersion
         }
 
-        // Resolved against the shipped set for the same reason panel
-        // icons are: this string ends up in the DOM of the very origin
-        // `isTrustedBrowserRequest` defends, so a name we don't know is
-        // refused here rather than escaped later.
+        var warnings: [PluginManifestWarning] = []
+
+        // Resolved against the shipped set, never passed through: this
+        // string would otherwise land in the DOM of the very origin
+        // `isTrustedBrowserRequest` defends. Resolving to a fallback
+        // keeps that guarantee while letting a plugin that names a
+        // future glyph still work here.
+        //
+        // Absent is legal and silent — `Plugin.railIcon` borrows the
+        // first panel's. Only a name we were *given* and can't place
+        // earns a warning.
         var icon: PluginIcon?
         if let rawIcon = dict["icon"] as? String {
-            guard let parsed = PluginIcon(rawValue: rawIcon) else {
-                throw PluginManifestError.unknownIcon(name: rawIcon)
-            }
-            icon = parsed
+            let resolved = PluginIcon.resolving(rawIcon)
+            icon = resolved.icon
+            if let warning = resolved.warning { warnings.append(warning) }
         }
 
         let capabilities = try (dict["capabilities"] as? [String] ?? []).map { raw in
@@ -123,7 +147,9 @@ struct PluginManifest: Equatable, Sendable {
 
         let panelDicts = contributes["panels"] as? [[String: Any]] ?? []
         let panels = try panelDicts.map {
-            try PluginPanel.parsing(dict: $0, declaredCommands: declaredCommands)
+            try PluginPanel.parsing(
+                dict: $0, declaredCommands: declaredCommands, warnings: &warnings
+            )
         }
 
         return PluginManifest(
@@ -134,8 +160,29 @@ struct PluginManifest: Equatable, Sendable {
             icon: icon,
             capabilities: capabilities,
             commands: commands,
-            panels: panels
+            panels: panels,
+            warnings: warnings
         )
+    }
+}
+
+/// Something worth telling the author about that isn't fatal.
+///
+/// The distinction from `PluginManifestError` is whether the plugin can
+/// still work: a missing `name` leaves nothing to install, but a glyph
+/// we don't recognise leaves everything working and one picture
+/// substituted. Warnings surface through `baguette plugin validate`.
+enum PluginManifestWarning: Equatable, Sendable, CustomStringConvertible {
+    case unknownIcon(name: String)
+
+    var description: String {
+        switch self {
+        case .unknownIcon(let name):
+            return """
+                unknown icon \"\(name)\" — showing the default glyph instead; \
+                use one of: \(PluginIcon.allCases.map(\.rawValue).joined(separator: ", "))
+                """
+        }
     }
 }
 
@@ -149,7 +196,6 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
     case missingCommandID
     case emptyCommandRun(id: String)
     case unsupportedAPIVersion(declared: Int, supported: Int)
-    case unknownIcon(name: String)
     case unknownCondition(expression: String)
     case unknownPanelBody(kind: String)
     case unknownRowAction(name: String)
@@ -172,11 +218,6 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
             return """
                 manifest declares apiVersion \(declared); this baguette \
                 supports up to \(supported) — upgrade baguette
-                """
-        case .unknownIcon(let name):
-            return """
-                unknown icon \"\(name)\" — use one of: \
-                \(PluginIcon.allCases.map(\.rawValue).joined(separator: ", "))
                 """
         case .unknownCondition(let expression):
             return """

@@ -47,13 +47,16 @@ struct PluginManifestTests {
         #expect(manifest.icon == nil)
     }
 
-    @Test func `a plugin icon outside the shipped set is rejected`() throws {
-        // Same boundary as a panel icon: untrusted manifest text that
-        // reaches the DOM is resolved against the host's fixed set or
-        // refused — never escaped downstream.
-        #expect(throws: PluginManifestError.unknownIcon(name: "<img src=x onerror=alert(1)>")) {
-            try PluginManifest.parsing(json: Self.fixtureBadGroupIcon)
-        }
+    @Test func `an injection-shaped plugin icon is replaced, never carried`() throws {
+        // Same boundary as a panel icon. What matters is that manifest
+        // text never survives as an icon — the parsed value is always
+        // one of the host's own glyphs, so there is nothing downstream
+        // to escape. Replacing it does that as completely as refusing
+        // it did, without killing the plugin over a picture.
+        let manifest = try PluginManifest.parsing(json: Self.fixtureBadGroupIcon)
+        #expect(manifest.icon == .puzzle)
+        #expect(PluginIcon.allCases.contains(try #require(manifest.icon)))
+        #expect(manifest.warnings == [.unknownIcon(name: "<img src=x onerror=alert(1)>")])
     }
 
     // MARK: - commands
@@ -135,15 +138,18 @@ struct PluginManifestTests {
         #expect(manifest.panels.first?.when == nil)
     }
 
-    @Test func `an icon outside the shipped set is rejected`() throws {
+    @Test func `an injection-shaped panel icon is replaced, never carried`() throws {
         // Icons are names resolved against a fixed host set, never
         // markup. A manifest is untrusted input rendered into the very
         // origin `isTrustedBrowserRequest` exists to defend, so an
-        // arbitrary icon string is an XSS vector — refuse it at the
-        // parse boundary rather than escaping it downstream.
-        #expect(throws: PluginManifestError.unknownIcon(name: "<svg onload=alert(1)>")) {
-            try PluginManifest.parsing(json: Self.fixtureBadIcon)
-        }
+        // arbitrary icon string would be an XSS vector — it is resolved
+        // away at the parse boundary, and what comes out is always a
+        // glyph this build ships.
+        let manifest = try PluginManifest.parsing(json: Self.fixtureBadIcon)
+        let icon = try #require(manifest.panels.first?.icon)
+        #expect(icon == .puzzle)
+        #expect(PluginIcon.allCases.contains(icon))
+        #expect(manifest.warnings == [.unknownIcon(name: "<svg onload=alert(1)>")])
     }
 
     @Test func `a body kind this build doesn't render is rejected`() throws {
@@ -173,6 +179,48 @@ struct PluginManifestTests {
         #expect(throws: PluginManifestError.unsupportedAPIVersion(declared: 99, supported: 1)) {
             try PluginManifest.parsing(json: Self.fixtureFutureAPI)
         }
+    }
+
+    // MARK: - the version contract
+
+    @Test func `an omitted apiVersion means 1, not whatever this build supports`() throws {
+        // The default is a statement about what manifests written
+        // *before* the field existed meant — it is not a statement about
+        // what this build can read. Tying the two together means the day
+        // the ceiling becomes 2, every such manifest is silently
+        // reinterpreted as a v2 manifest and misparsed.
+        #expect(PluginManifest.defaultAPIVersion == 1)
+
+        let manifest = try PluginManifest.parsing(json: Self.fixtureNoAPIVersion)
+        #expect(manifest.apiVersion == 1)
+    }
+
+    // MARK: - icons degrade rather than kill the plugin
+
+    @Test func `an unrecognised icon falls back rather than refusing the manifest`() throws {
+        // Icons are cosmetic and the vocabulary grows. Throwing means a
+        // plugin naming a glyph added after this baguette shipped
+        // disappears entirely — a disproportionate answer to a picture.
+        // Safe because the author's string is never rendered: it is
+        // resolved to a shipped glyph or replaced.
+        let manifest = try PluginManifest.parsing(json: Self.fixtureFutureIcon)
+        #expect(manifest.icon == .puzzle)
+        #expect(manifest.panels.first?.icon == .puzzle)
+    }
+
+    @Test func `a fallen-back icon is still reported so the author hears about a typo`() throws {
+        // Degrading must not mean going quiet: `plugin validate` is the
+        // authoring feedback loop, and "wrentch" is a typo, not a glyph
+        // from the future.
+        let manifest = try PluginManifest.parsing(json: Self.fixtureFutureIcon)
+        #expect(manifest.warnings == [
+            .unknownIcon(name: "sparkle"),
+            .unknownIcon(name: "constellation"),
+        ])
+    }
+
+    @Test func `a manifest naming only shipped glyphs warns about nothing`() throws {
+        #expect(try PluginManifest.parsing(json: Self.fixtureOneCommand).warnings.isEmpty)
     }
 
     // MARK: - malformed input
@@ -209,6 +257,36 @@ struct PluginManifestTests {
     }
 
     // MARK: - fixtures
+
+    static let fixtureNoAPIVersion = Data("""
+    {
+      "name": "legacy",
+      "version": "1.0.0",
+      "contributes": {
+        "commands": [
+          { "id": "go", "title": "Go", "run": ["node", "bin/go.js"] }
+        ]
+      }
+    }
+    """.utf8)
+
+    static let fixtureFutureIcon = Data("""
+    {
+      "name": "a11y",
+      "version": "1.0.0",
+      "apiVersion": 1,
+      "icon": "sparkle",
+      "contributes": {
+        "commands": [
+          { "id": "audit", "title": "Run audit", "run": ["node", "bin/audit.js"] }
+        ],
+        "panels": [
+          { "id": "main", "title": "Audit", "icon": "constellation",
+            "body": { "kind": "list", "source": "audit" } }
+        ]
+      }
+    }
+    """.utf8)
 
     static let fixtureNamelessCommand = Data("""
     {

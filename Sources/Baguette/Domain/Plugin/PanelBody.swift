@@ -31,13 +31,16 @@ struct PluginPanel: Equatable, Sendable {
     /// `declaredCommands` are the ids this plugin contributes; a body
     /// naming anything else is a typo the author should hear about at
     /// validate time rather than on first click.
-    static func parsing(dict: [String: Any], declaredCommands: Set<String>) throws -> PluginPanel {
+    static func parsing(
+        dict: [String: Any],
+        declaredCommands: Set<String>,
+        warnings: inout [PluginManifestWarning]
+    ) throws -> PluginPanel {
         let id = dict["id"] as? String ?? ""
 
-        let iconName = dict["icon"] as? String ?? ""
-        guard let icon = PluginIcon(rawValue: iconName) else {
-            throw PluginManifestError.unknownIcon(name: iconName)
-        }
+        let resolved = PluginIcon.resolving(dict["icon"] as? String ?? "")
+        let icon = resolved.icon
+        if let warning = resolved.warning { warnings.append(warning) }
 
         var condition: PluginCondition?
         if let rawWhen = dict["when"] as? String {
@@ -132,6 +135,14 @@ enum PluginCondition: String, Equatable, Sendable, CaseIterable {
 ///
 /// Adding a case is a host release. That's the cost of the closed set,
 /// and it's the point.
+///
+/// A name this build doesn't know **degrades to `puzzle`** rather than
+/// refusing the manifest — see `resolving(_:)`. The closed set is here
+/// to stop untrusted text reaching the DOM, and a fallback satisfies
+/// that completely: the author's string is never rendered either way.
+/// Killing a whole plugin over a glyph would be a disproportionate
+/// answer, and it would make every new icon a breaking change for every
+/// baguette already installed.
 enum PluginIcon: String, Equatable, Sendable, CaseIterable {
     case accessibility
     case reload
@@ -145,4 +156,21 @@ enum PluginIcon: String, Equatable, Sendable, CaseIterable {
     case clock
     case document
     case play
+    /// The plugin system's own emblem, and what an unrecognised or
+    /// missing name resolves to. The rail already wears it for a plugin
+    /// that names no icon at all, so a fallback looks deliberate rather
+    /// than broken.
+    case puzzle
+
+    /// Resolve an authored name, falling back to `puzzle`.
+    ///
+    /// Returns the warning alongside so the caller can carry it to
+    /// `plugin validate`: degrading must not mean going quiet, or a
+    /// plain typo becomes invisible.
+    static func resolving(_ raw: String) -> (icon: PluginIcon, warning: PluginManifestWarning?) {
+        guard let known = PluginIcon(rawValue: raw) else {
+            return (.puzzle, .unknownIcon(name: raw))
+        }
+        return (known, nil)
+    }
 }

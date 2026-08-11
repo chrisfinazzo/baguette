@@ -63,13 +63,15 @@ struct PluginEdgeCaseTests {
         #expect(error.description.contains("simulator.awake"))
         #expect(error.description.contains("simulator.booted"))
 
+        var warnings: [PluginManifestWarning] = []
         #expect(throws: PluginManifestError.unknownCondition(expression: "simulator.awake")) {
             _ = try PluginPanel.parsing(
                 dict: [
                     "id": "p", "icon": "list", "when": "simulator.awake",
                     "body": ["kind": "list", "source": "go"],
                 ],
-                declaredCommands: ["go"]
+                declaredCommands: ["go"],
+                warnings: &warnings
             )
         }
     }

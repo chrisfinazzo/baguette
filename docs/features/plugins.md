@@ -47,13 +47,24 @@ A plugin is a directory containing `baguette-plugin.json`:
 - **`run`** is an argv resolved against the plugin's own directory
   (its cwd when spawned). Prefer an absolute interpreter path or a bare
   one baguette finds via `PATH` (`["node", "bin/x.js"]`).
-- **`icon`** must name one baguette ships: `accessibility`, `reload`,
+- **`icon`** names one baguette ships: `accessibility`, `reload`,
   `link`, `list`, `bell`, `wrench`, `lock`, `globe`, `camera`, `clock`,
-  `document`, `play`. Arbitrary markup is rejected — a manifest is
-  untrusted text rendered into a protected page.
+  `document`, `play`, `puzzle`. Arbitrary markup never renders — a
+  manifest is untrusted text destined for a protected page, so the name
+  is resolved against this list and nothing else survives.
+
+  A name baguette doesn't know **draws `puzzle` instead of failing the
+  plugin**, so one written against a newer baguette still works on an
+  older one. `baguette plugin validate` reports the substitution, since
+  the likelier cause is a typo than a glyph from the future.
 - **Top-level `icon`** is the glyph for the plugin *as a whole* — the one
   the rail shows when its tools are collapsed. Optional: omit it and the
   plugin wears the icon of the first panel it contributes.
+- **`apiVersion`** is the contract the manifest was written against.
+  baguette refuses a *newer* one outright rather than guessing at shapes
+  it can't interpret. Omitting it means **1**, permanently — that's what
+  manifests written before the field existed meant, and it stays true
+  whatever this build happens to support.
 - **`when`**: `simulator.booted`, or omit for "always".
 - **`body.kind`** is `list` (the only widget today). `rowAction` says
   what clicking a row does:

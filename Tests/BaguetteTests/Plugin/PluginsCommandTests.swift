@@ -67,10 +67,30 @@ struct PluginsCommandTests {
         let outcome = PluginsCommand.validate(json: Data("""
         { "name": "x", "version": "1.0.0", "apiVersion": 1,
           "contributes": { "panels": [
-            { "id": "p", "title": "P", "icon": "nope",
+            { "id": "p", "title": "P", "icon": "list",
               "body": { "kind": "list", "source": "gone" } } ] } }
         """.utf8))
-        #expect(outcome == .invalid(reason: PluginManifestError.unknownIcon(name: "nope").description))
+        #expect(outcome == .invalid(
+            reason: PluginManifestError.unknownCommandSource(id: "gone").description
+        ))
+    }
+
+    @Test func `validate reports a mistyped icon even though it no longer refuses one`() throws {
+        // Icons degrade so a plugin naming a future glyph still runs.
+        // That must not swallow the authoring feedback: "nope" is a
+        // typo, and validate is the one place an author finds out.
+        let outcome = PluginsCommand.validate(json: Data("""
+        { "name": "x", "version": "1.0.0", "apiVersion": 1,
+          "contributes": {
+            "commands": [ { "id": "go", "title": "Go", "run": ["true"] } ],
+            "panels": [
+              { "id": "p", "title": "P", "icon": "nope",
+                "body": { "kind": "list", "source": "go" } } ] } }
+        """.utf8))
+        #expect(outcome == .valid(
+            name: "x", commands: 1, panels: 1,
+            warnings: [PluginManifestWarning.unknownIcon(name: "nope").description]
+        ))
     }
 
     // MARK: - helpers

@@ -81,8 +81,11 @@ struct PluginsCommand: ParsableCommand {
                 throw ExitCode.failure
             }
             switch PluginsCommand.validate(json: data) {
-            case .valid(let name, let commands, let panels):
+            case .valid(let name, let commands, let panels, let warnings):
                 print("\(name) is valid — \(commands) command(s), \(panels) panel(s)")
+                // Not a failure — the plugin works — but the author
+                // asked what's wrong with it, and this is the answer.
+                for warning in warnings { log("warning: \(warning)") }
             case .invalid(let reason):
                 log("Invalid manifest: \(reason)")
                 throw ExitCode.failure
@@ -272,7 +275,10 @@ struct PluginsCommand: ParsableCommand {
     }
 
     enum Validation: Equatable {
-        case valid(name: String, commands: Int, panels: Int)
+        /// Parsed. `warnings` are the non-fatal problems worth telling
+        /// the author about — a mistyped icon still renders, as the
+        /// default glyph, so this is the only place they'd find out.
+        case valid(name: String, commands: Int, panels: Int, warnings: [String] = [])
         case invalid(reason: String)
     }
 
@@ -282,7 +288,8 @@ struct PluginsCommand: ParsableCommand {
             return .valid(
                 name: manifest.name,
                 commands: manifest.commands.count,
-                panels: manifest.panels.count
+                panels: manifest.panels.count,
+                warnings: manifest.warnings.map(\.description)
             )
         } catch let error as PluginManifestError {
             return .invalid(reason: error.description)
