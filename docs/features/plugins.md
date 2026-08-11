@@ -113,6 +113,16 @@ The command prints **one JSON object** on stdout and exits:
   baguette shows the message. Printing non-JSON is an error, not an
   empty result — a panel that renders nothing reads as "all clear".
 
+**A command has ten seconds.** A button that never returns is
+indistinguishable from a hung UI, so the host bounds it rather than
+trusting authors to. At the deadline the command gets `SIGTERM`, and two
+seconds later `SIGKILL` — trapping the first only buys that grace period,
+it doesn't buy forever. Write cleanup handlers to be quick, and don't
+hold work open across the deadline expecting to finish it.
+
+The capability token is revoked the moment the command ends, however it
+ended. A child that outlived its parent's request has no credentials.
+
 ## Panels you can operate — `rowAction: "run"`
 
 The other three row actions are things the *host* does with a row's

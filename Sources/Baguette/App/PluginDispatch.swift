@@ -208,9 +208,10 @@ enum PluginDispatch {
                 }
 
                 // Whichever finishes first wins; the loser is cancelled.
-                let first = try await group.next()!
-                group.cancelAll()
-                return first
+                // Via `defer` so a spawn that throws cancels the timer
+                // too, rather than leaning on the group's own unwind.
+                defer { group.cancelAll() }
+                return try await group.next()!
             }
         } catch {
             return .spawnFailed("\(error)")
