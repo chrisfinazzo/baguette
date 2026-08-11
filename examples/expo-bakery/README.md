@@ -12,7 +12,7 @@ It exists to show the shape. Copy it to the **root of your own git
 repo** — a bakery is a repo, so `baguette.json` must sit at the top
 level, not in a subdirectory:
 
-```
+```text
 your-repo/
   baguette.json                       ← the menu (this file's sibling)
   plugins/

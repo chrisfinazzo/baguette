@@ -318,7 +318,7 @@ its plugins run as programs with your permissions. Everything is pinned
 to a commit; `update` is an explicit re-pull. Fetches are shallow,
 non-interactive (a bad URL fails fast), and pull no submodules.
 
-```
+```text
 ~/.baguette/                          # or $BAGUETTE_HOME
   bakeries.json                       # trusted sources
   installed.json                      # which plugin came from which bakery@commit

@@ -82,6 +82,17 @@ For releases prior to this changelog, see the
   capability. A worked example ships in
   [`examples/expo-bakery/`](examples/expo-bakery/) — an installable two-plugin
   bakery that sends the React Native ⌘R / ⌘D dev chords.
+- **Every spawned child is bounded.** `Subprocess` grows a `kill()`
+  alongside `terminate()`. SIGTERM is a request a child may trap or ignore,
+  and when it does its exit handler never fires — so a plugin command could
+  hold `PluginDispatch.run` open forever, leaving the serve route unanswered
+  and the per-invocation capability grant live for as long as the child chose
+  to run. The deadline now escalates to the signal that can't be refused after
+  a grace period, and reports the outcome as a timeout rather than blaming the
+  plugin for exiting on a signal the host sent. `GitCheckout` gained a deadline
+  too: `GIT_TERMINAL_PROMPT=0` only rules out a credential hang, so a remote
+  that connected and then stalled held a `POST /bakeries/preview` task open
+  indefinitely.
 - **Shake gesture.** `baguette shake --udid <UDID>`, `POST
   /simulators/<UDID>/shake` on `serve`, and a shake button in the serve
   UI toolbar (next to Home / App switcher, mirroring the rotate button)

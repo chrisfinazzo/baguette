@@ -106,7 +106,7 @@ struct InterfaceRoutesTests {
             simulators: Self.simulators(interface: interface)
         )
 
-        #expect(outcome == .ok)
+        #expect(outcome == .ok(applied: ["appearance"]))
         verify(interface).setAppearance(.value(.dark)).called(1)
         verify(interface).setIncreaseContrast(.any).called(0)
         verify(interface).setContentSize(.any).called(0)
@@ -140,10 +140,81 @@ struct InterfaceRoutesTests {
             update: InterfaceUpdate(appearance: .dark),
             simulators: Self.simulators(interface: interface)
         )
-        guard case .failed(let message) = outcome else {
+        guard case .failed(let message, let applied) = outcome else {
             Issue.record("expected .failed, got \(outcome)"); return
         }
         #expect(message.contains("3"))
+        // Nothing landed before the very first setter threw.
+        #expect(applied.isEmpty)
+    }
+
+    @Test func `a failure after an earlier success names what did apply`() async {
+        // Each setting is its own spawn, so a three-field body is three
+        // chances to fail halfway. A bare failure would tell the caller
+        // nothing changed, when in fact the appearance already had.
+        let interface = MockInterface()
+        given(interface).setAppearance(.any).willReturn(())
+        given(interface).setIncreaseContrast(.any)
+            .willThrow(InterfaceError.simctlFailed(status: 3))
+        given(interface).setContentSize(.any).willReturn(())
+
+        let outcome = await Server.applyInterface(
+            udid: "U",
+            update: InterfaceUpdate(
+                appearance: .dark, increaseContrast: .enabled, contentSize: .increment
+            ),
+            simulators: Self.simulators(interface: interface)
+        )
+        guard case .failed(let message, let applied) = outcome else {
+            Issue.record("expected .failed, got \(outcome)"); return
+        }
+        #expect(applied == ["appearance"])
+        #expect(message.contains("3"))
+        // The setting after the failure is not attempted — a body is
+        // applied in order and stops where it broke.
+        verify(interface).setContentSize(.any).called(0)
+    }
+
+    @Test func `a wholly successful apply names every setting it landed`() async {
+        let interface = MockInterface()
+        given(interface).setAppearance(.any).willReturn(())
+        given(interface).setIncreaseContrast(.any).willReturn(())
+        given(interface).setContentSize(.any).willReturn(())
+
+        let outcome = await Server.applyInterface(
+            udid: "U",
+            update: InterfaceUpdate(
+                appearance: .light, increaseContrast: .disabled, contentSize: .decrement
+            ),
+            simulators: Self.simulators(interface: interface)
+        )
+        guard case .ok(let applied) = outcome else {
+            Issue.record("expected .ok, got \(outcome)"); return
+        }
+        #expect(applied == ["appearance", "increaseContrast", "contentSize"])
+    }
+
+    @Test func `the applied answer is the shape a caller can act on`() throws {
+        // Used when the post-change read fails: the settings landed,
+        // but the device won't say what it now reads as. `{"ok":true}`
+        // claimed success in a shape the caller couldn't use.
+        let parsed = try #require(
+            JSONSerialization.jsonObject(
+                with: Data(Server.appliedJSON(["appearance"], error: "simctl exited 3").utf8)
+            ) as? [String: Any]
+        )
+        #expect(parsed["applied"] as? [String] == ["appearance"])
+        #expect(parsed["error"] as? String == "simctl exited 3")
+        #expect(parsed["ok"] as? Bool == false)
+
+        let clean = try #require(
+            JSONSerialization.jsonObject(
+                with: Data(Server.appliedJSON(["appearance", "contentSize"]).utf8)
+            ) as? [String: Any]
+        )
+        #expect(clean["applied"] as? [String] == ["appearance", "contentSize"])
+        #expect(clean["ok"] as? Bool == true)
+        #expect(clean["error"] == nil)
     }
 
     @Test func `applying to an unknown device is reported as such`() async {

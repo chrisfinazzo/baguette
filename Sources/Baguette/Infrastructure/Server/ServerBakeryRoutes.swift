@@ -52,12 +52,43 @@ extension Server {
 
         router.get("/bakeries.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let bakeries = (try? FileSystemBakeries(home: home).bakeries()) ?? []
+            switch Self.listBakeries(home: home) {
+            case .ok(let json): return Self.jsonResponse(json)
+            case .failed(let message):
+                return Self.pluginError(message, status: .internalServerError)
+            }
+        }
+    }
+
+    // MARK: - listing
+
+    enum BakeryListOutcome: Equatable {
+        case ok(String)
+        case failed(String)
+    }
+
+    /// The trusted bakeries, as the modal renders them.
+    ///
+    /// A read failure is reported rather than flattened to an empty
+    /// list: a corrupt or unreadable `bakeries.json` would otherwise
+    /// show in the UI as "no bakeries added", which is exactly what a
+    /// fresh install looks like — and the user's next add would write
+    /// that emptiness back over whatever was really there.
+    ///
+    /// A serialization failure is reported too. Falling back to `Data()`
+    /// meant a 200 with `Content-Type: application/json` and an empty
+    /// body, which throws inside the browser's `JSON.parse` with no way
+    /// to tell it apart from success.
+    static func listBakeries(home: URL) -> BakeryListOutcome {
+        do {
+            let bakeries = try FileSystemBakeries(home: home).bakeries()
             let dict: [String: Any] = ["bakeries": bakeries.map {
                 ["id": $0.id, "commit": $0.commit, "plugins": $0.plugins]
             }]
-            let data = (try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])) ?? Data()
-            return Self.jsonResponse(String(decoding: data, as: UTF8.self))
+            let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
+            return .ok(String(decoding: data, as: UTF8.self))
+        } catch {
+            return .failed("can't read the bakery registry: \(error)")
         }
     }
 

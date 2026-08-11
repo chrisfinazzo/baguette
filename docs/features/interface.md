@@ -59,7 +59,7 @@ type from `ContentSize` because setting also accepts `increment` /
 **text-size** — `increment`, `decrement`, or one of twelve categories,
 smallest first:
 
-```
+```text
 extra-small  small  medium  large  extra-large
 extra-extra-large  extra-extra-extra-large
 accessibility-medium  accessibility-large  accessibility-extra-large
@@ -70,7 +70,7 @@ The last five are the "Larger Accessibility Sizes" range.
 
 ## HTTP
 
-```
+```http
 GET  /simulators/:udid/interface.json     all three
 POST /simulators/:udid/interface          set any subset
 ```
@@ -93,6 +93,32 @@ actually landed rather than what it asked for.
 A body naming a value that can only be read (`unknown`, `unsupported`,
 or a bad spelling) is refused whole with `400` rather than half-applied.
 
+### When it isn't all-or-nothing
+
+Each setting is its own `simctl ui` spawn and there is no transaction to
+roll back, so a three-field body has three chances to fail partway. Two
+answers admit that instead of pretending:
+
+```json
+{"ok": false, "applied": ["appearance"], "error": "simctlFailed(status: 3)"}
+```
+
+`500`, and the appearance *did* change — a caller that assumed nothing
+landed would re-apply settings that are already set. Application stops
+at the first failure, so anything after it was never attempted.
+
+```json
+{"ok": true, "applied": ["appearance", "contentSize"]}
+```
+
+`200`. Everything landed, but the read-back afterwards didn't answer, so
+there is no resulting state to report. Retrying would only re-apply what
+already worked.
+
+Both are distinguishable from the normal answer by shape: a successful
+`POST` returns the settings themselves (`appearance`, `contentSize`,
+`increaseContrast`), never an `applied` list.
+
 Plugins reach both routes under the **`interface`** capability. One
 capability covers the family: a plugin that can darken the screen can
 already restyle it, so splitting read from write would be a distinction
@@ -100,7 +126,7 @@ without a difference.
 
 ## Dispatch path
 
-```
+```text
 CLI / HTTP ──▶ Interface (@Mockable)
                     │
                     ▼

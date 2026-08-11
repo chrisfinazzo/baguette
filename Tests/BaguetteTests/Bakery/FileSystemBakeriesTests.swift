@@ -81,6 +81,80 @@ struct FileSystemBakeriesTests {
         #expect(try registry.bakeries().count == 1)
     }
 
+    // MARK: - a registry that can't be read
+
+    @Test func `an unreadable registry is an error, not an empty registry`() throws {
+        // The difference matters because the next `record` writes back
+        // what it just read: reporting "no bakeries" for a file that is
+        // merely unreadable would erase every trusted source and the
+        // whole installed-plugin provenance on the following write.
+        //
+        // A directory where the file belongs is the portable way to
+        // make the path exist and the read fail — a permissions error
+        // reads identically to the caller.
+        let home = try TempHome()
+        try FileManager.default.createDirectory(
+            at: home.url.appendingPathComponent("bakeries.json"),
+            withIntermediateDirectories: true
+        )
+        let registry = FileSystemBakeries(home: home.url)
+
+        #expect(throws: (any Error).self) { _ = try registry.bakeries() }
+    }
+
+    @Test func `a missing registry still reads as empty`() throws {
+        // First run has neither file, and that is not an error.
+        let home = try TempHome()
+        let registry = FileSystemBakeries(home: home.url)
+        #expect(try registry.bakeries().isEmpty)
+        #expect(try registry.installed().isEmpty)
+    }
+
+    // MARK: - concurrent writers
+
+    @Test func `concurrent records all survive`() async throws {
+        // Every mutator is a read-modify-write over the whole file, and
+        // Hummingbird serves requests concurrently — two overlapping
+        // installs would otherwise both read the old array, and the
+        // second write would drop the first. `.atomic` prevents a torn
+        // file; it does not prevent a lost update.
+        let home = try TempHome()
+        let registry = FileSystemBakeries(home: home.url)
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<16 {
+                group.addTask {
+                    try? registry.record(
+                        Self.bakery(id: "github.com/acme/pack-\(index)", commit: "c\(index)")
+                    )
+                }
+            }
+        }
+
+        #expect(try registry.bakeries().count == 16)
+    }
+
+    @Test func `concurrent installed-plugin records all survive`() async throws {
+        let home = try TempHome()
+        let registry = FileSystemBakeries(home: home.url)
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<16 {
+                group.addTask {
+                    try? registry.recordInstalled(
+                        InstalledPlugin(
+                            name: "plugin-\(index)",
+                            bakery: "github.com/acme/tools",
+                            commit: "c\(index)"
+                        )
+                    )
+                }
+            }
+        }
+
+        #expect(try registry.installed().count == 16)
+    }
+
     // MARK: - helpers
 
     static func bakery(id: String, commit: String) -> Bakery {

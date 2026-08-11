@@ -94,14 +94,26 @@
       this.onFlyoutKeydown = (event) => { if (event.key === 'Escape') this.closeFlyout(); };
     }
 
-    async load() {
+    /**
+     * Fetch the contributed panels and draw the rail.
+     *
+     * `keepRailOnFailure` separates two different failures. On a cold
+     * start, an unreachable `/plugins.json` means this server has no
+     * plugin support and the right answer is to mount nothing. On a
+     * *reload* the rail was already on screen and the user is mid-task
+     * — dropping it there would take away the "+" button, which is the
+     * only in-browser way to add a plugin, with nothing but a page
+     * refresh to bring it back.
+     */
+    async load({ keepRailOnFailure = false } = {}) {
       let payload;
       try {
         const res = await fetch('/plugins.json', { cache: 'no-cache' });
-        if (!res.ok) return;
+        if (!res.ok) throw new Error('plugins.json: ' + res.status);
         payload = await res.json();
       } catch (_) {
-        return; // no server-side plugins; nothing to mount
+        if (!keepRailOnFailure) return; // no server-side plugins; nothing to mount
+        payload = null;
       }
       this.plugins = (payload && payload.plugins) || [];
       this.render();
@@ -147,7 +159,7 @@
       this.rail = null;
       this.host = null;
       this.openPanelID = null;
-      await this.load();
+      await this.load({ keepRailOnFailure: true });
     }
 
     buildRail() {
@@ -401,6 +413,40 @@
       this.renderRows(pluginName, panel, payload.rows || [], body.rowAction);
     }
 
+    /**
+     * Copy a row's text, and say so when the browser won't.
+     *
+     * `navigator.clipboard` is undefined outside a secure context, and
+     * while `127.0.0.1` counts as secure, `serve` accepts
+     * `--allowed-hosts` — so the page can be reached by hostname over
+     * plain http, where this is simply absent. Calling it there throws
+     * inside the click handler and the row just looks selected with
+     * nothing on the clipboard. `writeText` can also reject on a
+     * permission failure, which was likewise unhandled.
+     */
+    copyToClipboard(text, row) {
+      const clipboard = navigator.clipboard;
+      if (!clipboard || typeof clipboard.writeText !== 'function') {
+        this.noteRowError(row, 'clipboard needs https or localhost');
+        return;
+      }
+      clipboard.writeText(text).catch((error) => {
+        this.noteRowError(row, String((error && error.message) || error));
+      });
+    }
+
+    /** A short-lived note on one row, for a failure that isn't the panel's. */
+    noteRowError(row, message) {
+      if (!row) return;
+      const previous = row.querySelector('.plugin-inline-error');
+      if (previous) previous.remove();
+      const note = document.createElement('span');
+      note.className = 'plugin-error plugin-inline-error';
+      note.textContent = ' ' + message;
+      row.appendChild(note);
+      setTimeout(() => note.remove(), 4000);
+    }
+
     statusHTML(message) {
       return '<div class="plugin-status plugin-error">' + escapeHTML(message) + '</div>';
     }
@@ -453,7 +499,7 @@
         }
         if (intent.kind === 'highlight') this.onHighlight(intent.frame);
         if (intent.kind === 'tap') this.onTap(intent.point);
-        if (intent.kind === 'copy') navigator.clipboard.writeText(intent.text);
+        if (intent.kind === 'copy') this.copyToClipboard(intent.text, li);
         if (intent.kind === 'run') {
           // The row names a command within its own plugin; the plugin
           // id comes from the panel's own source, so a row can never

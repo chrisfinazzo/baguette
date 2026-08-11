@@ -2,7 +2,7 @@
   "name": "expo-devmenu",
   "version": "1.0.0",
   "apiVersion": 1,
-  "description": "Dev menu the focused Expo / React Native app",
+  "description": "Dev menu for the focused Expo / React Native app",
   "capabilities": ["input"],
   "contributes": {
     "commands": [

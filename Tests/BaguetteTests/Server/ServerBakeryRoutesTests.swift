@@ -31,6 +31,35 @@ struct ServerBakeryRoutesTests {
         guard case .failed = outcome else { Issue.record("expected .failed, got \(outcome)"); return }
     }
 
+    // MARK: - listing
+
+    @Test func `listing answers the trusted bakeries`() async throws {
+        let env = try Env()
+        _ = await Server.installBakery(
+            reference: "acme/tools", plugin: nil, accept: true, install: env.install
+        )
+        guard case .ok(let json) = Server.listBakeries(home: env.home) else {
+            Issue.record("expected .ok"); return
+        }
+        let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        let bakeries = try #require(parsed?["bakeries"] as? [[String: Any]])
+        #expect(bakeries.first?["commit"] as? String == "c0ffee")
+    }
+
+    @Test func `a registry that cannot be read is a failure, not an empty list`() throws {
+        // A corrupt or unreadable `bakeries.json` used to render in the
+        // UI as "no bakeries added" — indistinguishable from a fresh
+        // install, and the next write would have made it true.
+        let env = try Env()
+        try FileManager.default.createDirectory(
+            at: env.home.appendingPathComponent("bakeries.json"),
+            withIntermediateDirectories: true
+        )
+        guard case .failed = Server.listBakeries(home: env.home) else {
+            Issue.record("expected .failed"); return
+        }
+    }
+
     // MARK: - install
 
     @Test func `install without explicit consent is refused`() async throws {

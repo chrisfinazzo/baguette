@@ -53,19 +53,35 @@ extension Server {
             switch await Self.applyInterface(
                 udid: Self.udidParam(r), update: update, simulators: simulators
             ) {
-            case .ok:
+            case .ok(let applied):
                 // Answer with the resulting state so a caller that just
                 // changed something doesn't need a second round-trip to
                 // re-render — and sees what actually landed, not what it
                 // asked for.
                 switch await Self.readInterface(udid: Self.udidParam(r), simulators: simulators) {
-                case .ok(let json): return Self.jsonResponse(json)
-                default: return Self.jsonResponse(#"{"ok":true}"#)
+                case .ok(let json):
+                    return Self.jsonResponse(json)
+                default:
+                    // The settings landed but the device won't say what
+                    // it now reads as. Still a success — failing here
+                    // would invite a retry that re-applies them — but
+                    // answered in a shape that admits the read didn't
+                    // happen, rather than a bare `{"ok":true}`.
+                    return Self.jsonResponse(Self.appliedJSON(applied))
                 }
             case .unknownDevice:
                 return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .failed(let message):
-                return Self.pluginError(message, status: .internalServerError)
+            case .failed(let message, let applied):
+                // 500, but carrying the settings that did land — the
+                // caller can't otherwise tell a request that changed
+                // nothing from one that changed two of three.
+                return Response(
+                    status: .internalServerError,
+                    headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                    body: .init(byteBuffer: ByteBuffer(
+                        string: Self.appliedJSON(applied, error: message)
+                    ))
+                )
             }
         }
     }
@@ -116,32 +132,61 @@ extension Server {
     // MARK: - apply
 
     enum InterfaceApplyOutcome: Equatable {
-        case ok
+        /// Everything the body named landed. Carries the field names in
+        /// the order they were applied.
+        case ok(applied: [String])
         case unknownDevice
-        case failed(String)
+        /// A setter threw. `applied` names the settings that had
+        /// already landed before it did — this request was not
+        /// all-or-nothing, and a caller that assumes otherwise will
+        /// re-apply settings that are already set.
+        case failed(String, applied: [String])
     }
 
     /// Dispatch only the settings the body named. Each is its own
     /// `simctl` spawn, so a partial body means fewer spawns rather than
     /// a read-modify-write of the two it didn't mention.
+    ///
+    /// Three spawns is also three chances to fail halfway, and there is
+    /// no rollback: `simctl ui` has no transaction. So rather than
+    /// pretend, the outcome reports exactly which settings landed and
+    /// stops at the first failure.
     static func applyInterface(
         udid: String, update: InterfaceUpdate, simulators: any Simulators
     ) async -> InterfaceApplyOutcome {
         guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
         let interface = sim.interface()
+        var applied: [String] = []
         do {
             if let appearance = update.appearance {
                 try await interface.setAppearance(appearance)
+                applied.append("appearance")
             }
             if let contrast = update.increaseContrast {
                 try await interface.setIncreaseContrast(contrast)
+                applied.append("increaseContrast")
             }
             if let contentSize = update.contentSize {
                 try await interface.setContentSize(contentSize)
+                applied.append("contentSize")
             }
-            return .ok
+            return .ok(applied: applied)
         } catch {
-            return .failed(String(describing: error))
+            return .failed(String(describing: error), applied: applied)
         }
+    }
+
+    /// An answer that names what actually landed.
+    ///
+    /// Both callers need it for the same reason: the request wasn't
+    /// all-or-nothing, and the resulting state can't be shown. Used
+    /// when a setter failed partway, and when every setter succeeded
+    /// but the read-back afterwards didn't.
+    static func appliedJSON(_ applied: [String], error: String? = nil) -> String {
+        var dict: [String: Any] = ["ok": error == nil, "applied": applied]
+        if let error { dict["error"] = error }
+        let data = (try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]))
+            ?? Data(#"{"ok":false,"applied":[]}"#.utf8)
+        return String(decoding: data, as: UTF8.self)
     }
 }

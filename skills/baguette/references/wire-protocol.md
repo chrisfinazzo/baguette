@@ -327,6 +327,19 @@ A **read** may also answer `unknown` (device not booted) or
 back as a setting; a body naming one is refused with `400` rather than
 half-applied. Plugins need the `interface` capability.
 
+Each setting is its own spawn with no rollback, so a `POST` that breaks
+partway says which ones landed rather than implying none did:
+
+```json
+{"ok": false, "applied": ["appearance"], "error": "simctlFailed(status: 3)"}
+```
+
+`500`; application stops at the first failure. The same `applied` shape
+comes back with `200` and `"ok": true` when every setter succeeded but
+the read-back afterwards didn't — the change stuck, the resulting state
+is just unavailable. A normal success returns the settings themselves
+and never an `applied` list.
+
 ## Shake HTTP route
 
 Device action, not a gesture verb — fires a UIKit `motionShake` on the
