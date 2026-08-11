@@ -59,7 +59,10 @@ final class SimctlInterface: Interface, @unchecked Sendable {
     }
 
     func setContentSize(_ change: ContentSizeChange) async throws {
-        try await spawn(option: .contentSize, value: change.argument)
+        guard let value = change.argument else {
+            throw InterfaceError.notSettable(change.wire)
+        }
+        try await spawn(option: .contentSize, value: value)
     }
 
     // MARK: - the simctl verbs

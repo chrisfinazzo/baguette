@@ -76,11 +76,28 @@ enum ContentSizeChange: Equatable, Sendable {
         }
     }
 
-    var argument: String {
+    /// How this change spells itself, settable or not. Error messages
+    /// need to name what was refused, and a refused change has no
+    /// `argument` to name it with.
+    var wire: String {
         switch self {
         case .increment: return "increment"
         case .decrement: return "decrement"
-        case .size(let size): return size.argument ?? "large"
+        case .size(let size): return size.rawValue
+        }
+    }
+
+    /// The token `simctl ui <udid> content_size <arg>` accepts, or nil
+    /// when this change wraps a state that can only be read.
+    ///
+    /// Optional rather than falling back to a real category: `.size(.unknown)`
+    /// is constructible in-module, and spelling it `large` would set the
+    /// device to a category nobody asked for. Nil lets the setter refuse
+    /// it before spawning, exactly as appearance and contrast already do.
+    var argument: String? {
+        switch self {
+        case .increment, .decrement: return wire
+        case .size(let size): return size.argument
         }
     }
 }

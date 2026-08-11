@@ -28,6 +28,13 @@ struct PluginCommand: Equatable, Sendable {
 
     static func parsing(dict: [String: Any]) throws -> PluginCommand {
         let id = dict["id"] as? String ?? ""
+        // Checked before `run`, because the id is what every later
+        // error message names. It's also the namespace half of
+        // `plugin:command` — an empty one yields a bare `a11y:` that no
+        // lookup resolves and every listing renders blank.
+        guard !id.isEmpty else {
+            throw PluginManifestError.missingCommandID
+        }
         let run = dict["run"] as? [String] ?? []
         guard !run.isEmpty else {
             throw PluginManifestError.emptyCommandRun(id: id)

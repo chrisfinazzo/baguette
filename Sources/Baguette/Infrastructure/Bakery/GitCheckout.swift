@@ -12,16 +12,35 @@ import Foundation
 ///     able to drag in arbitrary submodule URLs.
 ///   - `GIT_TERMINAL_PROMPT=0` — a private or missing repo fails fast
 ///     instead of hanging on a credential prompt.
+///   - a **deadline** — the flag above only rules out a *credential*
+///     hang. A remote that accepts the connection and then stops
+///     sending leaves git running with nothing to time it out, and
+///     `POST /bakeries/preview` reaches `clone`, so one such remote
+///     would hold a server task open for as long as it cared to.
 final class GitCheckout: Checkout, @unchecked Sendable {
+    /// How long one git invocation may run. Generous: a cold shallow
+    /// clone of a large bakery over a slow link is a legitimate minute.
+    static let timeout: Duration = .seconds(120)
+
+    /// How long git gets between the polite stop and the signal it
+    /// can't refuse — room to unwind a partial fetch cleanly.
+    static let grace: Duration = .seconds(2)
+
     private let git: URL
     private let subprocess: @Sendable () -> any Subprocess
+    private let timeout: Duration
+    private let grace: Duration
 
     init(
         git: URL = URL(fileURLWithPath: "/usr/bin/git"),
-        subprocess: @escaping @Sendable () -> any Subprocess = { HostSubprocess() }
+        subprocess: @escaping @Sendable () -> any Subprocess = { HostSubprocess() },
+        timeout: Duration = GitCheckout.timeout,
+        grace: Duration = GitCheckout.grace
     ) {
         self.git = git
         self.subprocess = subprocess
+        self.timeout = timeout
+        self.grace = grace
     }
 
     func clone(_ ref: BakeryRef, into directory: URL) async throws -> CheckoutResult {
@@ -48,34 +67,84 @@ final class GitCheckout: Checkout, @unchecked Sendable {
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Run one git invocation, collecting stdout, throwing on non-zero.
+    /// Run one git invocation, collecting stdout, throwing on non-zero
+    /// — or on the deadline, whichever lands first.
     @discardableResult
     private func run(_ arguments: [String]) async throws -> String {
         let child = subprocess()
         let collected = Collected()
-        return try await withCheckedThrowingContinuation { continuation in
-            do {
-                try child.run(
-                    executable: git,
-                    arguments: arguments,
-                    workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-                    environment: environment,
-                    stdin: Data(),
-                    onBytes: { collected.append($0) },
-                    onExit: { status in
-                        if status == 0 {
-                            continuation.resume(returning: collected.string)
-                        } else {
-                            continuation.resume(throwing: GitCheckoutError.gitFailed(
-                                arguments: arguments, status: status, output: collected.string
-                            ))
-                        }
+        let deadline = Deadline()
+        let timeout = self.timeout
+        let grace = self.grace
+
+        return try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { continuation in
+                    do {
+                        try child.run(
+                            executable: self.git,
+                            arguments: arguments,
+                            workingDirectory: URL(
+                                fileURLWithPath: FileManager.default.currentDirectoryPath
+                            ),
+                            environment: self.environment,
+                            stdin: Data(),
+                            onBytes: { collected.append($0) },
+                            onExit: { status in
+                                deadline.noteChildLeft()
+                                if deadline.hasPassed {
+                                    // Killed by us, not failed by git —
+                                    // say so, or the user goes hunting
+                                    // for a repo problem that isn't one.
+                                    continuation.resume(throwing: GitCheckoutError.timedOut(
+                                        arguments: arguments, after: timeout
+                                    ))
+                                } else if status == 0 {
+                                    continuation.resume(returning: collected.string)
+                                } else {
+                                    continuation.resume(throwing: GitCheckoutError.gitFailed(
+                                        arguments: arguments, status: status,
+                                        output: collected.string
+                                    ))
+                                }
+                            }
+                        )
+                    } catch {
+                        continuation.resume(throwing: error)
                     }
-                )
-            } catch {
-                continuation.resume(throwing: error)
+                }
             }
+            group.addTask {
+                // Cancelled means git already answered; `group.next()`
+                // has taken that result and this task's value is
+                // discarded, so there is nothing to signal.
+                guard (try? await Task.sleep(for: timeout)) != nil else { return "" }
+                deadline.pass()
+                child.terminate()
+                // SIGTERM first, then the one git cannot trap — without
+                // the escalation a wedged child never reaches its exit
+                // handler and this continuation never resumes.
+                try? await Task.sleep(for: grace)
+                if !deadline.childHasLeft { child.kill() }
+                throw GitCheckoutError.timedOut(arguments: arguments, after: timeout)
+            }
+
+            defer { group.cancelAll() }
+            return try await group.next()!
         }
+    }
+
+    /// Who reached the finish line first — the clock, or git.
+    private final class Deadline: @unchecked Sendable {
+        private let lock = NSLock()
+        private var passed = false
+        private var childLeft = false
+
+        func pass() { lock.lock(); defer { lock.unlock() }; passed = true }
+        var hasPassed: Bool { lock.lock(); defer { lock.unlock() }; return passed }
+
+        func noteChildLeft() { lock.lock(); defer { lock.unlock() }; childLeft = true }
+        var childHasLeft: Bool { lock.lock(); defer { lock.unlock() }; return childLeft }
     }
 
     private var environment: [String: String] {
@@ -94,6 +163,9 @@ final class GitCheckout: Checkout, @unchecked Sendable {
 
 enum GitCheckoutError: Error, Equatable, CustomStringConvertible {
     case gitFailed(arguments: [String], status: Int32, output: String)
+    /// The deadline passed and we stopped git — distinct from git
+    /// failing, because the remote, not the repo, is the suspect.
+    case timedOut(arguments: [String], after: Duration)
 
     var description: String {
         switch self {
@@ -101,6 +173,8 @@ enum GitCheckoutError: Error, Equatable, CustomStringConvertible {
             let tail = output.trimmingCharacters(in: .whitespacesAndNewlines)
             let cmd = "git " + arguments.joined(separator: " ")
             return tail.isEmpty ? "\(cmd) exited \(status)" : "\(cmd) exited \(status): \(tail)"
+        case .timedOut(let arguments, let after):
+            return "git \(arguments.joined(separator: " ")) timed out after \(after)"
         }
     }
 }

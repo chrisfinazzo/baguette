@@ -199,7 +199,29 @@ struct PluginManifestTests {
         }
     }
 
+    @Test func `parsing rejects a command with no id`() throws {
+        // The id is the namespace half of `plugin:command`. An empty
+        // one makes `qualifiedCommandIDs` carry a bare "a11y:", which
+        // no lookup can ever resolve and every listing renders blank.
+        #expect(throws: PluginManifestError.missingCommandID) {
+            try PluginManifest.parsing(json: Self.fixtureNamelessCommand)
+        }
+    }
+
     // MARK: - fixtures
+
+    static let fixtureNamelessCommand = Data("""
+    {
+      "name": "a11y",
+      "version": "1.0.0",
+      "apiVersion": 1,
+      "contributes": {
+        "commands": [
+          { "id": "", "title": "Run audit", "run": ["node", "bin/audit.js"] }
+        ]
+      }
+    }
+    """.utf8)
 
     static let fixtureOneCommand = Data("""
     {

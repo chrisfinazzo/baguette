@@ -81,9 +81,19 @@ struct BakeryRef: Equatable, Sendable {
         guard segments.count >= 2 else { throw BakeryRefError.malformed(reference: text) }
         let owner = segments[0]
         let repo = dropDotGit(segments[1])
+        // Scheme and port are carried through rather than normalised to
+        // `https://<host>`: a self-hosted git on `:8443`, or one that
+        // only speaks http, is a different endpoint from the same
+        // hostname on 443, and substituting one for the other fails in
+        // a way that names a URL the user never typed.
+        //
+        // `host` itself stays portless — it's the identity of the
+        // source, and `cacheSubpath` turns it into a directory name.
+        let scheme = url.scheme ?? "https"
+        let authority = url.port.map { "\(host):\($0)" } ?? host
         return BakeryRef(
             host: host, owner: owner, repo: repo, plugin: nil,
-            cloneURL: "https://\(host)/\(owner)/\(repo).git"
+            cloneURL: "\(scheme)://\(authority)/\(owner)/\(repo).git"
         )
     }
 

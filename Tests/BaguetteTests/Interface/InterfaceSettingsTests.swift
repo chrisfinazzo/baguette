@@ -147,4 +147,13 @@ struct InterfaceSettingsTests {
         #expect(ContentSizeChange(wire: "unknown") == nil)
         #expect(ContentSizeChange(wire: "nonsense") == nil)
     }
+
+    @Test func `a change wrapping a read-only size names no argument`() {
+        // `.size(.unknown)` is constructible in-module, and silently
+        // spelling it `large` would set the device to an unrelated
+        // category. No argument means the setter refuses instead —
+        // matching how appearance and contrast already behave.
+        #expect(ContentSizeChange.size(.unknown).argument == nil)
+        #expect(ContentSizeChange.size(.unsupported).argument == nil)
+    }
 }

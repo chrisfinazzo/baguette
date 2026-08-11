@@ -84,4 +84,19 @@ protocol Subprocess: AnyObject, Sendable {
     /// no-ops once the child is already gone or has been asked
     /// to stop. Must be safe to call from any queue.
     func terminate()
+
+    /// Send the signal the child cannot trap, ignore or block
+    /// (`SIGKILL` on POSIX).
+    ///
+    /// `terminate()` is a *request*. A child that traps SIGTERM to
+    /// finish its work — or one that is wedged in uninterruptible
+    /// I/O — never winds down, so `onExit` never fires and whoever
+    /// is waiting on this child waits forever. This is the
+    /// escalation that guarantees the exit callback arrives, and it
+    /// belongs to the caller that set the deadline: only they know
+    /// how long the polite signal was worth waiting for.
+    ///
+    /// Idempotent, safe from any queue, and a no-op once the child
+    /// is already gone.
+    func kill()
 }

@@ -127,6 +127,25 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
         let pipe = self.pipe
         lock.unlock()
         if let proc, proc.isRunning { proc.terminate() }
+        closePipe(pipe)
+    }
+
+    func kill() {
+        lock.lock()
+        let proc = self.process
+        let pipe = self.pipe
+        lock.unlock()
+        // `Process` offers no SIGKILL of its own: `terminate()` sends
+        // SIGTERM and `interrupt()` sends SIGINT, and a child is free
+        // to trap either. Signalling the pid directly is the only way
+        // to guarantee `terminationHandler` — and so `onExit` — fires.
+        if let proc, proc.isRunning {
+            Darwin.kill(proc.processIdentifier, SIGKILL)
+        }
+        closePipe(pipe)
+    }
+
+    private func closePipe(_ pipe: Pipe?) {
         pipe?.fileHandleForReading.readabilityHandler = nil
         try? pipe?.fileHandleForReading.close()
         try? pipe?.fileHandleForWriting.close()

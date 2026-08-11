@@ -46,6 +46,35 @@ struct BakeryRefTests {
         #expect(ref.cloneURL == "https://gitlab.com/acme/tools.git")
     }
 
+    @Test func `an explicit port survives into the clone URL`() throws {
+        // A self-hosted git on a non-default port is a normal
+        // enterprise setup. Dropping the port sends `git clone` to
+        // whatever answers on 443 instead — a different host as far as
+        // the user is concerned.
+        let ref = try BakeryRef.parse("https://git.example:8443/acme/tools")
+        #expect(ref.host == "git.example")
+        #expect(ref.owner == "acme")
+        #expect(ref.repo == "tools")
+        #expect(ref.cloneURL == "https://git.example:8443/acme/tools.git")
+    }
+
+    @Test func `a plain-http reference clones over http`() throws {
+        // `parse` accepts http:// as a form, so rewriting it to https
+        // is a silent substitution, not a policy — a self-hosted git
+        // that only speaks http would fail with a TLS error naming a
+        // scheme the user never typed.
+        let ref = try BakeryRef.parse("http://git.internal:8080/acme/tools")
+        #expect(ref.cloneURL == "http://git.internal:8080/acme/tools.git")
+    }
+
+    @Test func `the cache path ignores the port so one host is one directory`() throws {
+        // The port disambiguates nothing on disk — `git.example` is one
+        // source whether it's reached on 443 or 8443 — and a colon in a
+        // path component is asking for trouble.
+        let ref = try BakeryRef.parse("https://git.example:8443/acme/tools")
+        #expect(ref.cacheSubpath == "git.example/acme/tools")
+    }
+
     @Test func `an scp-style git URL is understood`() throws {
         // `git@github.com:owner/repo.git` — the form GitHub prints for
         // SSH remotes. Kept verbatim as the clone URL so a user's SSH

@@ -146,6 +146,7 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
     case malformedJSON
     case missingName
     case missingVersion
+    case missingCommandID
     case emptyCommandRun(id: String)
     case unsupportedAPIVersion(declared: Int, supported: Int)
     case unknownIcon(name: String)
@@ -163,6 +164,8 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
             return "manifest is missing a non-empty \"name\""
         case .missingVersion:
             return "manifest is missing a non-empty \"version\""
+        case .missingCommandID:
+            return "a contributed command is missing a non-empty \"id\""
         case .emptyCommandRun(let id):
             return "command \"\(id)\" has an empty \"run\" — nothing to execute"
         case .unsupportedAPIVersion(let declared, let supported):

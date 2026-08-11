@@ -114,6 +114,17 @@ struct SimctlInterfaceTests {
         #expect(captures.ran == false)
     }
 
+    @Test func `a read-only content size is refused rather than applied as large`() async throws {
+        // The third setter used to fall back to "large" for a state
+        // that can only be read, quietly changing the device to a
+        // category nobody asked for.
+        let (interface, captures) = makeInterface()
+        await #expect(throws: InterfaceError.notSettable("unknown")) {
+            try await interface.setContentSize(.size(.unknown))
+        }
+        #expect(captures.ran == false)
+    }
+
     @Test func `a non-zero exit is reported with its status`() async throws {
         let (interface, _) = makeInterface(exitCode: 3)
         await #expect(throws: InterfaceError.simctlFailed(status: 3)) {

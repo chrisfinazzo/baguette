@@ -109,6 +109,12 @@ enum PluginDispatch {
     /// so the host bounds it rather than trusting authors to.
     static let timeout: Duration = .seconds(10)
 
+    /// How long a command gets between the polite stop and the signal
+    /// it can't refuse. Long enough for a well-written child to flush
+    /// and clean up after itself; short enough that a route waiting on
+    /// a wedged plugin still answers.
+    static let grace: Duration = .seconds(2)
+
     /// Resolve `qualifiedCommand` (`a11y:audit`) against the installed
     /// plugins and run it.
     ///
@@ -122,6 +128,8 @@ enum PluginDispatch {
         context: Context,
         plugins: any Plugins,
         grants: PluginGrants? = nil,
+        timeout: Duration = PluginDispatch.timeout,
+        grace: Duration = PluginDispatch.grace,
         subprocess: @Sendable () -> any Subprocess = { HostSubprocess() }
     ) async -> Outcome {
         guard let (plugin, command) = (try? plugins.resolve(qualifiedCommand: qualifiedCommand)) ?? nil
@@ -140,6 +148,7 @@ enum PluginDispatch {
 
         let child = subprocess()
         let collected = Collected()
+        let deadline = Deadline()
 
         do {
             return try await withThrowingTaskGroup(of: Outcome.self) { group in
@@ -157,7 +166,17 @@ enum PluginDispatch {
                                 stdin: contextJSON(qualifiedCommand, runContext),
                                 onBytes: { collected.append($0) },
                                 onExit: { status in
-                                    continuation.resume(returning: finish(status: status, collected: collected))
+                                    deadline.noteChildLeft()
+                                    // A child that died *because* the
+                                    // deadline passed is a timeout, not
+                                    // a plugin that chose to exit on
+                                    // signal 15 — blaming the plugin
+                                    // would send its author hunting.
+                                    continuation.resume(
+                                        returning: deadline.hasPassed
+                                            ? Self.timedOut(after: timeout)
+                                            : finish(status: status, collected: collected)
+                                    )
                                 }
                             )
                         } catch {
@@ -166,9 +185,26 @@ enum PluginDispatch {
                     }
                 }
                 group.addTask {
-                    try? await Task.sleep(for: timeout)
+                    // A cancelled sleep means the child answered first.
+                    // `group.next()` has already taken that outcome, so
+                    // this task's return value is discarded — there is
+                    // nothing left to signal or report.
+                    guard (try? await Task.sleep(for: timeout)) != nil else {
+                        return Self.timedOut(after: timeout)
+                    }
+                    deadline.pass()
                     child.terminate()
-                    return .exited(status: -1, output: "timed out after \(timeout)")
+                    // SIGTERM is a request the child may trap or
+                    // ignore. If it does, its exit handler never fires
+                    // — so the spawn task's continuation never resumes,
+                    // this group never returns, and the per-invocation
+                    // capability grant stays live for as long as the
+                    // child feels like running. The grace period is the
+                    // child's to clean up in; after it comes the signal
+                    // it cannot refuse.
+                    try? await Task.sleep(for: grace)
+                    if !deadline.childHasLeft { child.kill() }
+                    return Self.timedOut(after: timeout)
                 }
 
                 // Whichever finishes first wins; the loser is cancelled.
@@ -200,6 +236,45 @@ enum PluginDispatch {
         var value: Data {
             lock.lock(); defer { lock.unlock() }
             return data
+        }
+    }
+
+    private static func timedOut(after timeout: Duration) -> Outcome {
+        .exited(status: -1, output: "timed out after \(timeout)")
+    }
+
+    /// Who reached the finish line first — the clock, or the child.
+    ///
+    /// Both flags are written from the timeout task and read from the
+    /// child's exit callback (and the other way round), on whatever
+    /// queues the platform picked, so both go through the lock.
+    private final class Deadline: @unchecked Sendable {
+        private let lock = NSLock()
+        private var passed = false
+        private var childLeft = false
+
+        /// Latch the deadline, so the exit callback reports a timeout
+        /// rather than whatever signal happened to end the child.
+        func pass() {
+            lock.lock(); defer { lock.unlock() }
+            passed = true
+        }
+
+        var hasPassed: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return passed
+        }
+
+        /// Latch the child's exit, so escalation stops at the polite
+        /// signal when the polite signal was enough.
+        func noteChildLeft() {
+            lock.lock(); defer { lock.unlock() }
+            childLeft = true
+        }
+
+        var childHasLeft: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return childLeft
         }
     }
 

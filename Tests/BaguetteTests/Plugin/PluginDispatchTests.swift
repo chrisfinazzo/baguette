@@ -133,6 +133,144 @@ struct PluginDispatchTests {
 
     struct SpawnRefused: Error {}
 
+    // MARK: - a child that won't leave
+
+    /// A child that decides for itself which signal it answers to.
+    ///
+    /// `run` stores `onExit` rather than calling it, so the child is
+    /// still "running" when the deadline lands — which is the whole
+    /// situation the timeout exists for.
+    final class SignalStubbornChild: Subprocess, @unchecked Sendable {
+        /// Whether SIGTERM is enough to end it. `false` models a
+        /// program that traps or ignores the polite stop.
+        let diesOnTerminate: Bool
+        private let lock = NSLock()
+        private var onExit: (@Sendable (Int32) -> Void)?
+        private(set) var terminated = false
+        private(set) var killed = false
+        private(set) var grantToken: String?
+
+        init(diesOnTerminate: Bool) { self.diesOnTerminate = diesOnTerminate }
+
+        func run(
+            executable: URL, arguments: [String],
+            onBytes: @escaping @Sendable (Data) -> Void,
+            onExit: @escaping @Sendable (Int32) -> Void
+        ) throws { store(onExit, environment: [:]) }
+
+        func run(
+            executable: URL, arguments: [String], stdin: Data,
+            onBytes: @escaping @Sendable (Data) -> Void,
+            onExit: @escaping @Sendable (Int32) -> Void
+        ) throws { store(onExit, environment: [:]) }
+
+        func run(
+            executable: URL, arguments: [String], workingDirectory: URL,
+            environment: [String: String], stdin: Data,
+            onBytes: @escaping @Sendable (Data) -> Void,
+            onExit: @escaping @Sendable (Int32) -> Void
+        ) throws { store(onExit, environment: environment) }
+
+        private func store(
+            _ handler: @escaping @Sendable (Int32) -> Void, environment: [String: String]
+        ) {
+            lock.lock(); defer { lock.unlock() }
+            onExit = handler
+            grantToken = environment["BAGUETTE_TOKEN"]
+        }
+
+        func terminate() {
+            lock.lock()
+            terminated = true
+            let handler = diesOnTerminate ? onExit : nil
+            if diesOnTerminate { onExit = nil }
+            lock.unlock()
+            handler?(15)
+        }
+
+        func kill() {
+            lock.lock()
+            killed = true
+            let handler = onExit
+            onExit = nil
+            lock.unlock()
+            handler?(-9)           // SIGKILL can't be trapped
+        }
+    }
+
+    @Test func `a command that ignores the polite stop is killed at the deadline`() async throws {
+        // `withThrowingTaskGroup` waits for every child task, and the
+        // spawn task only finishes when `onExit` fires. Without a
+        // signal the child can't refuse, one plugin that traps SIGTERM
+        // hangs the route forever.
+        let child = SignalStubbornChild(diesOnTerminate: false)
+        let (outcome, grants) = await Self.runUntilDeadline(child: child)
+
+        #expect(child.terminated)
+        #expect(child.killed)
+        guard case .exited(let status, let output) = outcome else {
+            Issue.record("expected the timeout outcome, got \(outcome)"); return
+        }
+        #expect(status == -1)
+        #expect(output.contains("timed out"))
+        // The whole point of the per-invocation token: it must not
+        // outlive the command, however the command ended.
+        let token = try #require(child.grantToken)
+        #expect(grants.capabilities(for: token) == nil)
+    }
+
+    @Test func `a command that respects the polite stop is never killed`() async throws {
+        // SIGTERM first, and the grace period is the child's to use for
+        // its own cleanup. Escalating immediately would make the polite
+        // signal decorative.
+        let child = SignalStubbornChild(diesOnTerminate: true)
+        let (outcome, grants) = await Self.runUntilDeadline(child: child)
+
+        #expect(child.terminated)
+        #expect(child.killed == false)
+        // Still reported as a timeout: the child only died because the
+        // deadline passed, so "exited on signal 15" would blame the
+        // plugin for something the host did.
+        guard case .exited(let status, let output) = outcome else {
+            Issue.record("expected the timeout outcome, got \(outcome)"); return
+        }
+        #expect(status == -1)
+        #expect(output.contains("timed out"))
+        let token = try #require(child.grantToken)
+        #expect(grants.capabilities(for: token) == nil)
+    }
+
+    static func runUntilDeadline(
+        child: any Subprocess
+    ) async -> (PluginDispatch.Outcome, PluginGrants) {
+        let plugins = MockPlugins()
+        given(plugins).all().willReturn([
+            Plugin(
+                root: URL(fileURLWithPath: "/tmp/plugins/a11y"),
+                manifest: PluginManifest(
+                    name: "a11y", version: "1.0.0", apiVersion: 1,
+                    capabilities: [.describeUI],
+                    commands: [
+                        PluginCommand(id: "audit", title: "Run audit", run: ["node", "bin/audit.js"])
+                    ]
+                )
+            )
+        ])
+        let grants = PluginGrants()
+        let outcome = await PluginDispatch.run(
+            qualifiedCommand: "a11y:audit",
+            context: PluginDispatch.Context(
+                serverURL: "http://127.0.0.1:8421", udid: "UDID-1", token: "tok-abc"
+            ),
+            plugins: plugins,
+            grants: grants,
+            timeout: .milliseconds(20),
+            grace: .milliseconds(20),
+            subprocess: { child }
+        )
+        return (outcome, grants)
+    }
+
     static func run(
         command: String = "a11y:audit",
         udid: String? = "UDID-1",
@@ -158,6 +296,7 @@ struct PluginDispatchTests {
             onExit(exitCode)
         }
         given(sub).terminate().willReturn()
+        given(sub).kill().willReturn()
 
         let plugins = MockPlugins()
         given(plugins).all().willReturn([

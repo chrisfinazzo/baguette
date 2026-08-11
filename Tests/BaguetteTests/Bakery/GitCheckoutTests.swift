@@ -113,6 +113,75 @@ struct GitCheckoutTests {
         }
     }
 
+    // MARK: - the deadline
+
+    @Test func `a git that stalls past its deadline is stopped and reported`() async throws {
+        // GIT_TERMINAL_PROMPT=0 only rules out a *credential* hang. A
+        // remote that accepts the connection and then stops sending
+        // leaves git running and this continuation unresumed — and
+        // `POST /bakeries/preview` reaches clone, so one such remote
+        // would hold a server task open indefinitely.
+        let child = StalledChild()
+        let git = GitCheckout(
+            subprocess: { child },
+            timeout: .milliseconds(20),
+            grace: .milliseconds(20)
+        )
+
+        await #expect(throws: GitCheckoutError.self) {
+            _ = try await git.pull(at: URL(fileURLWithPath: "/tmp/cache/acme/tools"))
+        }
+        #expect(child.terminated)
+        #expect(child.killed)
+    }
+
+    /// A git that never finishes and ignores SIGTERM — the shape a
+    /// stalled network fetch actually takes.
+    final class StalledChild: Subprocess, @unchecked Sendable {
+        private let lock = NSLock()
+        private var onExit: (@Sendable (Int32) -> Void)?
+        private(set) var terminated = false
+        private(set) var killed = false
+
+        func run(
+            executable: URL, arguments: [String],
+            onBytes: @escaping @Sendable (Data) -> Void,
+            onExit: @escaping @Sendable (Int32) -> Void
+        ) throws { store(onExit) }
+
+        func run(
+            executable: URL, arguments: [String], stdin: Data,
+            onBytes: @escaping @Sendable (Data) -> Void,
+            onExit: @escaping @Sendable (Int32) -> Void
+        ) throws { store(onExit) }
+
+        func run(
+            executable: URL, arguments: [String], workingDirectory: URL,
+            environment: [String: String], stdin: Data,
+            onBytes: @escaping @Sendable (Data) -> Void,
+            onExit: @escaping @Sendable (Int32) -> Void
+        ) throws { store(onExit) }
+
+        private func store(_ handler: @escaping @Sendable (Int32) -> Void) {
+            lock.lock(); defer { lock.unlock() }
+            onExit = handler
+        }
+
+        func terminate() {
+            lock.lock(); defer { lock.unlock() }
+            terminated = true
+        }
+
+        func kill() {
+            lock.lock()
+            killed = true
+            let handler = onExit
+            onExit = nil
+            lock.unlock()
+            handler?(-9)
+        }
+    }
+
     @Test func `a git that cannot be spawned surfaces its own error`() async throws {
         // Distinct from a non-zero exit — git never ran.
         struct SpawnRefused: Error {}
