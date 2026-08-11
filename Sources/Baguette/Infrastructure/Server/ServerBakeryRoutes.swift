@@ -4,14 +4,23 @@ import Hummingbird
 import HummingbirdWebSocket
 import NIOCore
 
-/// The browser half of plugin distribution — preview a bakery, then
-/// install from it — in its own file like `ServerPluginRoutes`.
+/// The browser half of plugin distribution: **preview a bakery, and
+/// that's all**. In its own file like `ServerPluginRoutes`.
 ///
-/// These routes clone repos and write files, so they are as powerful as
-/// `boot`/`shutdown` and ride the **same** browser-trust gate
-/// (`rejectUntrustedBrowser` — Origin / `Sec-Fetch-Site` / DNS-rebind).
-/// On top of that, install demands an explicit `accept` from the modal:
-/// preview is safe to call, install is the consented act.
+/// Previewing clones a repo into the cache and reads its menu, which is
+/// as powerful as `boot`/`shutdown` and rides the same browser-trust
+/// gate (`rejectUntrustedBrowser` — Origin / `Sec-Fetch-Site` /
+/// DNS-rebind).
+///
+/// **Installing does not happen here, deliberately.** It copies files
+/// into a directory whose contents baguette later executes, and the
+/// only thing standing in front of a browser route is a set of origin
+/// heuristics — well tested, but heuristics, and if they are ever wrong
+/// the blast radius goes from "read the screen" to "write files that
+/// will run as you". A modal button also isn't real consent: the page
+/// sets the flag it then checks. Typing a command in your own terminal
+/// carries trust context a web page cannot, so the modal previews and
+/// hands the user the command to run.
 extension Server {
 
     func bakeryInstaller() -> BakeryInstall {
@@ -36,19 +45,7 @@ extension Server {
             }
         }
 
-        // The consented act. Refused without `accept:true`.
-        router.post("/bakeries/install") { r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let body = try await Self.jsonBody(r)
-            let ref = body["ref"] as? String ?? ""
-            let plugin = body["plugin"] as? String
-            let accept = body["accept"] as? Bool ?? false
-            switch await Self.installBakery(reference: ref, plugin: plugin, accept: accept, install: installer) {
-            case .ok(let json): return Self.jsonResponse(json)
-            case .rejected: return Self.pluginError("install requires accept:true", status: .forbidden)
-            case .failed(let message): return Self.pluginError(message, status: .badRequest)
-            }
-        }
+        // There is deliberately no install route. See `previewBakery`.
 
         router.get("/bakeries.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -111,33 +108,6 @@ extension Server {
             ]
             if let name = preview.menu.name { dict["name"] = name }
             if let description = preview.menu.description { dict["description"] = description }
-            let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
-            return .ok(String(decoding: data, as: UTF8.self))
-        } catch {
-            return .failed(String(describing: error))
-        }
-    }
-
-    // MARK: - install
-
-    enum BakeryInstallOutcome: Equatable {
-        case ok(String)
-        /// Consent wasn't given — the modal's Install click sets
-        /// `accept:true`; anything else is refused.
-        case rejected
-        case failed(String)
-    }
-
-    static func installBakery(
-        reference: String, plugin: String?, accept: Bool, install: BakeryInstall
-    ) async -> BakeryInstallOutcome {
-        guard accept else { return .rejected }
-        do {
-            let ref = try BakeryRef.parse(reference)
-            let installed = try await install.install(ref: ref, requested: plugin ?? ref.plugin)
-            let dict: [String: Any] = ["ok": true, "installed": installed.map {
-                ["name": $0.name, "bakery": $0.bakery, "commit": $0.commit]
-            }]
             let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
             return .ok(String(decoding: data, as: UTF8.self))
         } catch {

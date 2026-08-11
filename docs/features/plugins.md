@@ -336,12 +336,21 @@ baguette bakery remove tddworks/baguette-plugins
 References: `owner/repo` (GitHub), `owner/repo/plugin`, a full
 `https://…` / `git@…` URL (any host), or `file://…` (a local checkout).
 
-### Installing (browser)
+### Browsing (browser)
 
 In focus mode, the plugins rail on the right has a **+** at the bottom.
-Paste `owner/repo`, click **Preview** to see the source, its pinned
-commit, and the plugins it offers, then **Install**. The rail updates
-without a reload. Preview is safe; Install is the consented act.
+Paste `owner/repo` and click **Preview** to see the source, its resolved
+commit, and the plugins it offers. Each one comes with the command that
+installs it, ready to copy.
+
+**The browser previews; it doesn't install.** Installing writes files
+into a directory baguette later executes from, and the only thing in
+front of a browser route is a set of origin heuristics — well tested,
+but heuristics, and if one is ever wrong the blast radius goes from
+"read the screen" to "write files that will run as you". A modal button
+isn't real consent either: the page sets the flag it then checks.
+Typing a command in your own terminal carries trust a web page can't,
+so that's where installing happens.
 
 ### Trust & storage
 

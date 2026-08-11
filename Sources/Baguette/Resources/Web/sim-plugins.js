@@ -518,10 +518,11 @@
 
     // --- add-a-bakery modal ------------------------------------------
     //
-    // Two deliberate steps: Preview (safe — clones and reads the menu)
-    // then Install (the consented act, carrying accept:true). The user
-    // sees the source, the resolved commit, and the trust warning
-    // before anything lands on their machine.
+    // Preview only. Cloning a repo and reading its menu is safe and
+    // needs the browser; *installing* writes files that later run as
+    // programs, and this page's only protection is a set of origin
+    // heuristics. A terminal carries trust context a web page can't —
+    // you typed the command — so the modal ends by handing you one.
 
     openAddModal() {
       const overlay = document.createElement('div');
@@ -572,10 +573,16 @@
       }
 
       const shortCommit = String(data.commit || '').slice(0, 10);
+      // Each offered plugin becomes the command that installs it, not a
+      // button that does. Installing puts files on the machine that
+      // later run as programs, and a terminal carries trust context a
+      // web page can't — you typed it. See `docs/features/plugins.md`.
       const rows = (data.plugins || []).map((p) =>
         '<li class="plugin-offer">'
         + '<span class="plugin-row-title">' + escapeHTML(p.name) + '</span>'
-        + '<button class="plugin-btn plugin-install-btn" data-plugin="' + escapeHTML(p.name) + '">Install</button>'
+        + '<code class="plugin-cmd">baguette plugin install '
+        +   escapeHTML(ref) + '/' + escapeHTML(p.name) + '</code>'
+        + '<button class="plugin-btn plugin-copy-cmd" data-plugin="' + escapeHTML(p.name) + '">Copy</button>'
         + '</li>').join('');
 
       result.innerHTML =
@@ -584,33 +591,18 @@
         +   'with your permissions. Only add sources you trust. '
         +   '<span class="plugin-commit">@' + escapeHTML(shortCommit) + '</span>'
         + '</div>'
-        + '<ul class="plugin-offers">' + rows + '</ul>';
+        + '<ul class="plugin-offers">' + rows + '</ul>'
+        + '<div class="plugin-status">Run one of these in a terminal, then reopen the rail.</div>';
 
-      for (const btn of result.querySelectorAll('.plugin-install-btn')) {
-        btn.addEventListener('click', () => this.installFrom(ref, btn.dataset.plugin, btn, closeModal));
-      }
-    }
-
-    async installFrom(ref, plugin, button, closeModal) {
-      button.disabled = true;
-      button.textContent = 'Installing…';
-      try {
-        const res = await fetch('/bakeries/install', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ref, plugin, accept: true }),
+      for (const btn of result.querySelectorAll('.plugin-copy-cmd')) {
+        btn.addEventListener('click', () => {
+          const row = btn.closest('.plugin-offer');
+          const cmd = row && row.querySelector('.plugin-cmd');
+          this.copyToClipboard(cmd ? cmd.textContent : '', row);
         });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'install failed');
-      } catch (error) {
-        button.disabled = false;
-        button.textContent = 'Install';
-        button.insertAdjacentHTML('afterend',
-          '<span class="plugin-error plugin-inline-error"> ' + escapeHTML(String(error.message || error)) + '</span>');
-        return;
       }
-      closeModal();
-      this.reload();   // the new plugin's button appears in the rail
     }
+
   }
 
   // Host-owned styling. Injected here rather than added to
@@ -758,6 +750,12 @@
                   background: var(--nv-btn-hover, rgba(15,23,42,0.05));
                   font: 500 13px/1.2 -apple-system, sans-serif; color: var(--nv-text, #1d1d1f); }
   .plugin-inline-error { font-size: 11px; margin-left: 8px; }
+  /* The install command. Selectable and monospaced — it exists to be
+     read and run, so it must look like something you'd paste. */
+  .plugin-cmd { flex: 1 1 auto; min-width: 0; overflow-x: auto; white-space: nowrap;
+                user-select: all; -webkit-user-select: all;
+                font: 500 11px/1.6 ui-monospace, Menlo, monospace;
+                color: var(--nv-text-muted, rgba(29,29,31,0.75)); }
 
   @media (max-width: 560px) {
     .plugin-host { right: 12px; left: 12px; width: auto; }

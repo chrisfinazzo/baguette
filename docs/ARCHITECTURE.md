@@ -315,7 +315,7 @@ GET  /plugins.json                          Plugins.listJSON
 POST /plugins/:id/commands/:cmd?udid=       PluginDispatch → the plugin's rows
 GET  /bakeries.json                         trusted sources + pinned commits
 POST /bakeries/preview                      BakeryInstall.preview (trusts nothing)
-POST /bakeries/install                      BakeryInstall.install (the consented act)
+                                            (no install route — that's CLI-only, by design)
 GET  /<file>.{html,js,css,…}                Resources/Web/<file>
 ```
 

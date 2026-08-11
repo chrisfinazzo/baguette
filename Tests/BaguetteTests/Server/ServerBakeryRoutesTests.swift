@@ -35,9 +35,7 @@ struct ServerBakeryRoutesTests {
 
     @Test func `listing answers the trusted bakeries`() async throws {
         let env = try Env()
-        _ = await Server.installBakery(
-            reference: "acme/tools", plugin: nil, accept: true, install: env.install
-        )
+        _ = try await env.install.install(ref: try BakeryRef.parse("acme/tools"), requested: "hello")
         guard case .ok(let json) = Server.listBakeries(home: env.home) else {
             Issue.record("expected .ok"); return
         }
@@ -60,27 +58,18 @@ struct ServerBakeryRoutesTests {
         }
     }
 
-    // MARK: - install
+    // MARK: - there is no install route
 
-    @Test func `install without explicit consent is refused`() async throws {
-        // The route is powerful — it clones and writes files — so it
-        // will not run without the modal's deliberate accept.
+    @Test func `previewing does not install anything`() async throws {
+        // The browser can look; it cannot put files on the machine.
+        // Installing writes into a directory baguette later executes
+        // from, and a modal button isn't consent — the page sets the
+        // flag it then checks. The command a user types in their own
+        // terminal is the boundary that means something.
         let env = try Env()
-        let outcome = await Server.installBakery(
-            reference: "acme/tools", plugin: "hello", accept: false, install: env.install
-        )
-        #expect(outcome == .rejected)
+        _ = await Server.previewBakery(reference: "acme/tools", install: env.install)
         #expect(try env.registry.installed().isEmpty)
-    }
-
-    @Test func `install with consent installs and returns the plugin`() async throws {
-        let env = try Env()
-        let outcome = await Server.installBakery(
-            reference: "acme/tools", plugin: "hello", accept: true, install: env.install
-        )
-        guard case .ok(let json) = outcome else { Issue.record("expected .ok, got \(outcome)"); return }
-        #expect(json.contains("hello"))
-        #expect(try env.registry.installed().map(\.name) == ["hello"])
+        #expect(try env.registry.bakeries().isEmpty)
     }
 
     // MARK: - fixture (mirrors BakeryInstallTests.Env)

@@ -352,7 +352,6 @@ rejected.
 | `POST` | `/plugins/:id/commands/:cmd?udid=`         | run one plugin contribution, answer its rows |
 | `GET`  | `/bakeries.json`                           | trusted bakeries + pinned commits |
 | `POST` | `/bakeries/preview`                        | clone + read a bakery's menu (safe; trusts nothing) |
-| `POST` | `/bakeries/install`                        | trust a bakery and install a plugin from it |
 | `WS`   | `/simulators/:udid/stream?format=mjpeg\|avcc` | live frames + control + input + `describe_ui` |
 | `WS`   | `/simulators/:udid/logs?level=&style=&predicate=&bundleId=` | live unified-log stream |
 | `WS`   | `/simulators/:udid/camera`                 | virtual camera: pick a Mac webcam, frames pumped into the simulator's AVFoundation stack via the bundled `VirtualCamera.dylib` |
