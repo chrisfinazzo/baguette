@@ -68,6 +68,12 @@
      carries the click semantics and must load first. -->
 <script src="/plugin-row-action.js"></script>
 <script src="/sim-plugins.js"></script>
+<!-- Companion screens — the CarPlay display and the paired Apple Watch,
+     offered from their own rail. `screens/companion-screens.js` is the
+     value type (availability + instructions); `sim-screens.js` is the
+     rail that draws it, and must load after it. -->
+<script src="/screens/companion-screens.js"></script>
+<script src="/sim-screens.js"></script>
 <!-- Leaflet (vendored) + the location map picker. Leaflet must load
      before sim-location.js, which is itself lazy-used by sim-native.js
      on first open of the location card. -->

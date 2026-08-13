@@ -133,6 +133,7 @@ struct Server: Sendable {
         registerPluginRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerBakeryRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in
@@ -634,6 +635,7 @@ struct Server: Sendable {
         "carplay-frames/plain",
         "devices",
         "farm",
+        "screens",
         "vendor/leaflet",
     ]
 

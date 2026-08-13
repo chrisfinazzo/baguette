@@ -84,7 +84,8 @@
       --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
       --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
     }
-    #simNativeView:not([data-theme="dark"]) .carplay-frame {
+    #simNativeView:not([data-theme="dark"]) .carplay-frame,
+    #simNativeView:not([data-theme="dark"]) .watch-frame {
       border-color: rgba(15, 23, 42, 0.14);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
     }
@@ -105,13 +106,18 @@
     --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
     --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
   }
-  #simNativeView[data-theme="light"] .carplay-frame {
+  #simNativeView[data-theme="light"] .carplay-frame,
+  #simNativeView[data-theme="light"] .watch-frame {
     border-color: rgba(15, 23, 42, 0.14);
     box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
   }
 
-  /* Phone | CarPlay side-by-side. Each column keeps its own
-     intrinsic width; the row centers in the viewport. */
+  /* Phone | companion screens side-by-side. Each column keeps its own
+     intrinsic width; the row centers in the viewport.
+     `data-companions` on the root carries which panes are open as a
+     space-separated list, so the size budget below can react to the
+     count rather than every column claiming half the viewport whether
+     or not anything is beside it. */
   #simNativeView .dual-pane {
     display: flex;
     flex-direction: row;
@@ -122,6 +128,62 @@
     max-height: 100%;
     min-width: 0;
   }
+
+  /* --- The size budget -----------------------------------------------
+     One place decides how much room the device and each companion pane
+     may take, because the answer depends on facts spread across the
+     page: how wide the window is, whether the panes are side by side or
+     stacked, and how many are open. Expressing that as four variables
+     keeps the `!important` overrides below (which fight the SDK Bezel's
+     own inline caps) down to one rule each.
+
+     Alone, the device gets the window. It only gives up half when
+     something is actually next to it — previously it was pinned to
+     46vw at all times, so a phone with no CarPlay pane rendered at half
+     size on a laptop and at a *third* of the screen once the narrow
+     breakpoint stacked the columns.
+
+     `--nv-vh` is the viewport-height unit the budget is written in.
+     `dvh` (dynamic viewport height) is the one we want — it subtracts
+     iOS Safari's URL bar and bottom toolbar instead of letting them
+     overlay the bezel — but a custom property can't carry the old
+     `vh`-then-`dvh` double declaration the rest of this file uses,
+     since both parse fine and the later one always wins. `@supports`
+     asks the question directly instead.
+
+     Every width carries a `100%` term. The vw shares are a *share of
+     the window*, but the column they land in has already given up a
+     gutter to the right-edge rails — without the `100%` bound a pane
+     claims its full share and slides back under them, which is exactly
+     what it did at the narrowest widths. */
+  #simNativeView {
+    --nv-vh: 1vh;
+    --nv-device-max-w:    min(100%, 96vw);
+    --nv-device-max-h:    calc(100 * var(--nv-vh) - 68px);
+    --nv-companion-max-w: min(100%, 720px, 88vw);
+    --nv-companion-max-h: calc(100 * var(--nv-vh) - 68px);
+  }
+  @supports (height: 1dvh) {
+    #simNativeView { --nv-vh: 1dvh; }
+  }
+  /* The shares add up to 88vw, not 100: the gaps between columns and
+     the right-edge rails need the remainder, and a row that adds up to
+     the whole window overflows it and slides under them. */
+  #simNativeView[data-companions] {
+    --nv-device-max-w:    min(100%, 46vw);
+    --nv-companion-max-w: min(100%, 720px, 42vw);
+  }
+  /* Two panes open: three columns share one row. */
+  #simNativeView[data-companions~="carplay"][data-companions~="watch"] {
+    --nv-device-max-w:    min(100%, 30vw);
+    --nv-companion-max-w: min(100%, 560px, 29vw);
+  }
+  /* Keep the panes clear of the fixed right-edge rails. Padding on the
+     row rather than a narrower budget, so the group stays optically
+     centred in what's left of the window instead of straddling them.
+     Unconditional: the device is no longer pinned to half the window,
+     so on a wide screen it can now reach the rails on its own. */
+  #simNativeView .dual-pane { padding-right: 58px; }
 
   /* SwiftUI-style VStack: toolbar pill above the device, both
      centered horizontally, stacked vertically with a small gap.
@@ -134,19 +196,27 @@
     gap: 10px;
     max-height: 100%;
     min-width: 0;
+    /* A column shrink-wraps its widest child, so without this the
+       toolbar pill set the column's width and a `100%` inside it
+       resolved against the pill itself — no constraint at all. Capping
+       the column against the row gives that percentage something real
+       to measure, and stops the pill hanging off both edges. */
+    max-width: 100%;
   }
 
-  #simNativeView .carplay-column {
+  #simNativeView .companion-column {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;
     max-height: 100%;
     min-width: 0;
+    max-width: 100%;
     flex-shrink: 1;
   }
+  #simNativeView .companion-column[hidden] { display: none; }
 
-  #simNativeView .carplay-label {
+  #simNativeView .companion-label {
     height: 36px;
     display: inline-flex;
     align-items: center;
@@ -168,9 +238,8 @@
   #simNativeView .carplay-frame {
     position: relative;
     aspect-ratio: 16 / 9;
-    width: min(720px, 42vw);
-    max-height: calc(100vh - 68px);
-    max-height: calc(100dvh - 68px);
+    width: var(--nv-companion-max-w);
+    max-height: var(--nv-companion-max-h);
     background: #0a0a0c;
     border: 2px solid rgba(255, 255, 255, 0.14);
     border-radius: 12px;
@@ -189,9 +258,10 @@
     position: relative;
     width: 100%;
     height: auto;
-    max-height: calc(100dvh - 68px);
+    max-height: var(--nv-companion-max-h);
   }
-  #simNativeView .carplay-frame canvas {
+  #simNativeView .carplay-frame canvas,
+  #simNativeView .watch-frame canvas {
     display: block;
     width: 100%;
     height: 100%;
@@ -200,23 +270,27 @@
     pointer-events: none;
   }
 
-  @media (max-width: 960px) {
-    #simNativeView .dual-pane {
-      flex-direction: column;
-      gap: 16px;
-      overflow: auto;
-      max-height: 100%;
-      padding: 4px 0;
-    }
-    #simNativeView #nativeDeviceFrame,
-    #simNativeView #nativeDeviceFrame > div,
-    #simNativeView #nativeDeviceFrame img,
-    #simNativeView #nativeDeviceFrame canvas {
-      max-width: min(100%, 88vw) !important;
-    }
-    #simNativeView .carplay-frame {
-      width: min(720px, 88vw);
-    }
+  /* The watch is sized from its height, not the width budget: a watch
+     stretched to a CarPlay display's share of the row would be absurd,
+     and the tall aspect means height is what actually runs out first.
+
+     The ratio here is only the placeholder an empty pane wears; every
+     model has its own (a 46mm is 416×496), so sim-native.js replaces it
+     inline from the first frame's reported size. */
+  #simNativeView .watch-frame {
+    position: relative;
+    aspect-ratio: 41 / 50;
+    /* 44px of the pane's height budget belongs to the button row below. */
+    height: min(430px, calc(var(--nv-companion-max-h) - 44px));
+    width: auto;
+    max-width: min(100%, 34vw);
+    background: #0a0a0c;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 15%/12%;
+    overflow: hidden;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    outline: none;
+    flex-shrink: 1;
   }
 
   /* Toolbar pill — its own content-based width (label + controls).
@@ -224,6 +298,7 @@
      VStack. */
   #simNativeView .top-bar {
     display: inline-flex; align-items: center;
+    box-sizing: border-box;   /* so the max-width below is the real width */
     flex-shrink: 0;
     gap: 12px;
     height: 36px;
@@ -235,7 +310,15 @@
     backdrop-filter: blur(18px) saturate(1.5);
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     color: var(--nv-text);
-    max-width: 100%;
+    /* Never wider than the device is allowed to be. The pill sits in
+       the same column as the bezel and sizes to its contents, so
+       without this it — not the device — set the column's width: with
+       a companion pane open the toolbar stayed full length, pushed the
+       row wider than the window, and slid the pane under the rails
+       while clipping its own back button off the left edge. The icon
+       strip already scrolls when it doesn't fit, which is exactly the
+       behaviour this hands it. */
+    max-width: min(100%, var(--nv-device-max-w));
   }
 
   /* `!important` overrides the SDK Bezel's inline `max-height: 70vh`
@@ -250,16 +333,89 @@
      Safari toolbar and the bottom of the device gets clipped. Falls
      back to `vh` on engines that don't support `dvh`. */
   #simNativeView #nativeDeviceFrame,
-  #simNativeView #nativeDeviceFrame > div {
-    max-height: calc(100vh  - 68px) !important;
-    max-height: calc(100dvh - 68px) !important;
-    max-width: min(100%, 46vw) !important;
-  }
+  #simNativeView #nativeDeviceFrame > div,
   #simNativeView #nativeDeviceFrame img,
   #simNativeView #nativeDeviceFrame canvas {
-    max-height: calc(100vh  - 68px) !important;
-    max-height: calc(100dvh - 68px) !important;
-    max-width: min(100%, 46vw) !important;
+    max-height: var(--nv-device-max-h) !important;
+    max-width: var(--nv-device-max-w) !important;
+  }
+
+  /* Narrow windows: the row becomes a stack, so width stops being the
+     contended axis and height starts. Both budgets are redefined here
+     rather than in a `!important` override, because an override would
+     have had to out-specify the `[data-companions]` rules above — and
+     the earlier attempt at this lost that fight silently: the 46vw cap
+     below it in the file won at every width, which is what left the
+     phone rendering at under half the window on a small screen.
+
+     `dvh` (dynamic viewport height) so iOS Safari's URL bar and bottom
+     toolbar are subtracted from the viewport rather than overlaid on
+     the bezel; `vh` first as the fallback for engines without it. */
+  /* The watch's hardware buttons, as a glass pill under its pane —
+     same tokens as the toolbar, so the row reads as chrome around the
+     device rather than as part of what's on screen. */
+  #simNativeView .watch-buttons {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 3px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    flex-shrink: 0;
+  }
+  #simNativeView .watch-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 0 11px; height: 26px;
+    appearance: none; -webkit-appearance: none;
+    border: 0; border-radius: 999px;
+    background: transparent; color: var(--nv-text);
+    font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+  }
+  #simNativeView .watch-btn:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .watch-btn:active { background: var(--nv-btn-active); transform: scale(0.96); }
+  #simNativeView .watch-btn svg { display: block; color: var(--nv-text-muted); }
+  #simNativeView .watch-btn:hover svg { color: inherit; }
+
+  @media (max-width: 960px) {
+    #simNativeView,
+    #simNativeView[data-companions],
+    #simNativeView[data-companions~="carplay"][data-companions~="watch"] {
+      --nv-device-max-w:    min(100%, 92vw);
+      --nv-companion-max-w: min(100%, 720px, 92vw);
+    }
+    /* Stacked and sharing the height: the phone keeps the larger share
+       because it is the thing being worked on. The subtractions are the
+       chrome between and around the panes — 24px of view padding, the
+       36px toolbar, the 36px pane label and four gaps, ~132px in all —
+       so one open pane fits without scrolling. Two do scroll, which is
+       what the scroll container below is for. */
+    #simNativeView[data-companions] {
+      --nv-device-max-h:    calc(55 * var(--nv-vh) - 80px);
+      --nv-companion-max-h: calc(45 * var(--nv-vh) - 75px);
+    }
+    #simNativeView .dual-pane {
+      flex-direction: column;
+      gap: 16px;
+      overflow: auto;
+      max-height: 100%;
+      /* Longhand, not `padding: 4px 0` — the shorthand quietly reset
+         the right gutter reserved for the rails above, and the panes
+         went straight back under them at this width. */
+      padding-top: 4px;
+      padding-bottom: 4px;
+      /* Not `center`: a centred flex container that overflows spills
+         out of BOTH ends, and the top end can't be scrolled back to —
+         which quietly cut the top off the toolbar as soon as a pane
+         made the stack too tall. Growing downwards keeps every pixel
+         reachable. */
+      justify-content: flex-start;
+    }
+    #simNativeView .watch-frame { max-width: min(100%, 60vw); }
   }
 
   /* Device-frame rotation. The wrapper inside #nativeDeviceFrame
@@ -296,8 +452,7 @@
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] canvas,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] img,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] canvas {
-    max-height: min(calc(100vh  - 68px), calc(100vw - 32px)) !important;
-    max-height: min(calc(100dvh - 68px), calc(100vw - 32px)) !important;
+    max-height: min(var(--nv-device-max-h), calc(100vw - 32px)) !important;
   }
 
   /* --- Power card ---------------------------------------------------
@@ -550,6 +705,47 @@
   #simNativeView .sidebar-view-toggle:hover  { background: var(--nv-btn-hover); }
   #simNativeView .sidebar-view-toggle:active { transform: scale(0.96); }
   #simNativeView .sidebar-view-toggle svg { display: block; }
+
+  /* Right-edge rail stack. Two rails live here — baguette's own
+     companion-screens rail on top, the plugins rail below — and both
+     used to claim `right: 16px; top: 50%` for themselves, which put
+     them on top of each other the moment both existed.
+
+     Deliberately NOT centred with `transform: translateY(-50%)`: a
+     transformed element becomes the containing block for `position:
+     fixed` descendants, and the plugin panel and its flyout are both
+     fixed and mounted in here. Full-height plus `justify-content:
+     center` centres the group without that side effect.
+
+     No `z-index` either — with `z-index: auto` this container doesn't
+     create a stacking context, so each rail, panel and modal inside
+     keeps competing on its own layer against the rest of the page
+     rather than being flattened to the container's. */
+  #simNativeView .right-rails {
+    position: fixed;
+    right: 16px; top: 12px; bottom: 12px;
+    display: flex; flex-direction: column;
+    align-items: flex-end; justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+  }
+  #simNativeView .right-rails > * { pointer-events: auto; }
+  /* The rails position themselves when they stand alone (the plugin
+     rail is also used outside focus mode); inside the stack the flex
+     column places them.
+
+     `order` rather than DOM order: both rails are appended by their own
+     async fetch, so whichever server answer lands first would otherwise
+     decide which rail is on top — and the plugins rail beat the screens
+     rail on a warm cache but not a cold one. baguette's own controls go
+     above the ones you installed, every time. */
+  #simNativeView .right-rails > .plugin-rail,
+  #simNativeView .right-rails > .screens-rail {
+    position: static;
+    transform: none;
+  }
+  #simNativeView .right-rails > .screens-rail { order: 1; }
+  #simNativeView .right-rails > .plugin-rail  { order: 2; }
 
   /* Theme toggle — floating glass pill at the bottom-right
      corner. Carries one icon (sun in light theme, moon in dark
@@ -1563,13 +1759,62 @@
     <div id="native3DStage" class="r3d-live-stage" aria-label="Live 3D simulator"></div>
   </div>
 
-  <div class="carplay-column" aria-label="CarPlay display">
-    <div class="carplay-label">CarPlay</div>
+  <!-- Companion screens. Both start hidden: they are shown only when
+       the screens rail (sim-screens.js) opens one, and only when the
+       host says the screen is actually attached. `hidden` rather than a
+       CSS-only hide so the canvases stay out of layout entirely while
+       nothing is streaming into them. -->
+  <div class="companion-column" id="nativeCarPlayColumn" aria-label="CarPlay display" hidden>
+    <div class="companion-label">CarPlay</div>
     <div id="nativeCarPlayFrame" class="carplay-frame" data-frame-brand="plain" tabindex="0">
       <canvas id="nativeCarPlayCanvas" width="800" height="480"></canvas>
     </div>
   </div>
+
+  <div class="companion-column" id="nativeWatchColumn" aria-label="Apple Watch" hidden>
+    <div class="companion-label" id="nativeWatchLabel">Apple Watch</div>
+    <div id="nativeWatchFrame" class="watch-frame" tabindex="0">
+      <canvas id="nativeWatchCanvas" width="410" height="502"></canvas>
+    </div>
+    <!-- The watch's two hardware buttons. A watch pane is a bare rect
+         with no bezel chrome to hang overlay buttons off, and without
+         these the only way to leave an app is to know that the crown
+         exists — which is exactly what someone new to watchOS doesn't.
+         Named and captioned rather than drawn in their real positions:
+         a realistic right-edge crown teaches the hardware, but a label
+         teaches what the control does, and that's the useful half. -->
+    <div class="watch-buttons" role="group" aria-label="Apple Watch buttons">
+      <button type="button" class="watch-btn"
+              title="Digital Crown — press for the watch face, again for the app grid. Hold for Siri."
+              onclick="window.__nativeWatchButton && window.__nativeWatchButton('digital-crown')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" width="14" height="14" aria-hidden="true">
+          <circle cx="12" cy="12" r="5.5"/>
+          <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2"/>
+          <path d="M5.4 5.4 7 7M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/>
+        </svg>
+        Crown
+      </button>
+      <button type="button" class="watch-btn"
+              title="Side button — opens Control Centre. Double-press for Wallet, hold for the power menu."
+              onclick="window.__nativeWatchButton && window.__nativeWatchButton('side-button')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+          <rect x="9.5" y="4" width="5" height="16" rx="2.5"/>
+        </svg>
+        Side
+      </button>
+    </div>
   </div>
+  </div>
+
+  <!-- Right-edge rail stack. Both rails are drawn by JS and stacked
+       here so they can't land on top of each other: baguette's own
+       screens rail above, the plugins rail below. No `transform` on this
+       container — a transformed ancestor would become the containing
+       block for the `position: fixed` plugin panel and flyout inside it,
+       which is why it centres with `justify-content` instead. -->
+  <div class="right-rails" id="nativeRightRails"></div>
 
   <!-- Accessibility-inspector host. sim-native.js mounts an
        AXInspector into this element after the surface is ready;

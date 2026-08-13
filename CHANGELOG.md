@@ -10,6 +10,42 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **Companion screens are a choice now, not a fixture.** `/simulators/<udid>`
+  grew a rail on the right edge — above the plugins rail, in a shared stack so
+  the two can't land on top of each other — that offers the screens a simulator
+  can show beside its own: its CarPlay display, and the Apple Watch paired with
+  it. A screen the host doesn't have keeps its slot and explains how to get one
+  (I/O → External Displays for CarPlay; `simctl pair` for a watch), because a
+  rail that hid what you don't have could never tell you it exists. A paired
+  watch that isn't running gets a Boot button rather than a page of prose.
+  Which panes you had open is remembered across reloads. New route: `GET
+  /simulators/:udid/companion-screens.json`.
+- **Digital Crown and Side button, under the watch pane.** A watch pane is a
+  bare rect with no bezel chrome to hang overlay buttons off, so without them
+  the only way out of an app was to already know the crown exists. Both ride
+  the `button` envelope that `DeviceButton` has carried all along — Crown walks
+  the watch face → app grid, Side opens Control Centre. Scroll a list by
+  dragging on the face: the crown's *rotation* is a separate HID axis baguette
+  doesn't drive, and the mouse wheel emits a two-finger pan that watchOS
+  ignores. See [`docs/features/companion-screens.md`](docs/features/companion-screens.md).
+
+### Fixed
+
+- **Opening a device's tab no longer attaches a CarPlay display to it.** The
+  CarPlay pane used to mount unconditionally, and `?display=carplay` asks the
+  host to *enable* CarPlay — so merely looking at a simulator reached into
+  Simulator.app and turned one on. Nothing is asked for now until you open the
+  pane from the rail, and the rail only offers a display that is already there.
+- **The device rendered at half size (or a third) when nothing was beside it.**
+  The phone was pinned to `46vw` at every window width for the CarPlay pane's
+  benefit, and the narrow-window rule meant to relax that sat *earlier* in the
+  stylesheet at equal specificity, so it lost silently — leaving the phone
+  smaller on a small screen than on a large one. The size budget is now one set
+  of variables that reacts to the window width and to how many panes are
+  actually open; alone, the device gets the window.
+
 ---
 
 ## [0.1.90] - 2026-08-11

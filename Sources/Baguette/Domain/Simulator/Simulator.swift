@@ -100,6 +100,11 @@ protocol Simulator: Sendable {
     /// handle; the underlying `simctl spawn notifyutil` invocation is
     /// stateless.
     func shake() -> any Shake
+
+    /// This phone's side of the host's watch pairing table. Each call
+    /// returns a fresh handle; the underlying `simctl list pairs`
+    /// invocation is stateless.
+    func watchPairing() -> any WatchPairing
 }
 
 /// `Simulator.State` lifted to a top-level enum so the protocol can
@@ -118,6 +123,21 @@ enum SimulatorState: Sendable, Equatable {
         case .booting:      return "Booting"
         case .booted:       return "Booted"
         case .shuttingDown: return "ShuttingDown"
+        }
+    }
+
+    /// Inverse of `description` — reads the state strings the host's
+    /// own JSON tools print (`simctl list -j`, `simctl list pairs -j`).
+    /// A word we don't model reads as `.shutdown`: an unrecognised
+    /// state is not one we can act on, which is what shutdown already
+    /// means to every caller.
+    static func named(_ raw: String) -> SimulatorState {
+        switch raw {
+        case "Creating":     return .creating
+        case "Booting":      return .booting
+        case "Booted":       return .booted
+        case "ShuttingDown": return .shuttingDown
+        default:             return .shutdown
         }
     }
 }

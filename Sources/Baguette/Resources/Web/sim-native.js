@@ -35,6 +35,10 @@
   let carplaySession = null;
   let carplayScreen = null;
   let carplayFrame = null;  // Baguette._CarPlayFrame mount (brand chrome)
+  let watchSession = null;  // paired Apple Watch — its own device, its own stream
+  let watchScreen = null;
+  let screensRail = null;   // ScreensRail — which companion screens are shown
+  const openCompanions = new Set();
   let sim = null;           // Baguette SDK Simulator
   let logPanel = null;
   let axInspector = null;
@@ -322,7 +326,16 @@
       sim = null;
     }
 
-    // 4. Open stream — but only if there's a guest to stream. A
+    // 4. Companion-screens rail. Mounted before the stream opens, and
+    //    regardless of whether the device is booted: "what other screens
+    //    could I be looking at" is a question worth answering on a
+    //    device that isn't running yet, and the rail's answer for a
+    //    screen that isn't there is instructions rather than a pane.
+    //    Also mounts first so it sits above the plugins rail in the
+    //    shared right-edge stack.
+    mountScreensRail();
+
+    // 5. Open stream — but only if there's a guest to stream. A
     //    shutdown device has no framebuffer, no HID, and no
     //    PurpleWorkspacePort; opening the socket would just paint
     //    black forever with no hint as to why. Show the power card on
@@ -456,10 +469,11 @@
       onText: onStreamText,
     });
     session.start();
-    // CarPlay is mostly static; H.264 starves without an IDR cadence
-    // the guest doesn't produce. MJPEG paints the first JPEG seed and
-    // holds it — matches sim_carplay's reliable CarPlay path.
-    void startCarPlaySession('mjpeg');
+    // Companion panes are the user's standing choice, not this
+    // session's — but their sockets don't survive a phone-session
+    // restart's teardown, so reopen whichever are showing.
+    if (openCompanions.has('carplay')) void startCarPlaySession('mjpeg');
+    if (openCompanions.has('watch')) void startWatchSession();
     reflectFormat(format);
     // Restore the cached orientation across format-swap remounts,
     // so reopening the session doesn't snap the device back to
@@ -467,8 +481,86 @@
     if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
     mountAxInspector();
     // Once only — `startSession` re-runs on every format swap, and
-    // re-mounting would append a second copy of every plugin button.
+    // re-mounting would append a second copy of every rail button.
     if (!pluginPanels) mountPlugins();
+  }
+
+  // --- Companion screens ---------------------------------------------
+  //
+  // The CarPlay pane and the paired-watch pane are opt-in, driven by the
+  // rail on the right edge. They used to be neither: the CarPlay pane
+  // mounted on every page load, and because `?display=carplay` asks the
+  // host to *attach* a CarPlay display, simply opening a device's tab
+  // reached into Simulator.app and turned one on. Now nothing is asked
+  // for until the rail is told to show it, and the rail only offers a
+  // screen the host reports as already there.
+
+  function mountScreensRail() {
+    if (!window.ScreensRail || !window.Baguette || !window.Baguette._CompanionScreens) return;
+    screensRail = new window.ScreensRail({
+      udid,
+      mount: rightRails(),
+      onOpen: (entry) => openCompanion(entry),
+      onClose: (entry) => closeCompanion(entry),
+      log: (msg) => console.log('[screens]', msg),
+    });
+    screensRail.load();
+  }
+
+  /// Both right-edge rails live in one stack so they can't overlap.
+  /// Falls back to the view root if the template predates it.
+  function rightRails() {
+    return document.getElementById('nativeRightRails')
+        || document.getElementById('simNativeView')
+        || document.body;
+  }
+
+  function openCompanion(entry) {
+    if (entry.id === 'carplay') {
+      showCompanionColumn('nativeCarPlayColumn', true);
+      openCompanions.add('carplay');
+      // CarPlay is mostly static; H.264 starves without an IDR cadence
+      // the guest doesn't produce. MJPEG paints the first JPEG seed and
+      // holds it — matches sim_carplay's reliable CarPlay path.
+      void startCarPlaySession('mjpeg');
+    } else if (entry.id === 'watch') {
+      const label = document.getElementById('nativeWatchLabel');
+      if (label) label.textContent = entry.label;
+      showCompanionColumn('nativeWatchColumn', true);
+      openCompanions.add('watch');
+      void startWatchSession(entry.udid);
+    }
+    reflectCompanions();
+  }
+
+  function closeCompanion(entry) {
+    openCompanions.delete(entry.id);
+    if (entry.id === 'carplay') {
+      stopCarPlaySession();
+      showCompanionColumn('nativeCarPlayColumn', false);
+    } else if (entry.id === 'watch') {
+      stopWatchSession();
+      showCompanionColumn('nativeWatchColumn', false);
+    }
+    reflectCompanions();
+  }
+
+  function showCompanionColumn(id, visible) {
+    const column = document.getElementById(id);
+    if (column) column.hidden = !visible;
+  }
+
+  /// The open panes, on the root, as a space-separated list — the size
+  /// budget in sim-native.html reads it to decide how much of the
+  /// window the device may take when something is beside it.
+  function reflectCompanions() {
+    const view = document.getElementById('simNativeView');
+    if (!view) return;
+    if (!openCompanions.size) view.removeAttribute('data-companions');
+    else view.setAttribute('data-companions', [...openCompanions].sort().join(' '));
+    // The toolbar's width budget just changed with it; let the new
+    // layout settle before asking the strip whether it now overflows.
+    requestAnimationFrame(() => refreshToolbarScroll());
   }
 
   // CarPlay pane: own StreamSession (?display=carplay) + Screen gestures
@@ -543,6 +635,11 @@
     carplaySession.start();
   }
 
+  function stopCarPlaySession() {
+    if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
+    if (carplayScreen)  { try { carplayScreen.detach(); } catch (_) {} carplayScreen = null; }
+  }
+
   function ensureCarPlayInput(screenArea, canvas) {
     if (carplayScreen || !window.Baguette || !window.Baguette._Screen) return;
     const transport = new window.Baguette._Transport({
@@ -555,6 +652,68 @@
       { getOrientation: () => 'landscape-right', log: (msg) => console.log('[native:carplay]', msg) }
     );
     carplayScreen.bindDOM({ screenArea, canvas });
+  }
+
+  // Watch pane: a paired Apple Watch is a device of its own, not a
+  // second plane of this one — so it streams on its OWN udid down the
+  // ordinary phone-display route, and its gestures go down that socket.
+  // Nothing here is CarPlay-shaped; the only thing the two panes share
+  // is that the rail decides whether they exist.
+  const WATCH_DEFAULT_SIZE = { width: 410, height: 502 };
+  let watchUdid = null;
+
+  async function startWatchSession(nextUdid) {
+    if (nextUdid) watchUdid = nextUdid;
+    if (!watchUdid || !window.StreamSession) return;
+    stopWatchSession();
+
+    const screenArea = document.getElementById('nativeWatchFrame');
+    const canvas = document.getElementById('nativeWatchCanvas');
+    if (!screenArea || !canvas) return;
+
+    ensureWatchInput(screenArea, canvas);
+    watchSession = new window.StreamSession({
+      udid: watchUdid, format: 'mjpeg', version: 'v2',
+      display: 'phone',
+      canvas,
+      onSize: (w, h) => {
+        // Take the frame's shape from the watch itself. The CSS starts
+        // at a Series-sized 41:50 so the empty pane isn't shapeless, but
+        // every model differs — a 46mm is 416×496, an Ultra and a 42mm
+        // are neither — and a guessed ratio just letterboxes the face
+        // inside its own bezel.
+        if (w && h) screenArea.style.aspectRatio = w + ' / ' + h;
+        if (!watchScreen) return;
+        watchScreen.def.rect.width = w;
+        watchScreen.def.rect.height = h;
+        watchScreen.transport.setScreenSize(w, h);
+      },
+      onLog: (msg) => console.log('[native:watch]', msg),
+    });
+    watchSession.start();
+  }
+
+  function stopWatchSession() {
+    if (watchSession) { try { watchSession.stop(); } catch (_) {} watchSession = null; }
+    if (watchScreen)  { try { watchScreen.detach(); } catch (_) {} watchScreen = null; }
+    // Back to the stylesheet's placeholder shape, so reopening onto a
+    // different watch doesn't briefly wear the last one's proportions.
+    const frame = document.getElementById('nativeWatchFrame');
+    if (frame) frame.style.aspectRatio = '';
+  }
+
+  function ensureWatchInput(screenArea, canvas) {
+    if (watchScreen || !window.Baguette || !window.Baguette._Screen) return;
+    const transport = new window.Baguette._Transport({
+      send: (payload) => watchSession && watchSession.send(payload),
+      log: (msg) => console.log('[native:watch]', msg),
+    });
+    watchScreen = new window.Baguette._Screen(
+      { rect: { width: WATCH_DEFAULT_SIZE.width, height: WATCH_DEFAULT_SIZE.height } },
+      transport,
+      { getOrientation: () => 'portrait', log: (msg) => console.log('[native:watch]', msg) }
+    );
+    watchScreen.bindDOM({ screenArea, canvas });
   }
 
   // --- Power card ----------------------------------------------------
@@ -795,7 +954,11 @@
     if (!window.PluginPanels || !sim) return;
     pluginPanels = new window.PluginPanels({
       udid,
-      mount: document.getElementById('simNativeView') || document.body,
+      // The shared right-edge stack, below baguette's own screens rail —
+      // two rails claiming the same centred slot would sit on top of
+      // each other. The panel and flyout inside stay `position: fixed`
+      // and are unaffected by the stack; see `.right-rails`.
+      mount: rightRails(),
       isBooted: () => true,
       onHighlight: (frame) => paintPluginHighlight(frame),
       onTap: (point) => tapForPlugin(point),
@@ -910,6 +1073,14 @@
   // buttons are for mouse users (a vertical wheel can't pan a horizontal
   // overflow). The arrows hide entirely when nothing overflows and each
   // dims at its end, so the bar stays clean at full width.
+  // Re-measures the toolbar's overflow. Held here because the strip's
+  // width no longer changes only with the window: opening a companion
+  // pane narrows the toolbar too, and without a re-measure the chevrons
+  // stayed hidden over a strip that had just started overflowing —
+  // leaving a mouse user no way to reach the icons that had scrolled
+  // out of it.
+  let refreshToolbarScroll = () => {};
+
   function wireToolbarScroll() {
     const strip = document.getElementById('nativeToolScroll');
     const left  = document.getElementById('nativeScrollLeft');
@@ -930,6 +1101,7 @@
       strip.scrollLeft += dir * Math.max(80, strip.clientWidth * 0.7);
     };
 
+    refreshToolbarScroll = update;
     left.addEventListener('click', () => nudge(-1));
     right.addEventListener('click', () => nudge(1));
     strip.addEventListener('scroll', update, { passive: true });
@@ -980,6 +1152,14 @@
     window.__nativeToggleLocation = () => toggleLocation();
     window.__nativeToggle3D = () => toggle3D();
     window.__nativeToggle3DInspector = () => toggle3DInspector();
+    // The watch's hardware buttons. Same `button` envelope the phone's
+    // bezel buttons use, but down the watch's own socket — the press
+    // has to reach the watch's HID, not the phone we happen to be
+    // looking at beside it. Silently no-ops when the pane is closed;
+    // there is no button row on screen to press in that case.
+    window.__nativeWatchButton = (name) => {
+      if (watchSession) watchSession.send({ type: 'button', button: name });
+    };
     window.__nativeToggleAx = () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
@@ -1237,6 +1417,9 @@
       try { if (carplayScreen) carplayScreen.detach(); } catch (_) { /* ignore */ }
       try { if (carplayFrame) carplayFrame.detach(); } catch (_) { /* ignore */ }
       carplayFrame = null;
+      try { if (watchSession) watchSession.stop(); } catch (_) { /* ignore */ }
+      try { if (watchScreen) watchScreen.detach(); } catch (_) { /* ignore */ }
+      try { if (screensRail) screensRail.detach(); } catch (_) { /* ignore */ }
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
       try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }

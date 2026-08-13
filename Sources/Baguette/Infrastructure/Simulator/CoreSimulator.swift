@@ -131,4 +131,8 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     func photos() -> any PhotoLibrary {
         SimctlPhotoLibrary(udid: udid)
     }
+
+    func watchPairing() -> any WatchPairing {
+        SimctlWatchPairing(udid: udid)
+    }
 }
