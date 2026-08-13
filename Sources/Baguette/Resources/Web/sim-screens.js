@@ -79,19 +79,60 @@
      * edge would leave no way to find out that CarPlay exists at all.
      */
     async load() {
-      let payload = null;
+      this.screens = (await this.probe())
+        ?? window.Baguette._CompanionScreens.from(null);
+      this.render();
+      this.restoreRemembered();
+      if (!this.focusBound) {
+        this.focusBound = true;
+        this.bindFocusReprobe();
+      }
+    }
+
+    /**
+     * Re-probe when the page regains focus.
+     *
+     * Attaching a display happens in Simulator.app, not here, and there
+     * is no event for it — so the moment you come back to the browser is
+     * the moment to look again. Without this the rail is only ever as
+     * fresh as the last page load or the last **Check again** press,
+     * which is why an attached display "wasn't there" until a reload.
+     *
+     * Guarded on the answer actually differing, because `refresh()`
+     * closes and reopens panes: acting on an unchanged probe would tear
+     * down and rebuild live streams every single time you tab back.
+     * Both events fire together in some browsers, hence the in-flight
+     * latch rather than a timer.
+     */
+    bindFocusReprobe() {
+      let inFlight = false;
+      const look = async () => {
+        if (inFlight || document.hidden) return;
+        inFlight = true;
+        try {
+          const fresh = await this.probe();
+          if (fresh && !fresh.sameAs(this.screens)) await this.refresh();
+        } finally {
+          inFlight = false;
+        }
+      };
+      window.addEventListener('focus', look);
+      document.addEventListener('visibilitychange', look);
+    }
+
+    /// Ask the host what is attached, without touching any state.
+    async probe() {
       try {
         const res = await fetch(
           '/simulators/' + encodeURIComponent(this.udid) + '/companion-screens.json',
           { cache: 'no-store' }
         );
-        if (res.ok) payload = await res.json();
+        if (!res.ok) return null;
+        return window.Baguette._CompanionScreens.from(await res.json());
       } catch (error) {
         this.log('companion screens unavailable: ' + ((error && error.message) || error));
+        return null;
       }
-      this.screens = window.Baguette._CompanionScreens.from(payload);
-      this.render();
-      this.restoreRemembered();
     }
 
     /// Re-ask after the user has gone off and attached something. Panes

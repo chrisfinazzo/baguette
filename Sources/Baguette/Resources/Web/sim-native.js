@@ -94,6 +94,8 @@
   let lrEdgeOverride = null;     // null → use the default mapping
   let lrMirrorX      = false;    // false → strict CSS-rotation inverse
 
+
+
   if (typeof window !== 'undefined') {
     window.__edgeOverride = (e) => { lrEdgeOverride = e || null; console.log('[lr] edge override =', lrEdgeOverride); };
     window.__mirrorX      = (b) => { lrMirrorX = !!b;             console.log('[lr] mirror-X =', lrMirrorX); };
@@ -618,14 +620,21 @@
       try { carplayScreen.detach(); } catch (_) { /* ignore */ }
       carplayScreen = null;
     }
-    // Gestures on this pane used to restart the guest: the session held
-    // one digitizer target from open, derived from a connected screen id
-    // that churns every time the plane is attached, reconfigured or
-    // discarded. Dispatching to the dead one took backboardd down and
-    // SpringBoard with it. The server now re-derives per gesture and
-    // drops anything it can't target (`BoundInput` / `DisplayTouchTarget`),
-    // so the worst case is a tap that does nothing rather than a
-    // simulator that reboots.
+    // Gestures here restarted the guest for a long time. The cause was
+    // never the pane; it was that every touch carried a HID target no
+    // service had registered, and `SimHIDVirtualServiceManager` answers
+    // that by throwing — which takes backboardd and SpringBoard with it.
+    //
+    // Two things were wrong, and the guest named both as it died:
+    //   - the CarPlay service was never created (warmServices built the
+    //     pointer and mouse ones and stopped there), and
+    //   - the target was computed by `IndigoHIDTargetForScreen`, which
+    //     returns `0x40000000 | screenId` — plausible, and registered by
+    //     nothing. CarPlay's target is a fixed `0x40000001`.
+    //
+    // Both are fixed server-side, and `warmServices` now fails closed:
+    // if the service cannot be created there is no client, so gestures
+    // are dropped rather than aimed at a target that kills the guest.
     ensureCarPlayInput(ports.screenArea, ports.canvas);
 
     clearCompanionFault('nativeCarPlayColumn');

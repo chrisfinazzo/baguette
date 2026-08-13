@@ -1,36 +1,49 @@
 import Foundation
 
 /// Resolves the Indigo HID digitizer target for a display plane.
-/// Phone always uses the integrated constant; an external plane derives
-/// from the live connected screen id via `IndigoHIDTargetForScreen`.
 ///
-/// Nil means "do not dispatch". There is deliberately no fallback for a
-/// non-phone plane: this used to answer `IndigoHIDTouchTarget.phone`
-/// when derivation failed, which sent the external display's gestures to
-/// the phone and — the part that actually hurt — let a digitizer target
-/// that describes no live screen reach the HID stack. That restarts
-/// `backboardd`, taking SpringBoard and any CarPlay session with it, and
-/// presents as the simulator rebooting on its own. A gesture nobody can
-/// deliver is dropped.
+/// Both answers are constants, because a target is only valid if some
+/// create-service message registered it — see `IndigoHIDTouchTarget`.
+/// The plane picks *which* service to address; the screen it is
+/// currently showing on has nothing to do with it.
+///
+/// `connectedScreenId` and `derive` are kept for the caller's shape and
+/// deliberately unused for CarPlay. `IndigoHIDTargetForScreen` is a real
+/// SimulatorKit export and it is tempting precisely because it looks
+/// like the answer — it returns `0x40000000 | screenId`, a plausible
+/// number that no service has registered. Sending there is what
+/// restarted the guest.
 enum DisplayTouchTarget {
-    /// The id CoreSimulator never assigns to a connected screen, and so
-    /// the value a caller passes when it has no binding at all.
-    private static let noScreen: UInt32 = 0
-
     static func resolve(
         kind: DisplayKind,
         connectedScreenId: UInt32,
-        derive: (UInt32) -> UInt32?
+        derive: (UInt32) -> UInt32?,
+        override: UInt32? = nil
     ) -> UInt32? {
         switch kind {
-        case .phone:
-            return IndigoHIDTouchTarget.phone
-        case .carPlay:
-            // Never derive from the absent id: it yields a plausible
-            // number describing nothing, which is the shape of the
-            // crash rather than a way to avoid it.
-            guard connectedScreenId != noScreen else { return nil }
-            return derive(connectedScreenId)
+        case .phone:   return IndigoHIDTouchTarget.phone
+        case .carPlay: return override ?? IndigoHIDTouchTarget.carPlay
         }
+    }
+
+    /// Parses a probe override — `BAGUETTE_CARPLAY_TARGET`, decimal or
+    /// `0x`-prefixed. Exists because finding the right target is a
+    /// search: the guest publishes the registered set only when it
+    /// rejects one, and rebuilding between candidates is far slower
+    /// than restarting with a different number.
+    ///
+    /// Nonsense is ignored rather than defaulted to something arbitrary
+    /// — a typo'd target is exactly the unregistered value that kills
+    /// the guest.
+    static func parseOverride(_ raw: String?) -> UInt32? {
+        guard var text = raw?.trimmingCharacters(in: .whitespaces), !text.isEmpty else {
+            return nil
+        }
+        var radix = 10
+        if text.lowercased().hasPrefix("0x") {
+            radix = 16
+            text = String(text.dropFirst(2))
+        }
+        return UInt32(text, radix: radix)
     }
 }

@@ -187,43 +187,154 @@ nothing new was needed on the wire.
 Verified against a real paired Series 11: tap launches an app, Crown
 walks face → grid, Side opens Control Centre, drag scrolls Settings.
 
-## Why external input restarted the simulator
+## The external digitizer has to be built before it can be touched
 
-Touching the external pane used to take the whole guest down:
+Gestures on an external display used to restart the guest, reproducibly,
+on a freshly created simulator. The target was never the problem —
+`IndigoHIDTargetForScreen` was right all along. **The digitizer it
+addressed had never been built.**
+
+`IndigoHIDInput.warmServices` already created the pointer and mouse
+services on every HID client; the CarPlay one was simply missing. So
+touches were dispatched at a service that did not exist, and `backboardd`
+died — SpringBoard and the CarPlay session with it.
+
+### The recipe
+
+SimulatorKit exports three service constructors, all producing the same
+192-byte message and differing in two fields:
+
+| Symbol | opcode `[0x30]` | `[0x40]` | `[0x44]` | args |
+| --- | --- | --- | --- | --- |
+| `IndigoHIDMessageToCreatePointerService` | 3 | `0x35` | — | none |
+| `IndigoHIDMessageToCreateMouseService` | 5 | `0x36` | — | none |
+| `IndigoHIDMessageToCreateCarPlayService` | 7 | 1 | flag | **1 byte** |
+| `IndigoHIDMessageToRemoveCarPlayService` | 8 | — | — | none |
+
+Common header: `calloc(1, 0xc0)`, `[0x18] = 0xa0`, `[0x1c] = 1`,
+`[0x20] = 0x7fff0001`. Note `0x35` / `0x36` sit beside
+`IndigoHIDTouchTarget.phone = 0x32` — these are routing targets, and each
+must be **created before anything is sent to it**.
+
+**The byte is `hasTouchScreen`**, not a screen index. Disassembling
+Simulator.app's own call site names it:
+
+```objc
+id   config   = [self starkConfig];          // "Stark" — Apple's codename for CarPlay
+BOOL hasTouch = [config hasTouchScreen];
+msg = IndigoHIDMessageToCreateCarPlayService(hasTouch);
+[self sendIndigoHIDData:msg];
+```
+
+baguette passes `true`: nothing reaches that path without wanting touch.
+A knob-driven head unit would pass `false`.
+
+`deinit` removes the service, so a display that goes away doesn't leave a
+digitizer behind for the next session to inherit.
+
+### The target is a constant, not a computation
+
+Creating the service was necessary and not sufficient. The guest names
+the real problem as it dies:
 
 ```
-SpringBoard  60424 → 87561
-backboardd   60426 → 87552
+*** Terminating app due to uncaught exception 'NSInternalInconsistencyException',
+reason: 'Encountered HID event with unexpected target 1073741826
+         not in known targets: ( 50, 13, 11, 53, 51, 302, 300, 1, 14, 60, 12, 100, 54,
+                                 1073741825, 301 )'
 ```
 
-Not a reboot — a board relaunch, which looks identical from outside.
+`SimHIDVirtualServiceManager` keeps registered services in a dictionary
+and throws on anything else — which kills `backboardd` and SpringBoard
+with it. Read the list: `50` is `0x32` (phone), `53` is `0x35`
+(pointer), `54` is `0x36` (mouse), and `1073741825` is `0x40000001` —
+the CarPlay service, registered moments earlier. Every entry is a
+service something explicitly created.
 
-A stream session resolves its `Input` **once**, at socket open, and
-holds it for the session. That is fine for the phone: the integrated
-digitizer is a constant. An external plane's digitizer target is derived
-from its live connected screen id (`DisplayTouchTarget` →
-`IndigoHIDTargetForScreen`), and that id churns every time the display is
-attached, reconfigured or discarded — constantly, for CarPlay, as the
-session log above shows. So the target captured at open routinely
-describes a screen that no longer exists, and dispatching there kills
-`backboardd`.
+baguette sent `1073741826` = `0x40000002`. That is
+`IndigoHIDTargetForScreen(2)`, dutifully derived from the connected
+screen id.
 
-Three fallbacks made it worse, each turning "we don't know" into a
-confident wrong answer:
+**`IndigoHIDTargetForScreen` is a trap.** It is a genuine SimulatorKit
+export, it takes exactly the argument you have, and it returns
+`0x40000000 | screenId` — a number that looks like a target and that no
+service has registered. CarPlay's real target is a fixed `0x40000001`,
+because the create message hardcodes `1` into its target slot at
+`[0x40]`, exactly as the pointer and mouse constructors hardcode `0x35`
+and `0x36`. One service, one target, however many screens are attached.
 
-| Was | Now |
-| --- | --- |
-| `(try? resolve()) ?? cachedBinding()` | fresh resolve only — a stale binding is how a dead id outlives its screen |
-| `binding?.connectedScreenId ?? 0` | id `0` never reaches `derive`; it yields a plausible number describing nothing |
-| `derive(…) ?? IndigoHIDTouchTarget.phone` | `nil` — an external gesture is never redirected to the phone digitizer |
+So `DisplayTouchTarget` returns constants for both planes and consults
+nothing. And `warmServices` fails closed: if the CarPlay service cannot
+be created, `ensureWarm` returns no client and every gesture is dropped,
+because dispatching to an unregistered target is not a degraded mode —
+it is a dead simulator.
 
-`BoundInput` closes it: it asks for the plane's input on **every**
-gesture rather than caching one, and dispatches nothing when the plane
-isn't bound. The worst case is now a tap that does nothing, on a display
-that has gone away, instead of a simulator that restarts.
+### Why the target is resolved once
 
-The **watch** pane was never affected: a watch is a device of its own,
-streamed on its own udid down the ordinary phone digitizer path.
+An earlier fix re-derived the target on every gesture, to stop a session
+dispatching to a screen that had gone away. It is gone: a target is a
+constant naming a registered service, so nothing about it can go stale,
+and re-deriving it put a `simctl io enumerate` subprocess plus a
+SimulatorKit port walk in front of every touch — including every move of
+a drag. That is where "input is uber laggy" came from.
+
+Dispatching to a display that has since detached is harmless now: the
+service is still registered, so the event goes nowhere rather than
+throwing. Only *unregistered* targets kill the guest, and a constant
+cannot produce one.
+
+The **watch** pane was never affected — a watch is a device of its own,
+streamed on its own udid down the ordinary integrated digitizer path.
+
+## What was actually wrong, in order
+
+Three attempts missed before the fourth landed. Each failure narrowed it,
+and each wrong answer is worth keeping because each one looked right.
+
+| Target sent | Where it came from | What happened |
+| --- | --- | --- |
+| `0x40000002` | `IndigoHIDTargetForScreen(screenId)` | unregistered → guest throws → guest restarts |
+| `0x40000001` | `1` plus an invented `0x40000000` flag | registered by *something else* → CarPlay's taps drove the phone |
+| **`1`** | what the create message actually registers | works |
+
+Along the way two real bugs were fixed that were not this bug: a session
+held one digitizer target for its whole life, and three fallbacks turned
+"we don't know" into confident wrong answers — `?? cachedBinding()`,
+`?? 0` for the screen id, and worst, `?? IndigoHIDTouchTarget.phone`,
+which redirected an external plane's gestures onto the phone.
+
+The lesson worth carrying: **`IndigoHIDTargetForScreen` is a trap.** It
+is a real SimulatorKit export, it takes exactly the argument you have,
+and it returns a plausible number that no service has registered.
+
+
+## Simulator.app hosts the display; baguette only streams it
+
+An external display exists for as long as **Simulator.app's window for
+it** does. Quit Simulator.app and the guest tears the display down —
+`Discarding pending display`, `Invalidating screen controller: (null)` —
+and the pane goes with it. baguette attaches to the framebuffer; it does
+not host the screen and cannot keep one alive.
+
+This is worth knowing because it explains a whole class of confusion:
+a device whose Connected Screens still lists a CarPlay screen with no
+`IOSurface` behind it is one whose host window has gone. Everything
+downstream — the black pane, `simctl screenshot` timing out on the
+screen, the rail reporting nothing attached — follows from that.
+
+## The rail re-probes when the page regains focus
+
+Attaching a display happens in another application, and there is no
+event for it. So the rail looks again whenever the page comes back to
+the foreground, which is exactly the moment you return from
+Simulator.app. Before this, an attached display "wasn't there" until a
+full reload or a **Check again** press.
+
+It only *acts* when the answer differs (`CompanionScreens.sameAs`).
+`refresh()` closes and reopens panes, so re-rendering on an unchanged
+probe would tear down and rebuild live streams every time you tabbed
+back. Both `focus` and `visibilitychange` fire together in some
+browsers, so an in-flight latch collapses them into one request.
 
 ## Known limits
 

@@ -33,7 +33,38 @@ For releases prior to this changelog, see the
 
 ### Fixed
 
-- **Touching the external-display pane restarted the simulator.** A stream
+- **An attached display didn't appear until you reloaded the page.** The rail
+  only re-probed on load or on **Check again**, but attaching happens in
+  Simulator.app — so the rail looks again whenever the page regains focus, which
+  is the moment you come back. It acts only when the answer actually differs
+  (`CompanionScreens.sameAs`), because `refresh()` closes and reopens panes and
+  re-rendering an unchanged probe would tear down live streams on every tab-back.
+  Related, and worth knowing: **Simulator.app hosts the display** — quitting it
+  detaches the screen and the pane goes with it. baguette streams a framebuffer;
+  it cannot keep one alive.
+- **Touching an external display pane restarted the simulator.** Two causes, and
+  the second is the one that mattered. `SimHIDVirtualServiceManager` throws on a
+  HID event whose target is not a registered service — killing `backboardd` and
+  SpringBoard, which presents as the phone rebooting on its own — and it names
+  the valid set as it dies: `50` (`0x32` phone), `53` (`0x35` pointer), `54`
+  (`0x36` mouse), `1073741825` (`0x40000001` CarPlay). baguette was sending
+  `0x40000002`, straight from `IndigoHIDTargetForScreen(2)`. That export is a
+  trap: it returns `0x40000000 | screenId`, a plausible number no service has
+  registered. CarPlay's target is a **fixed** `0x40000001`, hardcoded into the
+  create message's target slot exactly like its siblings, so `DisplayTouchTarget`
+  now returns constants and derives nothing. Second cause: the digitizer
+  it addressed had never been built. `IndigoHIDTargetForScreen` returns a valid
+  target for a CarPlay screen whether or not a service exists behind it, so
+  touches went to nothing and `backboardd` died — taking SpringBoard and the
+  CarPlay session with it, which presents as the phone rebooting on its own.
+  `warmServices` already created the pointer and mouse services; the CarPlay one
+  was simply missing. It is now created the same way Simulator.app does it, via
+  `IndigoHIDMessageToCreateCarPlayService`, whose single byte turns out to be
+  `hasTouchScreen` — a BOOL, not a screen index (named by disassembling
+  Simulator.app's call site: `[[self starkConfig] hasTouchScreen]`). The service
+  is removed on teardown so a discarded display doesn't leave a digitizer behind.
+  See [`docs/features/companion-screens.md`](docs/features/companion-screens.md).
+- **A stream session held one digitizer target for its whole life.** A
   session resolves its `Input` once, at socket open, and holds it — fine for the
   phone's constant digitizer, wrong for an external plane, whose target is
   derived from a connected screen id that churns every time the display is
@@ -43,9 +74,9 @@ For releases prior to this changelog, see the
   rebooting on its own). Three fallbacks turned "we don't know" into a confident
   wrong answer and are gone: the stale-binding fallback, the `?? 0` screen id,
   and — worst — `?? IndigoHIDTouchTarget.phone`, which redirected the external
-  display's gestures onto the phone. New `BoundInput` re-derives the target on
-  every gesture and drops anything it can't target, so the worst case is a tap
-  that does nothing rather than a simulator that restarts.
+  display's gestures onto the phone. The target is now a constant, resolved once —
+  re-deriving it per gesture (an earlier attempt) put a `simctl io enumerate`
+  subprocess in front of every touch.
 - **Opening a device's tab no longer attaches a CarPlay display to it.** The
   CarPlay pane used to mount unconditionally, and `?display=carplay` asks the
   host to *enable* CarPlay — so merely looking at a simulator reached into

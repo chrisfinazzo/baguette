@@ -45,7 +45,7 @@
         'Choose I/O → External Displays, then any entry — CarPlay, or one of the plain resolutions.',
         'If it was already set to that entry, pick Disabled first and choose it again — a display left registered without its window has no framebuffer to stream.',
         'Some runtimes attach the plain resolutions but not CarPlay. If CarPlay does nothing, try one of the others.',
-        'Leave that window open, then press Check again.',
+        'Leave Simulator.app running — it hosts the display. Quitting it detaches the screen, and the pane goes with it.',
       ],
     },
     {
@@ -124,6 +124,25 @@
       }
     }
 
+    /**
+     * Whether this slot would render and stream identically to another.
+     *
+     * Deliberately compares the streamed identity too, not just the
+     * rendered one: a watch swapped for a different watch of the same
+     * name and state is a different device to open a socket against.
+     */
+    sameAs(other) {
+      if (!other) return false;
+      const size = this.size;
+      const otherSize = other.size;
+      return this.id === other.id
+        && this.status === other.status
+        && this.label === other.label
+        && this.udid === other.udid
+        && Boolean(size) === Boolean(otherSize)
+        && (!size || (size.width === otherSize.width && size.height === otherSize.height));
+    }
+
     /** The bound display's pixel size, when the host reported one. */
     get size() {
       const { width, height } = this._report;
@@ -148,6 +167,28 @@
     }
 
     /** Just the screens a click could show right now. */
+    /**
+     * Whether this says the same thing as another answer.
+     *
+     * The rail re-probes every time the page regains focus, because
+     * attaching a display happens in another application entirely and
+     * there is no event for it. That makes "did anything change?" a hot
+     * path, and answering "no" has to be free: acting on an unchanged
+     * answer would close and reopen every pane, tearing down live
+     * streams each time you tab back from Simulator.app.
+     *
+     * Compares what the rail actually renders and streams — the slot's
+     * state, the display's size, the watch's identity — so a device
+     * that came back at a different resolution counts as changed.
+     */
+    sameAs(other) {
+      if (!other || typeof other.entries !== 'function') return false;
+      const mine = this.entries();
+      const theirs = other.entries();
+      if (mine.length !== theirs.length) return false;
+      return mine.every((entry, i) => entry.sameAs(theirs[i]));
+    }
+
     openable() {
       return this.entries().filter((entry) => entry.canOpen);
     }

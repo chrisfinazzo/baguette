@@ -89,3 +89,64 @@ test('openable names just the screens a click could actually show', () => {
   });
   assert.deepEqual(screens.openable().map((e) => e.id), ['external']);
 });
+
+// Re-probing happens whenever the page regains focus, because attaching
+// a display happens in another app entirely. That makes "did anything
+// change?" a hot path: answering "no" has to be free, or every tab-back
+// tears down and rebuilds live streams.
+test('two identical answers compare equal', () => {
+  const a = CompanionScreens().from({
+    external: { available: true, width: 800, height: 480 },
+    watch: { available: true, udid: 'W-1', name: 'Watch', state: 'Booted' },
+  });
+  const b = CompanionScreens().from({
+    external: { available: true, width: 800, height: 480 },
+    watch: { available: true, udid: 'W-1', name: 'Watch', state: 'Booted' },
+  });
+  assert.ok(a.sameAs(b));
+});
+
+test('a display that appeared is a change', () => {
+  const before = CompanionScreens().from({ external: { available: false } });
+  const after = CompanionScreens().from({
+    external: { available: true, width: 800, height: 480 },
+  });
+  assert.ok(!before.sameAs(after));
+});
+
+test('a display that went away is a change', () => {
+  const before = CompanionScreens().from({
+    external: { available: true, width: 800, height: 480 },
+  });
+  const after = CompanionScreens().from({ external: { available: false } });
+  assert.ok(!before.sameAs(after));
+});
+
+// A watch that booted while you were elsewhere should light its slot
+// without a reload, same as a display that got attached.
+test('a watch that changed boot state is a change', () => {
+  const before = CompanionScreens().from({
+    watch: { available: true, udid: 'W-1', name: 'Watch', state: 'Shutdown' },
+  });
+  const after = CompanionScreens().from({
+    watch: { available: true, udid: 'W-1', name: 'Watch', state: 'Booted' },
+  });
+  assert.ok(!before.sameAs(after));
+});
+
+// Resizing the attached display changes what the pane should draw.
+test('a display that changed size is a change', () => {
+  const before = CompanionScreens().from({
+    external: { available: true, width: 800, height: 480 },
+  });
+  const after = CompanionScreens().from({
+    external: { available: true, width: 1280, height: 720 },
+  });
+  assert.ok(!before.sameAs(after));
+});
+
+test('comparing against nothing is a change, not a crash', () => {
+  const screens = CompanionScreens().from({ external: { available: true, width: 800, height: 480 } });
+  assert.ok(!screens.sameAs(null));
+  assert.ok(!screens.sameAs(undefined));
+});

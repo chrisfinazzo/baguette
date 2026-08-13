@@ -43,33 +43,32 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         return SimulatorKitScreen(udid: udid, host: host, binding: binding)
     }
 
-    /// Input that re-derives its digitizer target on every gesture.
+    /// Input for this plane, resolved once.
     ///
-    /// The phone's target is a constant, so this costs it nothing. An
-    /// external plane's target comes from a connected screen id that
-    /// churns as the display is attached, reconfigured and discarded —
-    /// under a session that resolved its `Input` once, at open. Holding
-    /// the target from then means dispatching to a screen that may be
-    /// gone, which restarts `backboardd`.
+    /// There was a version of this that re-derived the target on every
+    /// gesture, to stop a session dispatching to a screen that had gone
+    /// away. It is gone, and deliberately: a target is a **constant**
+    /// naming a registered service (`IndigoHIDTouchTarget`), not
+    /// anything derived from a screen, so there is nothing about it that
+    /// can go stale. What that version actually bought was a
+    /// `simctl io enumerate` subprocess plus a SimulatorKit port walk in
+    /// front of every touch — including every move of a drag — which is
+    /// exactly as slow as it sounds.
     ///
-    /// Note the missing `?? cachedBinding()`: falling back to the last
-    /// good binding is exactly how a dead screen id survives its screen.
-    /// Capture is fine for the framebuffer — a stale surface is a stale
-    /// picture — but not for HID.
+    /// Dispatching to a display that has since detached is now harmless:
+    /// the service is still registered, so the event is delivered
+    /// nowhere rather than throwing. Unregistered targets are what kill
+    /// the guest, and this cannot produce one.
     func input() -> any Input {
-        // Strong capture on purpose: the plane owns the probe, and the
-        // session's input should keep it alive for as long as it may be
-        // asked. Nothing holds the input back, so there is no cycle.
-        BoundInput { [self] in
-            guard let binding = try? self.resolve(),
-                  let target = DisplayTouchTarget.resolve(
-                      kind: self.kind,
-                      connectedScreenId: binding.connectedScreenId,
-                      derive: IndigoHIDTargetForScreen.target(for:)
-                  )
-            else { return nil }
-            return IndigoHIDInput(udid: self.udid, host: self.host, touchTarget: target)
-        }
+        let target = DisplayTouchTarget.resolve(
+            kind: kind,
+            connectedScreenId: 0,
+            derive: { _ in nil },
+            override: DisplayTouchTarget.parseOverride(
+                ProcessInfo.processInfo.environment["BAGUETTE_CARPLAY_TARGET"]
+            )
+        ) ?? IndigoHIDTouchTarget.phone
+        return IndigoHIDInput(udid: udid, host: host, touchTarget: target, plane: kind)
     }
 
     private func cachedBinding() -> DisplayBinding? {
