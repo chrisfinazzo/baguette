@@ -22,12 +22,17 @@ enum IndigoHIDTouchTarget {
 
     /// Every target the guest listed as known, for probing. Registered
     /// means safe to send to: a wrong one goes to the wrong surface,
-    /// only an *unregistered* one throws and takes the guest down.
+    /// only an *unregistered* one throws and takes the guest down. So
+    /// this is also the set `DisplayTouchTarget.parseOverride` accepts —
+    /// an env var is not somewhere you want to be able to name a target
+    /// from outside it.
     ///
     /// `50`/`53`/`54` are already accounted for (phone / pointer /
-    /// mouse). `1073741825` is the CarPlay service's own id, which
-    /// routes to the integrated digitizer rather than the CarPlay
-    /// screen. The `300`–`302` run is the interesting unexplored group.
+    /// mouse) and `1` is CarPlay's own service. `1073741825`
+    /// (`0x40000001`) is registered by something else entirely and
+    /// routes to the integrated digitizer — which is why sending
+    /// CarPlay's touches there landed them on the phone. The `300`–`302`
+    /// run is the interesting unexplored group.
     static let knownProbeTargets: [UInt32] = [
         1, 11, 12, 13, 14, 50, 51, 53, 54, 60, 100, 300, 301, 302, 0x4000_0001,
     ]

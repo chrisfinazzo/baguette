@@ -32,9 +32,15 @@ enum DisplayTouchTarget {
     /// rejects one, and rebuilding between candidates is far slower
     /// than restarting with a different number.
     ///
-    /// Nonsense is ignored rather than defaulted to something arbitrary
-    /// — a typo'd target is exactly the unregistered value that kills
-    /// the guest.
+    /// The search runs over `knownProbeTargets` and nowhere else, so
+    /// that is what this accepts. Anything outside it — a typo, a
+    /// number `IndigoHIDTargetForScreen` handed back, a guess — is by
+    /// definition a target no service registered, and dispatching there
+    /// is what takes `backboardd` and SpringBoard down. An env var is
+    /// not a good place to be able to do that from.
+    ///
+    /// Rejected input yields `nil` rather than something arbitrary, so
+    /// the caller falls back to the known-good constant.
     static func parseOverride(_ raw: String?) -> UInt32? {
         guard var text = raw?.trimmingCharacters(in: .whitespaces), !text.isEmpty else {
             return nil
@@ -44,6 +50,11 @@ enum DisplayTouchTarget {
             radix = 16
             text = String(text.dropFirst(2))
         }
-        return UInt32(text, radix: radix)
+        guard let target = UInt32(text, radix: radix),
+              IndigoHIDTouchTarget.knownProbeTargets.contains(target)
+        else {
+            return nil
+        }
+        return target
     }
 }

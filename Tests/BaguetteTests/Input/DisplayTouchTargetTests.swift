@@ -110,6 +110,29 @@ struct DisplayTouchTargetTests {
         #expect(DisplayTouchTarget.parseOverride(nil) == nil)
     }
 
+    /// The override is a *probe*, and the set it probes is the one the
+    /// guest published when it threw. A number outside that set is
+    /// precisely the unregistered target this whole type exists to keep
+    /// out, so a typo in an env var must not be the thing that takes
+    /// `backboardd` down.
+    @Test func `an override outside the registered set is refused`() {
+        for raw in ["0x40000002", "1073741826", "2", "999", "0x0"] {
+            #expect(DisplayTouchTarget.parseOverride(raw) == nil, "\(raw)")
+        }
+    }
+
+    /// And a refused override leaves the plane on the constant it would
+    /// have used anyway, rather than on nothing.
+    @Test func `an unregistered override leaves CarPlay on its own service`() {
+        #expect(
+            DisplayTouchTarget.resolve(
+                kind: .carPlay, connectedScreenId: 2,
+                derive: { _ in nil },
+                override: DisplayTouchTarget.parseOverride("0x40000002")
+            ) == IndigoHIDTouchTarget.carPlay
+        )
+    }
+
     /// Everything the guest named as registered, so a sweep can be
     /// driven from the list rather than from memory.
     @Test func `the probe list holds only registered targets`() {

@@ -309,6 +309,7 @@ GET  /simulators/:udid/bezel.png            composite.data
 GET  /simulators/:udid/interface.json       appearance + contrast + content size
 POST /simulators/:udid/interface            set any subset, answer the result
 GET  /simulators/:udid/companion-screens.json  CarPlay display + paired watch
+POST /simulators/:udid/carplay-display      attach/reattach CarPlay via Simulator.app
 GET  /simulators/:udid/describe-ui.json     Accessibility.describeAll / describeAt
 POST /simulators/:udid/input                GestureDispatcher (one envelope)
 WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher

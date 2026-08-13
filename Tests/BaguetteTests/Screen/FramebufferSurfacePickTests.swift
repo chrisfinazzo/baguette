@@ -74,6 +74,15 @@ struct FramebufferSurfacePickTests {
         #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 1179, height: 2556)))
     }
 
+    /// Landscape means *wider than tall*. A square is neither the
+    /// device's shape nor a display's, and admitting it means any square
+    /// scratch buffer big enough to clear the area floor can bind as the
+    /// external plane.
+    @Test func `a square surface is not landscape`() {
+        #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 512, height: 512)))
+        #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 1080, height: 1080)))
+    }
+
     @Test func `a degenerate sliver is not a display`() {
         #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 100, height: 100)))
         #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 0, height: 0)))

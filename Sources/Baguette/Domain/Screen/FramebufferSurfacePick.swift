@@ -41,8 +41,12 @@ enum FramebufferSurfacePick {
     /// keeps a portrait phone plane out of the external pane — mirroring
     /// SpringBoard there is worse than showing nothing, because it looks
     /// like it worked.
+    ///
+    /// Strictly wider than tall: a square is not a display's shape, and
+    /// `>=` let any square scratch buffer over the area floor bind as
+    /// the external plane.
     static func acceptsExternal(_ size: Size) -> Bool {
-        size.width >= size.height && size.area >= minExternalArea
+        size.width > size.height && size.area >= minExternalArea
     }
 
     private static func closestIndex(to target: Size, in candidates: [Size]) -> Int? {

@@ -12,113 +12,54 @@ For releases prior to this changelog, see the
 
 ### Added
 
-- **Companion screens are a choice now, not a fixture.** `/simulators/<udid>`
-  grew a rail on the right edge — above the plugins rail, in a shared stack so
-  the two can't land on top of each other — that offers the screens a simulator
-  can show beside its own: its CarPlay display, and the Apple Watch paired with
-  it. A screen the host doesn't have keeps its slot and explains how to get one
-  (I/O → External Displays for CarPlay; `simctl pair` for a watch), because a
-  rail that hid what you don't have could never tell you it exists. A paired
-  watch that isn't running gets a Boot button rather than a page of prose.
-  Which panes you had open is remembered across reloads. New route: `GET
-  /simulators/:udid/companion-screens.json`.
-- **Digital Crown and Side button, under the watch pane.** A watch pane is a
-  bare rect with no bezel chrome to hang overlay buttons off, so without them
-  the only way out of an app was to already know the crown exists. Both ride
-  the `button` envelope that `DeviceButton` has carried all along — Crown walks
-  the watch face → app grid, Side opens Control Centre. Scroll a list by
-  dragging on the face: the crown's *rotation* is a separate HID axis baguette
-  doesn't drive, and the mouse wheel emits a two-finger pan that watchOS
-  ignores. See [`docs/features/companion-screens.md`](docs/features/companion-screens.md).
+- **Companion screens rail.** A rail on the right edge of `/simulators/<udid>`
+  offering the screens a simulator can show beside its own: its CarPlay /
+  external display, and the Apple Watch paired with it. A screen the host
+  doesn't have keeps its slot and says how to get one, an unbooted watch gets a
+  Boot button, and a missing CarPlay display gets a button that drives
+  Simulator.app's menus for you. The rail re-probes on focus, since attaching
+  happens in another app; open panes survive a reload. New routes: `GET
+  /simulators/:udid/companion-screens.json`, `POST
+  /simulators/:udid/carplay-display`. See
+  [`docs/features/companion-screens.md`](docs/features/companion-screens.md).
+- **Digital Crown and Side button, under the watch pane.** A watch has no bezel
+  chrome to hang overlay buttons off, so without them the only way out of an app
+  was to already know the crown exists. Scroll by dragging on the face — the
+  crown's *rotation* is a separate HID axis baguette doesn't drive.
 
 ### Fixed
 
-- **An attached display didn't appear until you reloaded the page.** The rail
-  only re-probed on load or on **Check again**, but attaching happens in
-  Simulator.app — so the rail looks again whenever the page regains focus, which
-  is the moment you come back. It acts only when the answer actually differs
-  (`CompanionScreens.sameAs`), because `refresh()` closes and reopens panes and
-  re-rendering an unchanged probe would tear down live streams on every tab-back.
-  Related, and worth knowing: **Simulator.app hosts the display** — quitting it
-  detaches the screen and the pane goes with it. baguette streams a framebuffer;
-  it cannot keep one alive.
-- **Touching an external display pane restarted the simulator.** Two causes, and
-  the second is the one that mattered. `SimHIDVirtualServiceManager` throws on a
-  HID event whose target is not a registered service — killing `backboardd` and
-  SpringBoard, which presents as the phone rebooting on its own — and it names
-  the valid set as it dies: `50` (`0x32` phone), `53` (`0x35` pointer), `54`
-  (`0x36` mouse), `1073741825` (`0x40000001` CarPlay). baguette was sending
-  `0x40000002`, straight from `IndigoHIDTargetForScreen(2)`. That export is a
-  trap: it returns `0x40000000 | screenId`, a plausible number no service has
-  registered. CarPlay's target is a **fixed** `0x40000001`, hardcoded into the
-  create message's target slot exactly like its siblings, so `DisplayTouchTarget`
-  now returns constants and derives nothing. Second cause: the digitizer
-  it addressed had never been built. `IndigoHIDTargetForScreen` returns a valid
-  target for a CarPlay screen whether or not a service exists behind it, so
-  touches went to nothing and `backboardd` died — taking SpringBoard and the
-  CarPlay session with it, which presents as the phone rebooting on its own.
-  `warmServices` already created the pointer and mouse services; the CarPlay one
-  was simply missing. It is now created the same way Simulator.app does it, via
-  `IndigoHIDMessageToCreateCarPlayService`, whose single byte turns out to be
-  `hasTouchScreen` — a BOOL, not a screen index (named by disassembling
-  Simulator.app's call site: `[[self starkConfig] hasTouchScreen]`). The service
-  is removed on teardown so a discarded display doesn't leave a digitizer behind.
-  See [`docs/features/companion-screens.md`](docs/features/companion-screens.md).
-- **A stream session held one digitizer target for its whole life.** A
-  session resolves its `Input` once, at socket open, and holds it — fine for the
-  phone's constant digitizer, wrong for an external plane, whose target is
-  derived from a connected screen id that churns every time the display is
-  attached, reconfigured or discarded. The captured target routinely described a
-  screen that no longer existed, and dispatching there killed `backboardd`,
-  taking SpringBoard and any CarPlay session with it (it presents as the phone
-  rebooting on its own). Three fallbacks turned "we don't know" into a confident
-  wrong answer and are gone: the stale-binding fallback, the `?? 0` screen id,
-  and — worst — `?? IndigoHIDTouchTarget.phone`, which redirected the external
-  display's gestures onto the phone. The target is now a constant, resolved once —
-  re-deriving it per gesture (an earlier attempt) put a `simctl io enumerate`
-  subprocess in front of every touch.
-- **Opening a device's tab no longer attaches a CarPlay display to it.** The
-  CarPlay pane used to mount unconditionally, and `?display=carplay` asks the
-  host to *enable* CarPlay — so merely looking at a simulator reached into
-  Simulator.app and turned one on. Nothing is asked for now until you open the
-  pane from the rail, and the rail only offers a display that is already there.
-- **The CarPlay pane was a black rectangle with no explanation.** Two causes,
-  both fixed. The rail called CarPlay "attached" on the strength of a name in
-  `simctl io enumerate`'s Connected Screens — but a display can be registered
-  with no framebuffer behind it once its host window has gone, and Apple's own
-  `simctl screenshot` fails on it with "Timeout waiting for screen surfaces".
-  Availability is now the same `Display.resolve()` the stream performs, so the
-  rail and the stream can't disagree, and an unbindable display shows the
-  instructions for attaching a working one (including the Disabled → CarPlay
-  cycle that clears a stale registration). Separately, when a stream does fail
-  to bind, the server's `{"ok":false,"error":…}` used to go to `console.log`
-  and nowhere else; it now renders under the pane with those instructions and
-  the verbatim error. The card also grew an **Attach a CarPlay display** button
-  (`POST /simulators/:udid/carplay-display`) that drives the menu dance itself —
-  raising this device's own window first, which is the step that goes wrong when
-  a person does it by hand with another simulator frontmost — and answers with a
-  fresh bind probe, so it can report "the menu ran and there is still nothing to
-  stream" instead of claiming success.
-- **The pane called itself CarPlay while showing whatever external display was
-  attached.** The plane binds *the best external* — the I/O → External Displays
-  menu offers CarPlay alongside several plain resolutions, and on an iOS 27 beta
-  the plain ones attach and stream while CarPlay attaches nothing at all. The
-  rail now says **External display** and names the size it bound
-  (`{"external":{"available":true,"width":800,"height":480}}`), and the
-  instructions say to try a resolution when CarPlay does nothing.
-- **A 1080p external display reported itself as "nothing attached".** The
-  external plane refused any surface above `800 × 480 × 4` — a leftover from
-  when the pane was only ever CarPlay, whose screen is 720×480. The menu offers
-  ordinary resolutions and they are real displays, so the upper bound is gone
-  (`acceptsCarPlay` → `acceptsExternal`). The landscape check stays: it is what
-  keeps a portrait phone plane from being mirrored into the external pane.
-- **The device rendered at half size (or a third) when nothing was beside it.**
-  The phone was pinned to `46vw` at every window width for the CarPlay pane's
-  benefit, and the narrow-window rule meant to relax that sat *earlier* in the
-  stylesheet at equal specificity, so it lost silently — leaving the phone
-  smaller on a small screen than on a large one. The size budget is now one set
-  of variables that reacts to the window width and to how many panes are
-  actually open; alone, the device gets the window.
+- **Touching an external display pane restarted the simulator.** The target came
+  from `IndigoHIDTargetForScreen`, which returns a plausible number no service
+  has registered — and the CarPlay digitizer had never been created either.
+  Unregistered targets make the guest throw and take SpringBoard with it, so
+  targets are constants now and the service is created before use, removed on
+  teardown, and failed closed if it can't be made.
+- **Opening a device's tab attached a CarPlay display to it.** The pane mounted
+  unconditionally and `?display=carplay` asks the host to *enable* CarPlay, so
+  merely looking at a simulator turned one on.
+- **The CarPlay pane was a black rectangle with no explanation.** Availability
+  came from a name in Connected Screens, but a display can be registered with no
+  framebuffer behind it. It's the same `Display.resolve()` the stream performs
+  now, and a stream that fails to bind renders the error under the pane instead
+  of logging it to the console.
+- **The pane called itself CarPlay while showing any external display.** It binds
+  the best external, and the External Displays menu offers plain resolutions
+  too — which on an iOS 27 beta attach and stream while CarPlay attaches nothing.
+- **External displays were bound by area alone.** Anything above `800 × 480 × 4`
+  was refused outright, so a 1080p display reported "nothing attached"; with the
+  bound lifted, a 4K one then out-measured the phone and took the *device* plane,
+  putting both planes on the wrong port. The device plane is picked by shape now,
+  area only as the tie-break, and landscape means strictly wider than tall.
+- **Two-finger gestures from the browser were built on the wrong thread.**
+  `IndigoHIDMessageForMouseNSEvent` reads NSEvent thread-local state, so it must
+  be built on the main actor. The `POST …/input` route always hopped; the stream
+  socket — the path the browser's pinch and two-finger pan actually ride — did
+  not, and produced messages the simulator silently drops.
+- **The device rendered at half size when nothing was beside it.** The phone was
+  pinned to `46vw` at every width for the CarPlay pane's benefit, and the
+  narrow-window rule meant to relax that lost silently to it. Pane sizing is one
+  set of variables now, reacting to window width and how many panes are open.
 
 ---
 

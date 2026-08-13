@@ -148,7 +148,13 @@
       }
     }
 
+    /// Null until the first probe resolves — `mountScreensRail` kicks
+    /// `load()` off without awaiting it, and a stream that faults in
+    /// that window asks for its entry to draw the fault card. Throwing
+    /// there would escape the socket callback and take the card with it,
+    /// so an unprobed rail answers the same as an unknown id.
     entry(id) {
+      if (!this.screens) return null;
       return this.screens.entries().find((e) => e.id === id) || null;
     }
 

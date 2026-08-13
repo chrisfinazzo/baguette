@@ -162,7 +162,7 @@ of the open panes) and the window width:
 | --- | --- | --- |
 | nothing open | `96vw` | — |
 | one pane | `46vw` | `42vw` |
-| both panes | `34vw` | `32vw` |
+| both panes | `30vw` | `29vw` |
 | ≤ 960px (stacked) | `92vw` | `92vw` |
 
 Below 960px the row becomes a column, so height becomes the contended
@@ -190,9 +190,10 @@ walks face → grid, Side opens Control Centre, drag scrolls Settings.
 ## The external digitizer has to be built before it can be touched
 
 Gestures on an external display used to restart the guest, reproducibly,
-on a freshly created simulator. The target was never the problem —
-`IndigoHIDTargetForScreen` was right all along. **The digitizer it
-addressed had never been built.**
+on a freshly created simulator. Two things were wrong at once, and this
+is the half that had to be fixed first: **the digitizer being addressed
+had never been built.** (The other half — the target itself — is
+[below](#the-target-is-a-constant-not-a-computation).)
 
 `IndigoHIDInput.warmServices` already created the pointer and mouse
 services on every HID client; the CarPlay one was simply missing. So
@@ -247,9 +248,9 @@ reason: 'Encountered HID event with unexpected target 1073741826
 `SimHIDVirtualServiceManager` keeps registered services in a dictionary
 and throws on anything else — which kills `backboardd` and SpringBoard
 with it. Read the list: `50` is `0x32` (phone), `53` is `0x35`
-(pointer), `54` is `0x36` (mouse), and `1073741825` is `0x40000001` —
-the CarPlay service, registered moments earlier. Every entry is a
-service something explicitly created.
+(pointer), `54` is `0x36` (mouse), and the plain `1` sitting quietly in
+the middle is the CarPlay service, registered moments earlier. Every
+entry is a service something explicitly created.
 
 baguette sent `1073741826` = `0x40000002`. That is
 `IndigoHIDTargetForScreen(2)`, dutifully derived from the connected
@@ -258,10 +259,18 @@ screen id.
 **`IndigoHIDTargetForScreen` is a trap.** It is a genuine SimulatorKit
 export, it takes exactly the argument you have, and it returns
 `0x40000000 | screenId` — a number that looks like a target and that no
-service has registered. CarPlay's real target is a fixed `0x40000001`,
+service has registered. CarPlay's real target is a fixed plain `1`,
 because the create message hardcodes `1` into its target slot at
-`[0x40]`, exactly as the pointer and mouse constructors hardcode `0x35`
-and `0x36`. One service, one target, however many screens are attached.
+`[0x40]` and the guest keys its registry on that raw value, unshifted
+and unflagged — exactly as the pointer and mouse constructors hardcode
+`0x35` and `0x36`. One service, one target, however many screens are
+attached.
+
+The other entry in that list worth naming is `1073741825`
+(`0x40000001`): `1` wearing the `0x40000000` flag invented to match
+`IndigoHIDTargetForScreen`. Something else registers it, so it never
+crashed anything — it just delivered CarPlay's touches to the phone,
+which is the harder failure to spot.
 
 So `DisplayTouchTarget` returns constants for both planes and consults
 nothing. And `warmServices` fails closed: if the CarPlay service cannot
@@ -349,10 +358,32 @@ browsers, so an in-flight latch collapses them into one request.
   `carplay-frames/` registry) may be dressing a screen that isn't
   CarPlay.
 - **Portrait externals are rejected.** `acceptsExternal` requires
-  landscape and ≥ 50,000 px². The landscape rule is what keeps a portrait
-  phone plane out of the external pane; mirroring SpringBoard there is
-  worse than showing nothing because it looks like it worked. There is no
+  landscape — strictly wider than tall, so a square surface is out too —
+  and ≥ 50,000 px². The landscape rule is what keeps a portrait phone
+  plane out of the external pane; mirroring SpringBoard there is worse
+  than showing nothing because it looks like it worked. There is no
   longer an upper size bound — 1080p and 4K externals bind fine.
+- **`POST /carplay-display` needs Automation + Accessibility permission**
+  for whatever launched `baguette serve`, since it drives Simulator.app's
+  menus. Without it the route answers 500 with that instruction. It is
+  granted per-terminal, so a baguette started from a different shell may
+  need it again.
+- **The crown presses but doesn't turn.** Rotation is a separate HID
+  axis that baguette doesn't drive, so the usual watchOS scroll gesture
+  isn't available. Dragging on the face scrolls instead.
+- **The scroll wheel does nothing over a watch pane.** `WheelGestureSource`
+  emits a two-finger pan, which watchOS ignores in a list. Drag instead.
+  Reaching for the wheel is the instinctive move, so this one surprises.
+- Only a plain press is sent. The double-press (Wallet) and the holds
+  (Siri on the crown, power menu on the side button) would need a
+  `duration` and a repeat, which the buttons don't offer yet.
+- CarPlay streams MJPEG regardless of the format picker. It is a mostly
+  static screen and H.264 starves without an IDR cadence the guest
+  doesn't produce; MJPEG paints the first seed and holds it.
+- Nothing is pushed from the host. Attaching a display in Simulator.app
+  raises no event the browser can see, so the rail asks: on page load, on
+  focus (`bindFocusReprobe`, above), and whenever you press **Check
+  again**.
 
 ## Why an external display is usually blank
 
@@ -417,23 +448,3 @@ nothing attached.
 Deliberately not "fixed" by making surfaceless ports bind: that would
 trade a clear "nothing attached" for a black rectangle, which is the
 symptom this whole feature exists to stop showing you.
-- **`POST /carplay-display` needs Automation + Accessibility permission**
-  for whatever launched `baguette serve`, since it drives Simulator.app's
-  menus. Without it the route answers 500 with that instruction. It is
-  granted per-terminal, so a baguette started from a different shell may
-  need it again.
-- **The crown presses but doesn't turn.** Rotation is a separate HID
-  axis that baguette doesn't drive, so the usual watchOS scroll gesture
-  isn't available. Dragging on the face scrolls instead.
-- **The scroll wheel does nothing over a watch pane.** `WheelGestureSource`
-  emits a two-finger pan, which watchOS ignores in a list. Drag instead.
-  Reaching for the wheel is the instinctive move, so this one surprises.
-- Only a plain press is sent. The double-press (Wallet) and the holds
-  (Siri on the crown, power menu on the side button) would need a
-  `duration` and a repeat, which the buttons don't offer yet.
-- CarPlay streams MJPEG regardless of the format picker. It is a mostly
-  static screen and H.264 starves without an IDR cadence the guest
-  doesn't produce; MJPEG paints the first seed and holds it.
-- The rail probes once per page load, plus whenever you press **Check
-  again**. Attaching a display in Simulator.app does not push anything
-  to the browser.

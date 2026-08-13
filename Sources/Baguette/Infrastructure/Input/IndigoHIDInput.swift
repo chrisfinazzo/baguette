@@ -12,8 +12,9 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
     /// Digitizer routing target for this input surface. Phone defaults
-    /// to `IndigoHIDTouchTarget.phone`. CarPlay callers inject the
-    /// value from `IndigoHIDTargetForScreen(connectedScreenId)`.
+    /// to `IndigoHIDTouchTarget.phone`; CarPlay callers inject
+    /// `IndigoHIDTouchTarget.carPlay`. Both are constants naming a
+    /// service something created — never anything derived from a screen.
     let touchTarget: UInt32
     /// Which plane this input drives. Only used to decide whether the
     /// guest must be asked to build a digitizer first — see
@@ -696,11 +697,11 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             usleep(20_000)
         }
         // An external plane's digitizer does not exist until the guest
-        // is told to build one. Without this the target that
-        // `IndigoHIDTargetForScreen` hands back addresses nothing, and
-        // dispatching to it takes `backboardd` down — SpringBoard and
-        // any CarPlay session with it. Simulator.app creates the
-        // service before it ever sends a touch; so do we.
+        // is told to build one. Without this, `IndigoHIDTouchTarget.carPlay`
+        // addresses nothing, and dispatching to it takes `backboardd`
+        // down — SpringBoard and any CarPlay session with it.
+        // Simulator.app creates the service before it ever sends a
+        // touch; so do we.
         //
         // The phone is skipped: its digitizer is part of the device, and
         // asking for a second one is its own kind of wrong.
