@@ -174,7 +174,7 @@
     --nv-companion-max-w: min(100%, 720px, 42vw);
   }
   /* Two panes open: three columns share one row. */
-  #simNativeView[data-companions~="carplay"][data-companions~="watch"] {
+  #simNativeView[data-companions~="external"][data-companions~="watch"] {
     --nv-device-max-w:    min(100%, 30vw);
     --nv-companion-max-w: min(100%, 560px, 29vw);
   }
@@ -351,6 +351,44 @@
      `dvh` (dynamic viewport height) so iOS Safari's URL bar and bottom
      toolbar are subtracted from the viewport rather than overlaid on
      the bezel; `vh` first as the fallback for engines without it. */
+  /* A companion pane that couldn't bind. Sits under the pane rather
+     than over it: the empty frame is honest about there being no
+     picture, and covering it would hide the one thing that changes when
+     the fix works. Sized to the pane so the steps stay readable at any
+     width the pane is drawn at. */
+  #simNativeView .companion-fault {
+    box-sizing: border-box;
+    width: min(100%, 380px);
+    padding: 11px 13px 12px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    flex-shrink: 0;
+  }
+  #simNativeView .companion-fault-title {
+    font: 600 11.5px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    color: #fbbf24;                 /* amber: the screen is fine, the wiring isn't */
+    margin-bottom: 7px;
+  }
+  #simNativeView .companion-fault-steps {
+    margin: 0 0 9px; padding-left: 16px;
+    display: flex; flex-direction: column; gap: 5px;
+    font: 400 11.5px/1.45 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .companion-fault-steps li { overflow-wrap: anywhere; }
+  #simNativeView .companion-fault-raw {
+    display: block;
+    font: 500 10.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-faint);
+    overflow-wrap: anywhere;
+    user-select: all; -webkit-user-select: all;
+  }
+
   /* The watch's hardware buttons, as a glass pill under its pane —
      same tokens as the toolbar, so the row reads as chrome around the
      device rather than as part of what's on screen. */
@@ -384,7 +422,7 @@
   @media (max-width: 960px) {
     #simNativeView,
     #simNativeView[data-companions],
-    #simNativeView[data-companions~="carplay"][data-companions~="watch"] {
+    #simNativeView[data-companions~="external"][data-companions~="watch"] {
       --nv-device-max-w:    min(100%, 92vw);
       --nv-companion-max-w: min(100%, 720px, 92vw);
     }
@@ -1764,8 +1802,8 @@
        host says the screen is actually attached. `hidden` rather than a
        CSS-only hide so the canvases stay out of layout entirely while
        nothing is streaming into them. -->
-  <div class="companion-column" id="nativeCarPlayColumn" aria-label="CarPlay display" hidden>
-    <div class="companion-label">CarPlay</div>
+  <div class="companion-column" id="nativeCarPlayColumn" aria-label="External display" hidden>
+    <div class="companion-label">External display</div>
     <div id="nativeCarPlayFrame" class="carplay-frame" data-frame-brand="plain" tabindex="0">
       <canvas id="nativeCarPlayCanvas" width="800" height="480"></canvas>
     </div>

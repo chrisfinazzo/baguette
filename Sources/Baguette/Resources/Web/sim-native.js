@@ -93,6 +93,7 @@
   //   window.__lrReset()                   — restore defaults
   let lrEdgeOverride = null;     // null → use the default mapping
   let lrMirrorX      = false;    // false → strict CSS-rotation inverse
+
   if (typeof window !== 'undefined') {
     window.__edgeOverride = (e) => { lrEdgeOverride = e || null; console.log('[lr] edge override =', lrEdgeOverride); };
     window.__mirrorX      = (b) => { lrMirrorX = !!b;             console.log('[lr] mirror-X =', lrMirrorX); };
@@ -472,7 +473,7 @@
     // Companion panes are the user's standing choice, not this
     // session's — but their sockets don't survive a phone-session
     // restart's teardown, so reopen whichever are showing.
-    if (openCompanions.has('carplay')) void startCarPlaySession('mjpeg');
+    if (openCompanions.has('external')) void startCarPlaySession('mjpeg');
     if (openCompanions.has('watch')) void startWatchSession();
     reflectFormat(format);
     // Restore the cached orientation across format-swap remounts,
@@ -516,9 +517,9 @@
   }
 
   function openCompanion(entry) {
-    if (entry.id === 'carplay') {
+    if (entry.id === 'external') {
       showCompanionColumn('nativeCarPlayColumn', true);
-      openCompanions.add('carplay');
+      openCompanions.add('external');
       // CarPlay is mostly static; H.264 starves without an IDR cadence
       // the guest doesn't produce. MJPEG paints the first JPEG seed and
       // holds it — matches sim_carplay's reliable CarPlay path.
@@ -535,7 +536,7 @@
 
   function closeCompanion(entry) {
     openCompanions.delete(entry.id);
-    if (entry.id === 'carplay') {
+    if (entry.id === 'external') {
       stopCarPlaySession();
       showCompanionColumn('nativeCarPlayColumn', false);
     } else if (entry.id === 'watch') {
@@ -617,22 +618,87 @@
       try { carplayScreen.detach(); } catch (_) { /* ignore */ }
       carplayScreen = null;
     }
+    // Gestures on this pane used to restart the guest: the session held
+    // one digitizer target from open, derived from a connected screen id
+    // that churns every time the plane is attached, reconfigured or
+    // discarded. Dispatching to the dead one took backboardd down and
+    // SpringBoard with it. The server now re-derives per gesture and
+    // drops anything it can't target (`BoundInput` / `DisplayTouchTarget`),
+    // so the worst case is a tap that does nothing rather than a
+    // simulator that reboots.
     ensureCarPlayInput(ports.screenArea, ports.canvas);
 
+    clearCompanionFault('nativeCarPlayColumn');
     carplaySession = new window.StreamSession({
       udid, format, version: 'v2',
       display: 'carplay',
       canvas: ports.canvas,
       onSize: (w, h) => {
+        clearCompanionFault('nativeCarPlayColumn');
         if (carplayScreen) {
           carplayScreen.def.rect.width = w;
           carplayScreen.def.rect.height = h;
           carplayScreen.transport.setScreenSize(w, h);
         }
       },
+      onText: (env) => showCompanionFault('nativeCarPlayColumn', 'external', env),
       onLog: (msg) => console.log('[native:carplay]', msg),
     });
     carplaySession.start();
+  }
+
+  // --- When a companion stream can't bind ------------------------------
+  //
+  // The server already says why: it writes `{"ok":false,"error":…}` on
+  // the socket and closes. That answer used to go to `console.log` and
+  // nowhere else, so the pane sat there as an unexplained black
+  // rectangle — the single most confusing thing about the CarPlay pane.
+  // `noMatchingPort(carPlay)` means the display is registered but has no
+  // framebuffer, which is a thing the user can actually fix, so it
+  // belongs on the pane next to the instructions for fixing it.
+
+  function showCompanionFault(columnId, entryId, env) {
+    if (!env || env.ok !== false || !env.error) return false;
+    const column = document.getElementById(columnId);
+    if (!column) return true;
+    clearCompanionFault(columnId);
+
+    const entry = screensRail && screensRail.entry(entryId);
+    const note = document.createElement('div');
+    note.className = 'companion-fault';
+
+    const title = document.createElement('div');
+    title.className = 'companion-fault-title';
+    title.textContent = /noMatchingPort/.test(env.error)
+      ? 'Nothing is rendering to this screen'
+      : 'This screen could not be opened';
+    note.appendChild(title);
+
+    const steps = document.createElement('ol');
+    steps.className = 'companion-fault-steps';
+    for (const step of (entry && entry.instructions) || []) {
+      const item = document.createElement('li');
+      item.textContent = step;
+      steps.appendChild(item);
+    }
+    note.appendChild(steps);
+
+    // The server's own words, kept verbatim and last — it is the thing
+    // to search for when the steps above don't help.
+    const raw = document.createElement('code');
+    raw.className = 'companion-fault-raw';
+    raw.textContent = env.error;
+    note.appendChild(raw);
+
+    column.appendChild(note);
+    return true;
+  }
+
+  function clearCompanionFault(columnId) {
+    const column = document.getElementById(columnId);
+    if (!column) return;
+    const existing = column.querySelector('.companion-fault');
+    if (existing) existing.remove();
   }
 
   function stopCarPlaySession() {
@@ -672,6 +738,7 @@
     if (!screenArea || !canvas) return;
 
     ensureWatchInput(screenArea, canvas);
+    clearCompanionFault('nativeWatchColumn');
     watchSession = new window.StreamSession({
       udid: watchUdid, format: 'mjpeg', version: 'v2',
       display: 'phone',
@@ -683,11 +750,13 @@
         // are neither — and a guessed ratio just letterboxes the face
         // inside its own bezel.
         if (w && h) screenArea.style.aspectRatio = w + ' / ' + h;
+        clearCompanionFault('nativeWatchColumn');
         if (!watchScreen) return;
         watchScreen.def.rect.width = w;
         watchScreen.def.rect.height = h;
         watchScreen.transport.setScreenSize(w, h);
       },
+      onText: (env) => showCompanionFault('nativeWatchColumn', 'watch', env),
       onLog: (msg) => console.log('[native:watch]', msg),
     });
     watchSession.start();

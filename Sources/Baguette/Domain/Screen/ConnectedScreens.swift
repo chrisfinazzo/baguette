@@ -32,7 +32,7 @@ enum ConnectedScreens {
             throw FramebufferSelectionError.noMatchingPort(.carPlay)
         }
         let externals = ports.filter {
-            $0 != phoneWinner && FramebufferSurfacePick.acceptsCarPlay($0.size)
+            $0 != phoneWinner && FramebufferSurfacePick.acceptsExternal($0.size)
         }
         guard let best = pickBestExternal(from: externals) else {
             throw FramebufferSelectionError.noMatchingPort(.carPlay)

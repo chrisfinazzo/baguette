@@ -22,22 +22,23 @@ function entriesFor(payload) {
 
 test('every companion screen gets an entry, in a stable order', () => {
   const ids = CompanionScreens().from(null).entries().map((e) => e.id);
-  assert.deepEqual(ids, ['carplay', 'watch']);
+  assert.deepEqual(ids, ['external', 'watch']);
 });
 
-test('a connected CarPlay display is ready to open', () => {
-  const carplay = entriesFor({ carplay: { available: true } }).carplay;
-  assert.equal(carplay.status, 'ready');
-  assert.equal(carplay.label, 'CarPlay');
-  assert.ok(carplay.canOpen);
+test('an attached external display is ready to open, labelled by its size', () => {
+  const external = entriesFor({ external: { available: true, width: 800, height: 480 } }).external;
+  assert.equal(external.status, 'ready');
+  assert.equal(external.label, 'External display');
+  assert.ok(external.canOpen);
+  assert.equal(external.detail, '800 \u00d7 480');
 });
 
-test('a CarPlay display that is not attached explains how to attach one', () => {
-  const carplay = entriesFor({ carplay: { available: false } }).carplay;
-  assert.equal(carplay.status, 'absent');
-  assert.ok(!carplay.canOpen);
-  assert.ok(carplay.instructions.length > 0);
-  assert.ok(carplay.instructions.some((step) => /External Displays/.test(step)));
+test('no external display attached explains how to attach one', () => {
+  const external = entriesFor({ external: { available: false } }).external;
+  assert.equal(external.status, 'absent');
+  assert.ok(!external.canOpen);
+  assert.ok(external.instructions.length > 0);
+  assert.ok(external.instructions.some((step) => /External Displays/.test(step)));
 });
 
 test('a booted paired watch is ready, and is labelled with its own name', () => {
@@ -83,8 +84,8 @@ test('a watch marked available with no udid cannot be streamed', () => {
 
 test('openable names just the screens a click could actually show', () => {
   const screens = CompanionScreens().from({
-    carplay: { available: true },
+    external: { available: true, width: 800, height: 480 },
     watch: { available: true, udid: 'W-1', name: 'Watch', state: 'Shutdown' },
   });
-  assert.deepEqual(screens.openable().map((e) => e.id), ['carplay']);
+  assert.deepEqual(screens.openable().map((e) => e.id), ['external']);
 });

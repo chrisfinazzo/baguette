@@ -27,7 +27,7 @@
   // Host-owned glyphs, one per companion screen. Keyed by the same ids
   // `CompanionScreens` uses so a new kind lands in one place at each end.
   const GLYPHS = {
-    carplay:
+    external:
       '<path d="M4 16.5h16M5.5 16.5v2M18.5 16.5v2"/>' +
       '<path d="M4.6 16.5 6.2 9.9A2 2 0 0 1 8.1 8.4h7.8a2 2 0 0 1 1.9 1.5l1.6 6.6"/>' +
       '<path d="M6.4 13.2h11.2"/>',
@@ -162,7 +162,7 @@
       const button = document.createElement('button');
       button.className = 'screens-rail-btn';
       if (!entry.canOpen) button.classList.add('unavailable');
-      button.innerHTML = svgWrap(GLYPHS[entry.id] || GLYPHS.carplay, 18);
+      button.innerHTML = svgWrap(GLYPHS[entry.id] || GLYPHS.external, 18);
       button.title = entry.canOpen
         ? entry.label
         : entry.label + ' — ' + entry.detail;
@@ -266,6 +266,8 @@
 
       if (entry.status === 'needs-boot') {
         body.appendChild(this.bootControls(entry));
+      } else if (entry.id === 'external') {
+        body.appendChild(this.attachCarPlayControls(entry));
       } else {
         const list = document.createElement('ol');
         list.className = 'screens-steps';
@@ -287,6 +289,91 @@
       this.mount.appendChild(card);
       this.card = card;
       this.positionCard(card, this.buttons.get(entry.id));
+    }
+
+    /**
+     * Attaching a CarPlay display, as a button plus the manual steps.
+     *
+     * The button is the better path: the menu attaches the display to
+     * whichever simulator window is frontmost, and getting that wrong is
+     * the usual reason doing it by hand appears to do nothing. baguette
+     * raises this device's own window first.
+     *
+     * The steps stay underneath rather than being replaced by the
+     * button, because driving another app's menus needs Automation
+     * permission that may not be granted — and because the answer comes
+     * back as a fresh probe, this can honestly report "still nothing to
+     * stream" instead of claiming success.
+     */
+    attachCarPlayControls(entry) {
+      const wrap = document.createElement('div');
+
+      const button = document.createElement('button');
+      button.className = 'screens-card-btn';
+      button.textContent = 'Attach a CarPlay display';
+      const note = document.createElement('p');
+      note.className = 'screens-card-note';
+      note.style.margin = '9px 0 0';
+
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Attaching…';
+        note.textContent = 'Driving Simulator.app’s I/O menu — this takes a few seconds.';
+        let payload = null;
+        let failure = null;
+        try {
+          const res = await fetch(
+            '/simulators/' + encodeURIComponent(this.udid) + '/carplay-display',
+            { method: 'POST' }
+          );
+          payload = await res.json();
+          if (!res.ok) failure = (payload && payload.error) || ('HTTP ' + res.status);
+        } catch (error) {
+          failure = String((error && error.message) || error);
+        }
+        button.disabled = false;
+        button.textContent = 'Try again';
+
+        if (failure) { note.textContent = failure; return; }
+
+        // The route answers with the resulting availability, so this
+        // can tell "attached" from "clicked, and still nothing there".
+        this.screens = window.Baguette._CompanionScreens.from(payload);
+        const now = this.entry('external');
+        if (now && now.canOpen) {
+          this.closeCard();
+          this.render();
+          this.openScreen('external');
+          return;
+        }
+        note.textContent =
+          'The menu ran, but there is still no framebuffer to stream. '
+          + 'Check that a CarPlay window opened in Simulator.app — if it did not, '
+          + 'this runtime may not support one.';
+      });
+
+      wrap.appendChild(button);
+      wrap.appendChild(note);
+
+      const or = document.createElement('p');
+      or.className = 'screens-card-note';
+      or.style.margin = '11px 0 6px';
+      // The button drives the CarPlay entry specifically, and that is
+      // the entry some runtimes attach nothing for — so the manual path
+      // is not just a fallback for missing permission, it is the one
+      // that offers the resolutions that do work.
+      or.textContent = 'Or by hand — and pick a plain resolution if CarPlay does nothing:';
+      wrap.appendChild(or);
+
+      const list = document.createElement('ol');
+      list.className = 'screens-steps';
+      for (const step of entry.instructions) {
+        const item = document.createElement('li');
+        item.textContent = step;
+        list.appendChild(item);
+      }
+      wrap.appendChild(list);
+      return wrap;
     }
 
     /// A paired watch that isn't running needs one button, not a page of

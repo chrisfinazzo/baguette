@@ -9,7 +9,16 @@ import Foundation
 /// type carries rather than an error the caller has to interpret — a
 /// device with neither is the common case, not a failure.
 struct CompanionScreens: Sendable, Equatable {
-    let carPlayConnected: Bool
+    /// The size of the external display that actually bound, if one did.
+    ///
+    /// Deliberately not "is CarPlay connected". The plane binds *the
+    /// best external display* — `DisplayKind.carPlay` names the plane,
+    /// not what the host attached to it, and the External Displays menu
+    /// can attach a TVOut of some other resolution just as easily.
+    /// Labelling that "CarPlay" in the UI promises something the pane
+    /// isn't showing, so the size travels instead and the rail says what
+    /// is really there.
+    let externalSize: Size?
     let watch: PairedWatch?
 
     var json: String {
@@ -19,12 +28,17 @@ struct CompanionScreens: Sendable, Equatable {
             watchField["name"] = watch.name
             watchField["state"] = watch.state.description
         }
+        var externalField: [String: Any] = ["available": externalSize != nil]
+        if let externalSize {
+            externalField["width"] = externalSize.width
+            externalField["height"] = externalSize.height
+        }
         let dict: [String: Any] = [
-            "carplay": ["available": carPlayConnected],
+            "external": externalField,
             "watch": watchField,
         ]
         let data = (try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]))
-            ?? Data(#"{"carplay":{"available":false},"watch":{"available":false}}"#.utf8)
+            ?? Data(#"{"external":{"available":false},"watch":{"available":false}}"#.utf8)
         return String(decoding: data, as: UTF8.self)
     }
 }

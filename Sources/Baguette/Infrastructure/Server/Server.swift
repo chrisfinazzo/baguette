@@ -2171,7 +2171,18 @@ struct Server: Sendable {
     /// Pull the UDID out of a `/simulators/<udid>/<verb>` request.
     /// `<verb>` is the last segment, `<udid>` the one before.
     static func udidParam(_ request: Request) -> String {
-        let parts = request.uri.path.split(separator: "/")
+        udid(inPath: request.uri.path)
+    }
+
+    /// The positional rule every `/simulators/:udid/<verb>` route obeys,
+    /// as a pure function so routes can be pinned against it in tests.
+    ///
+    /// Positional rather than read from the router's parameters, which
+    /// is why the rule is worth stating out loud: a route that puts the
+    /// udid anywhere but second-to-last still compiles, still matches,
+    /// and then answers "unknown udid: <whatever segment landed there>".
+    static func udid(inPath path: String) -> String {
+        let parts = path.split(separator: "/")
         guard parts.count >= 3 else { return "" }
         return String(parts[parts.count - 2]).removingPercentEncoding ?? ""
     }

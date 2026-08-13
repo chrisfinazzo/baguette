@@ -23,13 +23,29 @@
   // entry existing in that case.
   const KINDS = [
     {
-      id: 'carplay',
-      label: 'CarPlay',
-      absentTitle: 'No CarPlay display attached',
+      id: 'external',
+      // "External display", not "CarPlay". The plane binds whatever the
+      // External Displays menu attached — the CarPlay entry is only one
+      // of several resolutions it offers, and on some runtimes it is the
+      // one that doesn't work while the others do. Promising CarPlay and
+      // showing an 800×480 TVOut under that name is a small lie the rail
+      // has no reason to tell.
+      label: 'External display',
+      absentTitle: 'No external display to stream',
+      // Two different situations end up here and the steps have to cover
+      // both, because from the browser they look identical. Either the
+      // device has no CarPlay screen at all, or it has one that is
+      // registered with no framebuffer behind it — an enable whose host
+      // window has since gone. The second is the confusing one: the host
+      // still lists the screen by name, but nothing composites to it and
+      // even `simctl screenshot` times out waiting for surfaces. The
+      // Disabled→CarPlay cycle is what clears it.
       instructions: [
-        'Open Simulator.app with this device frontmost.',
-        'Choose I/O → External Displays → CarPlay.',
-        'Come back here and reload — the display shows up as soon as it is attached.',
+        'Open Simulator.app and bring this device’s window to the front.',
+        'Choose I/O → External Displays, then any entry — CarPlay, or one of the plain resolutions.',
+        'If it was already set to that entry, pick Disabled first and choose it again — a display left registered without its window has no framebuffer to stream.',
+        'Some runtimes attach the plain resolutions but not CarPlay. If CarPlay does nothing, try one of the others.',
+        'Leave that window open, then press Check again.',
       ],
     },
     {
@@ -91,13 +107,28 @@
       return this.status === 'ready';
     }
 
-    /** One line under the label — what is going on with this screen. */
+    /**
+     * One line under the label — what is going on with this screen.
+     *
+     * An attached external reports its size, because that is the only
+     * thing distinguishing the display you asked for from the one the
+     * menu actually gave you.
+     */
     get detail() {
       switch (this.status) {
-        case 'ready':      return this.id === 'watch' ? 'Booted' : 'Attached';
+        case 'ready':
+          if (this.id === 'watch') return 'Booted';
+          return this.size ? this.size.width + ' × ' + this.size.height : 'Attached';
         case 'needs-boot': return 'Not booted';
         default:           return this.absentTitle;
       }
+    }
+
+    /** The bound display's pixel size, when the host reported one. */
+    get size() {
+      const { width, height } = this._report;
+      if (!width || !height) return null;
+      return { width, height };
     }
   }
 

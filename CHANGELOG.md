@@ -33,11 +33,54 @@ For releases prior to this changelog, see the
 
 ### Fixed
 
+- **Touching the external-display pane restarted the simulator.** A stream
+  session resolves its `Input` once, at socket open, and holds it — fine for the
+  phone's constant digitizer, wrong for an external plane, whose target is
+  derived from a connected screen id that churns every time the display is
+  attached, reconfigured or discarded. The captured target routinely described a
+  screen that no longer existed, and dispatching there killed `backboardd`,
+  taking SpringBoard and any CarPlay session with it (it presents as the phone
+  rebooting on its own). Three fallbacks turned "we don't know" into a confident
+  wrong answer and are gone: the stale-binding fallback, the `?? 0` screen id,
+  and — worst — `?? IndigoHIDTouchTarget.phone`, which redirected the external
+  display's gestures onto the phone. New `BoundInput` re-derives the target on
+  every gesture and drops anything it can't target, so the worst case is a tap
+  that does nothing rather than a simulator that restarts.
 - **Opening a device's tab no longer attaches a CarPlay display to it.** The
   CarPlay pane used to mount unconditionally, and `?display=carplay` asks the
   host to *enable* CarPlay — so merely looking at a simulator reached into
   Simulator.app and turned one on. Nothing is asked for now until you open the
   pane from the rail, and the rail only offers a display that is already there.
+- **The CarPlay pane was a black rectangle with no explanation.** Two causes,
+  both fixed. The rail called CarPlay "attached" on the strength of a name in
+  `simctl io enumerate`'s Connected Screens — but a display can be registered
+  with no framebuffer behind it once its host window has gone, and Apple's own
+  `simctl screenshot` fails on it with "Timeout waiting for screen surfaces".
+  Availability is now the same `Display.resolve()` the stream performs, so the
+  rail and the stream can't disagree, and an unbindable display shows the
+  instructions for attaching a working one (including the Disabled → CarPlay
+  cycle that clears a stale registration). Separately, when a stream does fail
+  to bind, the server's `{"ok":false,"error":…}` used to go to `console.log`
+  and nowhere else; it now renders under the pane with those instructions and
+  the verbatim error. The card also grew an **Attach a CarPlay display** button
+  (`POST /simulators/:udid/carplay-display`) that drives the menu dance itself —
+  raising this device's own window first, which is the step that goes wrong when
+  a person does it by hand with another simulator frontmost — and answers with a
+  fresh bind probe, so it can report "the menu ran and there is still nothing to
+  stream" instead of claiming success.
+- **The pane called itself CarPlay while showing whatever external display was
+  attached.** The plane binds *the best external* — the I/O → External Displays
+  menu offers CarPlay alongside several plain resolutions, and on an iOS 27 beta
+  the plain ones attach and stream while CarPlay attaches nothing at all. The
+  rail now says **External display** and names the size it bound
+  (`{"external":{"available":true,"width":800,"height":480}}`), and the
+  instructions say to try a resolution when CarPlay does nothing.
+- **A 1080p external display reported itself as "nothing attached".** The
+  external plane refused any surface above `800 × 480 × 4` — a leftover from
+  when the pane was only ever CarPlay, whose screen is 720×480. The menu offers
+  ordinary resolutions and they are real displays, so the upper bound is gone
+  (`acceptsCarPlay` → `acceptsExternal`). The landscape check stays: it is what
+  keeps a portrait phone plane from being mirrored into the external pane.
 - **The device rendered at half size (or a third) when nothing was beside it.**
   The phone was pinned to `46vw` at every window width for the CarPlay pane's
   benefit, and the narrow-window rule meant to relax that sat *earlier* in the

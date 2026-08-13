@@ -53,6 +53,49 @@ struct FramebufferSurfacePickTests {
         #expect(index == nil)
     }
 
+    /// The external plane used to refuse anything above 800×480×4 —
+    /// a leftover from when this pane was only ever CarPlay, whose
+    /// screen is 720×480. The I/O → External Displays menu offers
+    /// ordinary resolutions too, and a 1080p one is a perfectly good
+    /// display to stream; rejecting it just reported "nothing attached"
+    /// at a screen the user was looking at.
+    @Test func `a full-HD external is a candidate`() {
+        #expect(FramebufferSurfacePick.acceptsExternal(Size(width: 1920, height: 1080)))
+        #expect(FramebufferSurfacePick.acceptsExternal(Size(width: 3840, height: 2160)))
+    }
+
+    /// Landscape is the check that still earns its keep: it is what
+    /// keeps a portrait phone plane out of the external pane when the
+    /// largest-area heuristic has already spent itself on some other
+    /// port. Mirroring SpringBoard into the external pane is worse than
+    /// showing nothing, because it looks like it worked.
+    @Test func `a portrait plane is never an external candidate`() {
+        #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 1206, height: 2622)))
+        #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 1179, height: 2556)))
+    }
+
+    @Test func `a degenerate sliver is not a display`() {
+        #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 100, height: 100)))
+        #expect(!FramebufferSurfacePick.acceptsExternal(Size(width: 0, height: 0)))
+    }
+
+    @Test func `a large landscape surface is picked for a large binding`() {
+        let binding = DisplayBinding(
+            kind: .carPlay,
+            connectedScreenId: 2,
+            portName: "com.apple.framebuffer.display",
+            size: Size(width: 1920, height: 1080)
+        )
+        let index = FramebufferSurfacePick.index(
+            binding: binding,
+            candidates: [
+                Size(width: 1206, height: 2622),
+                Size(width: 1920, height: 1080),
+            ]
+        )
+        #expect(index == 1)
+    }
+
     @Test func unboundScreenFallsBackToLargestArea() {
         let index = FramebufferSurfacePick.index(
             binding: nil,

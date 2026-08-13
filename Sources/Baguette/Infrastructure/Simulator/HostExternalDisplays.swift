@@ -39,4 +39,18 @@ final class HostExternalDisplays: ExternalDisplays, @unchecked Sendable {
         enabledAfterSuccess = true
         lock.unlock()
     }
+
+    /// Deliberately does not consult the probe — see `ExternalDisplays`.
+    /// The cached `enabledAfterSuccess` is reset first so a cycle that
+    /// silently attaches nothing can't leave the probe insisting a
+    /// display is there on the strength of a previous success.
+    func reattachCarPlay() throws {
+        lock.lock()
+        enabledAfterSuccess = false
+        lock.unlock()
+        try panel.recoverCarPlay()
+        lock.lock()
+        enabledAfterSuccess = true
+        lock.unlock()
+    }
 }
