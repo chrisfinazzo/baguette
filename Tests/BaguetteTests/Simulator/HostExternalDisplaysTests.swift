@@ -76,6 +76,42 @@ struct HostExternalDisplaysTests {
         verify(panel).enableCarPlay().called(1)
     }
 
+    /// Enabling is guarded by the probe, and rightly so — clicking the
+    /// menu when CarPlay is already on would tear down a working
+    /// display. Reattaching is the opposite request: the caller is
+    /// saying "what's listed is no good". A screen can sit in Connected
+    /// Screens with no framebuffer behind it, which is precisely the
+    /// state that needs the Disabled → CarPlay cycle, and precisely the
+    /// state where the probe says "already connected, nothing to do".
+    /// So reattach must not consult it.
+    @Test func `reattach cycles the panel even when a screen is already listed`() throws {
+        let panel = MockExternalDisplayPanel()
+        given(panel).recoverCarPlay().willReturn()
+        let external = HostExternalDisplays(
+            panel: panel,
+            enumerateIO: { self.connectedEnumerate }
+        )
+
+        #expect(external.isCarPlayConnected)
+        try external.reattachCarPlay()
+
+        verify(panel).recoverCarPlay().called(1)
+        verify(panel).enableCarPlay().called(0)
+    }
+
+    @Test func `reattach on a device with no external at all still cycles`() throws {
+        let panel = MockExternalDisplayPanel()
+        given(panel).recoverCarPlay().willReturn()
+        let external = HostExternalDisplays(
+            panel: panel,
+            enumerateIO: { self.phoneOnlyEnumerate }
+        )
+
+        try external.reattachCarPlay()
+
+        verify(panel).recoverCarPlay().called(1)
+    }
+
     private final class EnumerateState: @unchecked Sendable {
         var text: String
         init(text: String) { self.text = text }

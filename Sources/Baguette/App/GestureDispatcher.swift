@@ -3,7 +3,14 @@ import Foundation
 /// Parses one stdin line as JSON, routes through `GestureRegistry`, and
 /// dispatches the resulting `Gesture` against an `Input`. Returns a one-line
 /// JSON ack the caller writes to stdout.
-final class GestureDispatcher {
+///
+/// `@unchecked` because `GestureRegistry` is a class with a mutating
+/// `register` API. Both stored properties are `let`, `Input` is
+/// `Sendable`, and a registry is only ever written while it is being
+/// built (`GestureRegistry.standard`, or a test's own) — `dispatch`
+/// reads it and nothing else. What crosses the isolation boundary is a
+/// finished, frozen object.
+final class GestureDispatcher: @unchecked Sendable {
     private let input: any Input
     private let registry: GestureRegistry
 

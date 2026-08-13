@@ -82,6 +82,41 @@ struct ConnectedScreensTests {
         #expect(binding.size == nearPlist.size)
     }
 
+    /// A 4K external out-measures every phone, so "the device is the
+    /// largest plane" quietly hands the device slot to the external —
+    /// and the portrait phone left over is not a landscape external, so
+    /// the pane then reported nothing attached for a screen the user was
+    /// looking at. The device is picked by its own shape, not by size.
+    @Test func `carPlay binds a 4K external larger than the phone plane`() throws {
+        let uhd = FramebufferPortSnapshot(
+            portName: "com.apple.framebuffer.display",
+            connectedScreenId: 2,
+            size: Size(width: 3840, height: 2160)
+        )
+        let binding = try ConnectedScreens.binding(
+            kind: .carPlay,
+            ports: [phonePort, uhd]
+        )
+        #expect(binding.connectedScreenId == 2)
+        #expect(binding.size == uhd.size)
+    }
+
+    /// Same list, other plane: the phone must not be handed the external
+    /// either, or the device pane streams the car's screen.
+    @Test func `phone keeps its own plane when a larger external is attached`() throws {
+        let uhd = FramebufferPortSnapshot(
+            portName: "com.apple.framebuffer.display",
+            connectedScreenId: 2,
+            size: Size(width: 3840, height: 2160)
+        )
+        let binding = try ConnectedScreens.binding(
+            kind: .phone,
+            ports: [uhd, phonePort]
+        )
+        #expect(binding.connectedScreenId == 1)
+        #expect(binding.size == phonePort.size)
+    }
+
     @Test func `carPlay throws when no external remains after excluding phone`() {
         #expect(throws: FramebufferSelectionError.noMatchingPort(.carPlay)) {
             try ConnectedScreens.binding(kind: .carPlay, ports: [phonePort])

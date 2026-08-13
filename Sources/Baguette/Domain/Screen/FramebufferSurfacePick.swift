@@ -1,12 +1,11 @@
 import Foundation
 
 /// Picks which live framebuffer surface to emit for a display binding.
-/// CarPlay never falls back to a phone-sized plane — better to emit
-/// nothing than to mirror SpringBoard into the CarPlay pane.
+/// The external plane never falls back to a phone-sized plane — better
+/// to emit nothing than to mirror SpringBoard into the external pane.
 enum FramebufferSurfacePick {
-    /// Soft upper bound: CarPlay-ish surfaces stay well under a phone panel.
-    private static let maxCarPlayArea = 800.0 * 480.0 * 4.0
-    private static let minCarPlayArea = 50_000.0
+    /// Below this, a surface is a stub or a scratch buffer, not a screen.
+    private static let minExternalArea = 50_000.0
 
     static func index(
         binding: DisplayBinding?,
@@ -20,7 +19,7 @@ enum FramebufferSurfacePick {
         case .phone:
             return closestIndex(to: binding.size, in: candidates)
         case .carPlay:
-            let eligible = candidates.indices.filter { acceptsCarPlay(candidates[$0]) }
+            let eligible = candidates.indices.filter { acceptsExternal(candidates[$0]) }
             guard !eligible.isEmpty else { return nil }
             return eligible.min { a, b in
                 distance(candidates[a], binding.size) < distance(candidates[b], binding.size)
@@ -28,10 +27,26 @@ enum FramebufferSurfacePick {
         }
     }
 
-    static func acceptsCarPlay(_ size: Size) -> Bool {
-        size.width >= size.height
-            && size.area >= minCarPlayArea
-            && size.area <= maxCarPlayArea
+    /// Whether a surface could be the external display.
+    ///
+    /// Landscape, and big enough to be a screen. There used to be an
+    /// upper bound too — `800 × 480 × 4` — from when this plane was
+    /// only ever CarPlay, whose screen is 720×480. But the plane binds
+    /// whatever the External Displays menu attached, and that menu
+    /// offers ordinary resolutions: a 1080p display is a real display,
+    /// and refusing it reported "nothing attached" for a screen the user
+    /// was looking at.
+    ///
+    /// The landscape test is the one that matters and stays. It is what
+    /// keeps a portrait phone plane out of the external pane — mirroring
+    /// SpringBoard there is worse than showing nothing, because it looks
+    /// like it worked.
+    ///
+    /// Strictly wider than tall: a square is not a display's shape, and
+    /// `>=` let any square scratch buffer over the area floor bind as
+    /// the external plane.
+    static func acceptsExternal(_ size: Size) -> Bool {
+        size.width > size.height && size.area >= minExternalArea
     }
 
     private static func closestIndex(to target: Size, in candidates: [Size]) -> Int? {
@@ -47,6 +62,6 @@ enum FramebufferSurfacePick {
     }
 }
 
-private extension Size {
+extension Size {
     var area: Double { width * height }
 }

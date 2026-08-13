@@ -12,9 +12,14 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
     /// Digitizer routing target for this input surface. Phone defaults
-    /// to `IndigoHIDTouchTarget.phone`. CarPlay callers inject the
-    /// value from `IndigoHIDTargetForScreen(connectedScreenId)`.
+    /// to `IndigoHIDTouchTarget.phone`; CarPlay callers inject
+    /// `IndigoHIDTouchTarget.carPlay`. Both are constants naming a
+    /// service something created — never anything derived from a screen.
     let touchTarget: UInt32
+    /// Which plane this input drives. Only used to decide whether the
+    /// guest must be asked to build a digitizer first — see
+    /// `warmServices`.
+    private let plane: DisplayKind
 
     private var client: AnyObject?
     private var warmed = false
@@ -56,6 +61,22 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private typealias HIDArbitraryFn = @convention(c) (UInt32, UInt32, UInt32, UInt32) -> UnsafeMutableRawPointer?
     private typealias ScrollFn = @convention(c) (UInt32, Double, Double, Double) -> UnsafeMutableRawPointer?
     private typealias ServiceFn = @convention(c) () -> UnsafeMutableRawPointer?
+    /// `IndigoHIDMessageToCreateCarPlayService` — unlike its pointer and
+    /// mouse siblings it takes one byte.
+    ///
+    /// Disassembling Simulator.app's call site names it:
+    ///
+    ///     id   config   = [self starkConfig];        // "Stark" = CarPlay
+    ///     BOOL hasTouch = [config hasTouchScreen];
+    ///     msg = IndigoHIDMessageToCreateCarPlayService(hasTouch);
+    ///     [self sendIndigoHIDData:msg];
+    ///
+    /// So the byte is `hasTouchScreen`, not a screen index: `true` for a
+    /// touchscreen head unit, `false` for a knob-driven one. The message
+    /// itself is the same 192-byte struct the siblings build, differing
+    /// only in opcode (`[0x30] = 7`, vs 3 for pointer and 5 for mouse)
+    /// and in carrying the flag at `[0x44]`.
+    private typealias CarPlayServiceFn = @convention(c) (UInt8) -> UnsafeMutableRawPointer?
 
     private var mouseFn: MouseFn?
     private var mouseEdgeFn: MouseEdgeFn?
@@ -65,6 +86,8 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private var createPointerSvc: ServiceFn?
     private var createMouseSvc: ServiceFn?
     private var removePointerSvc: ServiceFn?
+    private var createCarPlaySvc: CarPlayServiceFn?
+    private var removeCarPlaySvc: ServiceFn?
 
     // Wire constants — kept private; the user never sees these.
     private static let nsEventDown:    UInt32 = 1
@@ -86,10 +109,12 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private static let edgeRight:  UInt32 = 4
 
     init(udid: String, host: any DeviceHost,
-         touchTarget: UInt32 = IndigoHIDTouchTarget.phone) {
+         touchTarget: UInt32 = IndigoHIDTouchTarget.phone,
+         plane: DisplayKind = .phone) {
         self.udid = udid
         self.host = host
         self.touchTarget = touchTarget
+        self.plane = plane
     }
 
     private func resolveDevice() -> NSObject? {
@@ -99,6 +124,12 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     deinit {
         if warmed, let client {
             if let remove = removePointerSvc, let msg = remove() {
+                send(message: msg, to: client)
+            }
+            // Leaving a digitizer behind for a display that has gone is
+            // how the next session inherits a target addressing nothing.
+            if plane.needsExternalDigitizer,
+               let remove = removeCarPlaySvc, let msg = remove() {
                 send(message: msg, to: client)
             }
         }
@@ -608,8 +639,17 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             if let err { logErr("SimDeviceLegacyHIDClient init failed: \(err)") }
             return nil
         }
+        // Fail closed. If this plane needs a digitizer and the guest
+        // could not be told to build one, every gesture that follows
+        // would address a target no service registered — and
+        // `SimHIDVirtualServiceManager` answers that by throwing, which
+        // takes `backboardd` and SpringBoard with it. A dead pane beats
+        // a dead simulator.
+        guard warmServices(on: c) else {
+            client = nil
+            return nil
+        }
         client = c
-        warmServices(on: c)
         warmed = true
         return c
     }
@@ -640,10 +680,14 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         createPointerSvc = dlsym(handle, "IndigoHIDMessageToCreatePointerService").map { unsafeBitCast($0, to: ServiceFn.self) }
         createMouseSvc   = dlsym(handle, "IndigoHIDMessageToCreateMouseService").map { unsafeBitCast($0, to: ServiceFn.self) }
         removePointerSvc = dlsym(handle, "IndigoHIDMessageToRemovePointerService").map { unsafeBitCast($0, to: ServiceFn.self) }
-        log("[hid] symbols resolved — mouse:\(mouseFn != nil) mouseEdge:\(mouseEdgeFn != nil) button:\(buttonFn != nil) hidArb:\(hidArbFn != nil) scroll:\(scrollFn != nil)")
+        createCarPlaySvc = dlsym(handle, "IndigoHIDMessageToCreateCarPlayService").map { unsafeBitCast($0, to: CarPlayServiceFn.self) }
+        removeCarPlaySvc = dlsym(handle, "IndigoHIDMessageToRemoveCarPlayService").map { unsafeBitCast($0, to: ServiceFn.self) }
+        log("[hid] symbols resolved — mouse:\(mouseFn != nil) mouseEdge:\(mouseEdgeFn != nil) button:\(buttonFn != nil) hidArb:\(hidArbFn != nil) scroll:\(scrollFn != nil) carPlaySvc:\(createCarPlaySvc != nil)")
     }
 
-    private func warmServices(on client: AnyObject) {
+    /// Returns false when this plane cannot be safely dispatched to.
+    @discardableResult
+    private func warmServices(on client: AnyObject) -> Bool {
         if let create = createPointerSvc, let msg = create() {
             send(message: msg, to: client)
             usleep(20_000)
@@ -652,5 +696,33 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             send(message: msg, to: client)
             usleep(20_000)
         }
+        // An external plane's digitizer does not exist until the guest
+        // is told to build one. Without this, `IndigoHIDTouchTarget.carPlay`
+        // addresses nothing, and dispatching to it takes `backboardd`
+        // down — SpringBoard and any CarPlay session with it.
+        // Simulator.app creates the service before it ever sends a
+        // touch; so do we.
+        //
+        // The phone is skipped: its digitizer is part of the device, and
+        // asking for a second one is its own kind of wrong.
+        guard plane.needsExternalDigitizer else { return true }
+        guard let create = createCarPlaySvc else {
+            logErr("[hid] CreateCarPlayService missing — refusing to dispatch to \(hex(touchTarget)); "
+                 + "no service would be registered there and the guest throws on unknown targets")
+            return false
+        }
+        // `true` = hasTouchScreen, read off Simulator.app's starkConfig
+        // at its own call site. Nothing reaches here without wanting
+        // touch, so a knob-only head unit is not a case we have.
+        guard let msg = create(1) else {
+            logErr("[hid] CreateCarPlayService returned no message — refusing to dispatch")
+            return false
+        }
+        send(message: msg, to: client)
+        usleep(20_000)
+        log("[hid] carplay digitizer registered at \(hex(touchTarget))")
+        return true
     }
+
+    private func hex(_ value: UInt32) -> String { "0x" + String(value, radix: 16) }
 }

@@ -133,6 +133,7 @@ struct Server: Sendable {
         registerPluginRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerBakeryRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in
@@ -634,6 +635,7 @@ struct Server: Sendable {
         "carplay-frames/plain",
         "devices",
         "farm",
+        "screens",
         "vendor/leaflet",
     ]
 
@@ -1610,7 +1612,7 @@ struct Server: Sendable {
                     try? await outbound.write(.text(frame))
                     continue
                 }
-                handleInbound(line: line, stream: stream, dispatcher: dispatcher)
+                await handleInbound(line: line, stream: stream, dispatcher: dispatcher)
             }
         } catch {
             // socket closed; defer cleans up
@@ -1684,7 +1686,7 @@ struct Server: Sendable {
                     try? await outbound.write(.text(frame))
                     continue
                 }
-                handleInbound(
+                await handleInbound(
                     line: line,
                     stream: stream,
                     dispatcher: dispatcher
@@ -2144,11 +2146,21 @@ struct Server: Sendable {
     /// to detect), then format-level verbs, then gesture dispatch as
     /// the catch-all. ReconfigParser returns the same config when
     /// the line wasn't a `set_*` — that's our discriminator.
+    ///
+    /// The gesture leg hops to `MainActor` because
+    /// `IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent
+    /// thread-local state, and this runs on a NIO event-loop thread —
+    /// which builds malformed messages the simulator silently drops.
+    /// `ServerPluginRoutes.dispatchInput` has always done this for the
+    /// `POST …/input` route; the stream socket is the path the browser's
+    /// two-finger gestures actually ride, and it was dispatching raw.
+    /// Only stream config and format verbs stay off the hop — they
+    /// touch no AppKit state.
     private static func handleInbound(
         line: String,
         stream: any Stream,
         dispatcher: GestureDispatcher
-    ) {
+    ) async {
         let next = ReconfigParser.apply(line, to: stream.config)
         if next != stream.config {
             stream.apply(next)
@@ -2163,13 +2175,24 @@ struct Server: Sendable {
             default: break
             }
         }
-        _ = dispatcher.dispatch(line: line)
+        _ = await MainActor.run { dispatcher.dispatch(line: line) }
     }
 
     /// Pull the UDID out of a `/simulators/<udid>/<verb>` request.
     /// `<verb>` is the last segment, `<udid>` the one before.
     static func udidParam(_ request: Request) -> String {
-        let parts = request.uri.path.split(separator: "/")
+        udid(inPath: request.uri.path)
+    }
+
+    /// The positional rule every `/simulators/:udid/<verb>` route obeys,
+    /// as a pure function so routes can be pinned against it in tests.
+    ///
+    /// Positional rather than read from the router's parameters, which
+    /// is why the rule is worth stating out loud: a route that puts the
+    /// udid anywhere but second-to-last still compiles, still matches,
+    /// and then answers "unknown udid: <whatever segment landed there>".
+    static func udid(inPath path: String) -> String {
+        let parts = path.split(separator: "/")
         guard parts.count >= 3 else { return "" }
         return String(parts[parts.count - 2]).removingPercentEncoding ?? ""
     }
