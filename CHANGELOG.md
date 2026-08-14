@@ -10,6 +10,37 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+
+- **The plugins rail follows the focus-mode design system.** The rail, its
+  flyout, the panel and the bakery modal were styled by a stylesheet
+  `sim-plugins.js` injected into `document.head` — and a stylesheet written
+  beside its module can't see the `--nv-*` theme tokens, which are defined on
+  `#simNativeView`. Every colour in it therefore carried a guessed fallback,
+  and the guesses were light-theme values: light-slate shadows with no dark
+  variant, a white `var(--panel)` text field inside a dark glass modal, and an
+  accent pulled from `sim.html`'s light-only `--accent` rather than
+  `--nv-accent`. It also invented its own geometry — 34×34 rail buttons at
+  radius 9 against the toolbar's 30×28 at radius 8, a `600 10px/0.06em` accent
+  heading against the app's `700 9.5px/0.10em` faint one, a fourth primary
+  button, and four 2px accent seams no other surface has.
+
+  All of it now lives in `sim-native.html` under `#simNativeView`, beside the
+  panels it sits next to, with no fallbacks — the same arrangement the logs,
+  status-bar, location and a11y panels already use. The companion-screens rail
+  moved with it and the two now share every rule they had duplicated. The rails
+  being separate is the trust signal (see `docs/features/plugins.md`); the
+  plugin rail keeps its accent emblem to say which is which, and drops the
+  second colour system that was layered on top.
+
+### Added
+
+- `--nv-danger`, `--nv-warn` and `--nv-scrim` theme tokens, in both light and
+  dark. A panel reporting an error previously picked its own red, and the one
+  it picked was a light-theme `#b91c1c` on a near-black page. Plugin row
+  severity is now a `data-severity` attribute the stylesheet colours, rather
+  than an inline hex the module carries.
+
 ---
 
 ## [0.1.91] - 2026-08-14
