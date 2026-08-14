@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.91] - 2026-08-14
+
 ### Added
 
 - **Companion screens rail.** A rail on the right edge of `/simulators/<udid>`
@@ -648,7 +652,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.90...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.91...HEAD
+[0.1.91]: https://github.com/tddworks/baguette/compare/v0.1.90...v0.1.91
 [0.1.90]: https://github.com/tddworks/baguette/compare/v0.1.89...v0.1.90
 [0.1.89]: https://github.com/tddworks/baguette/compare/v0.1.88...v0.1.89
 [0.1.88]: https://github.com/tddworks/baguette/compare/v0.1.87...v0.1.88
