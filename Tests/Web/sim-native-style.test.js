@@ -115,3 +115,43 @@ test('the size budget defines every variable the device and panes size from', ()
     assert.ok(defined.has(name), `${name} is not defined anywhere`);
   }
 });
+
+// The two checks below are about *where* focus-mode styling lives, not
+// whether it parses. A panel that ships its own stylesheet is styling
+// itself against a token set it can't see, so it drifts — different
+// radii, a shadow that never learned about dark mode, an accent pulled
+// from whatever `--accent` happens to mean on the page it landed on.
+// The rest of the focus chrome (logs, status bar, location, the a11y
+// inspector) contributes zero CSS and is styled here; these keep it that
+// way.
+
+/** Panel modules that render into `#simNativeView` and must not carry CSS. */
+const PANEL_MODULES = ['sim-plugins.js', 'sim-screens.js'];
+
+test('panel modules inject no stylesheet of their own', () => {
+  for (const name of PANEL_MODULES) {
+    const src = fs.readFileSync(path.join(path.dirname(TEMPLATE), name), 'utf8');
+    assert.ok(
+      !/createElement\(\s*['"]style['"]\s*\)/.test(src),
+      `${name} builds a <style> element — focus-mode CSS belongs in ` +
+      'sim-native.html under #simNativeView, where the --nv-* tokens are'
+    );
+  }
+});
+
+test('the focus-mode stylesheet reads no token from outside the --nv-* set', () => {
+  const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
+  // `--bg` / `--text` are the standalone-preview :root in <head>, which
+  // only applies under file://; `--swatch` is written per-element from
+  // sim-3d.js. Everything else must come from the theme block, because
+  // only those names are redefined for light and dark.
+  const allowed = new Set(['--bg', '--text', '--swatch']);
+  const foreign = [...new Set(
+    [...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1])
+  )].filter((name) => !name.startsWith('--nv-') && !allowed.has(name));
+  assert.deepEqual(
+    foreign, [],
+    'these resolve against sim.html\'s light-only :root, so they never ' +
+    'change for dark mode — use the --nv-* equivalent'
+  );
+});

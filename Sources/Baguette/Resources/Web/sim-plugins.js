@@ -54,7 +54,10 @@
 
   ICONS.puzzle = PUZZLE;
 
-  const SEVERITY_COLOR = { error: '#b91c1c', warn: '#b45309', info: '#64748b' };
+  // The severities the stylesheet draws a dot for. Anything else — a
+  // level from a newer manifest, or a typo — falls back to `info`
+  // rather than reaching the page as an unrecognised attribute value.
+  const SEVERITIES = ['info', 'warn', 'error'];
 
   function escapeHTML(s) {
     return String(s == null ? '' : s)
@@ -148,7 +151,6 @@
     }
 
     render() {
-      PluginPanels.injectCSS();
       this.buildRail();
       for (const group of this.visibleGroups()) this.addGroup(group);
       // The "+ Add" entry point always shows, so a fresh user with no
@@ -478,10 +480,10 @@
       }
       const action = new window.Baguette._PluginRowAction(rowAction);
       const items = rows.map((row, index) => {
-        const color = SEVERITY_COLOR[row.severity] || SEVERITY_COLOR.info;
+        const severity = SEVERITIES.includes(row.severity) ? row.severity : 'info';
         const clickable = action.actionable(row) ? ' plugin-row-clickable' : '';
         return '<li class="plugin-row' + clickable + '" data-index="' + index + '">'
-             + '<span class="plugin-dot" style="background:' + color + '"></span>'
+             + '<span class="plugin-dot" data-severity="' + severity + '"></span>'
              + '<span class="plugin-row-text">'
              +   '<span class="plugin-row-title">' + escapeHTML(row.title) + '</span>'
              +   (row.subtitle
@@ -605,171 +607,11 @@
 
   }
 
-  // Host-owned styling. Injected here rather than added to
-  // sim-native.html so the module stays self-contained; no plugin
-  // contributes CSS. The rail gets an accent seam so it reads as a
-  // distinct system, not another toolbar.
-  const CSS = `
-  .plugin-rail { position: fixed; right: 16px; top: 50%; transform: translateY(-50%);
-                 display: flex; flex-direction: column; align-items: center; gap: 6px;
-                 padding: 8px 6px; z-index: 45;
-                 background: var(--nv-bar-bg, rgba(255,255,255,0.92));
-                 border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.10));
-                 border-left: 2px solid var(--accent, #2563eb);
-                 border-radius: 14px;
-                 box-shadow: var(--nv-bar-shadow, 0 8px 30px rgba(15,23,42,0.12));
-                 backdrop-filter: blur(18px) saturate(1.5);
-                 -webkit-backdrop-filter: blur(18px) saturate(1.5);
-                 color: var(--nv-text, #1d1d1f); }
-  .plugin-rail-cap { display: inline-flex; align-items: center; justify-content: center;
-                     width: 30px; height: 24px; color: var(--accent, #2563eb); opacity: 0.85; }
-  .plugin-rail-divider { width: 20px; height: 1px; margin: 1px 0 3px;
-                         background: var(--nv-divider, rgba(15,23,42,0.14)); }
-  .plugin-rail-btn { position: relative; width: 34px; height: 34px; padding: 0; border: 0;
-                     cursor: pointer;
-                     display: inline-flex; align-items: center; justify-content: center;
-                     background: transparent; border-radius: 9px; color: var(--nv-text, #1d1d1f);
-                     transition: background 0.12s ease, transform 0.12s ease; }
-  .plugin-rail-btn:hover  { background: var(--nv-btn-hover, rgba(15,23,42,0.06)); }
-  .plugin-rail-btn:active { transform: scale(0.94); }
-  .plugin-rail-btn.active { background: color-mix(in srgb, var(--accent, #2563eb) 16%, transparent);
-                            color: var(--accent, #2563eb); }
-  .plugin-rail-btn.expanded { background: var(--nv-btn-hover, rgba(15,23,42,0.06)); }
-  /* A caret on plugins that hold more than one tool: says "there is
-     more here, and it opens leftward" before you hover to find out. */
-  .plugin-rail-group::after { content: ''; position: absolute; left: 3px; top: 50%;
-                              margin-top: -3px; border: 3px solid transparent;
-                              border-right-color: currentColor; opacity: 0.4;
-                              transition: opacity 0.12s ease; }
-  .plugin-rail-group:hover::after, .plugin-rail-group.expanded::after { opacity: 0.75; }
-
-  .plugin-flyout { position: fixed; z-index: 50; min-width: 172px; max-width: 260px;
-                   padding: 5px; display: flex; flex-direction: column; gap: 1px;
-                   background: var(--nv-bar-bg, rgba(255,255,255,0.96));
-                   border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.10));
-                   border-right: 2px solid var(--accent, #2563eb);
-                   border-radius: 12px;
-                   box-shadow: 0 10px 34px rgba(15,23,42,0.20);
-                   backdrop-filter: blur(18px) saturate(1.5);
-                   -webkit-backdrop-filter: blur(18px) saturate(1.5);
-                   animation: plugin-flyout-in 0.12s ease-out; }
-  @keyframes plugin-flyout-in { from { opacity: 0; transform: translateX(6px); }
-                                to   { opacity: 1; transform: translateX(0); } }
-  @media (prefers-reduced-motion: reduce) { .plugin-flyout { animation: none; } }
-  .plugin-flyout-head { padding: 5px 8px 6px; font: 600 10px/1 -apple-system, sans-serif;
-                        letter-spacing: 0.06em; text-transform: uppercase;
-                        color: var(--accent, #2563eb);
-                        border-bottom: 1px solid var(--nv-divider, rgba(15,23,42,0.10));
-                        margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis;
-                        white-space: nowrap; }
-  .plugin-flyout-item { display: flex; align-items: center; gap: 9px; width: 100%;
-                        padding: 7px 9px; border: 0; border-radius: 8px; cursor: pointer;
-                        background: transparent; text-align: left;
-                        font: 500 12px/1.2 -apple-system, sans-serif;
-                        color: var(--nv-text, #1d1d1f);
-                        transition: background 0.1s ease; }
-  .plugin-flyout-item:hover { background: var(--nv-btn-hover, rgba(15,23,42,0.06)); }
-  .plugin-flyout-item.active { background: color-mix(in srgb, var(--accent, #2563eb) 14%, transparent);
-                               color: var(--accent, #2563eb); }
-  .plugin-flyout-glyph { display: inline-flex; flex: 0 0 auto;
-                         color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-  .plugin-flyout-item:hover .plugin-flyout-glyph,
-  .plugin-flyout-item.active .plugin-flyout-glyph { color: inherit; }
-  .plugin-flyout-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .plugin-host { position: fixed; right: 72px; top: 50%; transform: translateY(-50%);
-                 width: 340px; max-height: 66vh; z-index: 44; }
-  .plugin-card { background: var(--nv-bar-bg, rgba(255,255,255,0.94));
-                 border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.10));
-                 border-top: 2px solid var(--accent, #2563eb);
-                 border-radius: 14px; box-shadow: 0 10px 34px rgba(15,23,42,0.20);
-                 backdrop-filter: blur(18px) saturate(1.5);
-                 -webkit-backdrop-filter: blur(18px) saturate(1.5);
-                 overflow: hidden; display: flex; flex-direction: column; max-height: 66vh; }
-  .plugin-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-                 border-bottom: 1px solid var(--nv-divider, rgba(15,23,42,0.10)); }
-  .plugin-title { font: 600 12px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-                  color: var(--nv-text, #1d1d1f); letter-spacing: 0.02em; }
-  .plugin-tag { font: 600 10px/1 -apple-system, sans-serif; letter-spacing: 0.04em;
-                text-transform: lowercase; color: var(--accent, #2563eb);
-                background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent);
-                padding: 3px 6px; border-radius: 999px; }
-  .plugin-close { margin-left: auto; border: 0; background: transparent; cursor: pointer;
-                  font-size: 12px; color: var(--nv-text-muted, rgba(29,29,31,0.65)); padding: 2px 4px; }
-  .plugin-body { overflow-y: auto; }
-  .plugin-status { padding: 14px 12px; font: 400 12px/1.4 -apple-system, sans-serif;
-                   color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-  .plugin-error { color: #b91c1c; }
-  .plugin-rows { list-style: none; margin: 0; padding: 4px 0; }
-  .plugin-row { display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px;
-                font: 400 12px/1.35 -apple-system, sans-serif; color: var(--nv-text, #1d1d1f); }
-  .plugin-row-clickable { cursor: pointer; }
-  .plugin-row-clickable:hover { background: var(--nv-btn-hover, rgba(15,23,42,0.06)); }
-  .plugin-row-active { background: var(--nv-btn-active, rgba(15,23,42,0.12)); }
-  .plugin-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; flex: 0 0 auto; }
-  .plugin-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .plugin-row-sub { color: var(--nv-text-muted, rgba(29,29,31,0.65)); font-size: 11px;
-                    overflow-wrap: anywhere; }
-  .plugin-highlight { position: absolute; border: 2px solid var(--accent, #2563eb);
-                      background: rgba(37,99,235,0.16); border-radius: 3px;
-                      pointer-events: none; z-index: 30; }
-
-  .plugin-rail-add { color: var(--accent, #2563eb); }
-
-  .plugin-modal-overlay { position: fixed; inset: 0; z-index: 60;
-                          display: flex; align-items: center; justify-content: center;
-                          background: rgba(15,23,42,0.32); backdrop-filter: blur(2px); }
-  .plugin-modal { width: min(440px, 92vw);
-                  background: var(--nv-bar-bg, rgba(255,255,255,0.98));
-                  border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.12));
-                  border-top: 2px solid var(--accent, #2563eb);
-                  border-radius: 14px; box-shadow: 0 20px 60px rgba(15,23,42,0.30);
-                  overflow: hidden; }
-  .plugin-modal-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-  .plugin-field-label { font: 500 11px/1.3 -apple-system, sans-serif;
-                        color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-  .plugin-field-row { display: flex; gap: 8px; }
-  .plugin-input { flex: 1; padding: 8px 10px; border-radius: 8px;
-                  border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.16));
-                  background: var(--panel, #fff); color: var(--nv-text, #1d1d1f);
-                  font: 400 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .plugin-btn { padding: 8px 12px; border: 0; border-radius: 8px; cursor: pointer;
-                font: 600 12px/1 -apple-system, sans-serif; color: #fff;
-                background: var(--accent, #2563eb); }
-  .plugin-btn:disabled { opacity: 0.6; cursor: default; }
-  .plugin-warn { font: 400 12px/1.45 -apple-system, sans-serif; color: var(--nv-text, #1d1d1f);
-                 background: color-mix(in srgb, #b45309 10%, transparent);
-                 border: 1px solid color-mix(in srgb, #b45309 26%, transparent);
-                 border-radius: 8px; padding: 10px; }
-  .plugin-commit { font: 500 11px/1 ui-monospace, Menlo, monospace;
-                   color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-  .plugin-offers { list-style: none; margin: 4px 0 0; padding: 0;
-                   display: flex; flex-direction: column; gap: 6px; }
-  .plugin-offer { display: flex; align-items: center; justify-content: space-between;
-                  gap: 10px; padding: 8px 10px; border-radius: 8px;
-                  background: var(--nv-btn-hover, rgba(15,23,42,0.05));
-                  font: 500 13px/1.2 -apple-system, sans-serif; color: var(--nv-text, #1d1d1f); }
-  .plugin-inline-error { font-size: 11px; margin-left: 8px; }
-  /* The install command. Selectable and monospaced — it exists to be
-     read and run, so it must look like something you'd paste. */
-  .plugin-cmd { flex: 1 1 auto; min-width: 0; overflow-x: auto; white-space: nowrap;
-                user-select: all; -webkit-user-select: all;
-                font: 500 11px/1.6 ui-monospace, Menlo, monospace;
-                color: var(--nv-text-muted, rgba(29,29,31,0.75)); }
-
-  @media (max-width: 560px) {
-    .plugin-host { right: 12px; left: 12px; width: auto; }
-  }
-  `;
-
-  function injectCSS() {
-    if (document.getElementById('plugin-panel-css')) return;
-    const style = document.createElement('style');
-    style.id = 'plugin-panel-css';
-    style.textContent = CSS;
-    document.head.appendChild(style);
-  }
-
+  // No CSS here. The rail, its flyout and the panel are styled by the
+  // focus-mode stylesheet in sim-native.html, under `#simNativeView`,
+  // where the --nv-* theme tokens are defined — same arrangement as the
+  // logs, status-bar, location and a11y panels. A stylesheet written
+  // beside this module can't see those tokens, so every colour in it had
+  // to carry a guessed fallback, and the guesses were light-theme values.
   root.PluginPanels = PluginPanels;
-  root.PluginPanels.injectCSS = injectCSS;
 })(window);

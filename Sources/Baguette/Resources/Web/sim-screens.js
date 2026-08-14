@@ -159,7 +159,6 @@
     }
 
     render() {
-      ScreensRail.injectCSS();
       if (this.rail) this.rail.remove();
       this.buttons.clear();
 
@@ -505,91 +504,8 @@
     }
   }
 
-  // Host-owned styling, injected here so the module stays self-contained
-  // — same arrangement as the plugin rail it sits above. The two rails
-  // share a shape on purpose but not an accent: this one is baguette's
-  // own, so it takes the page's text colour rather than the plugin
-  // system's accent seam.
-  const CSS = `
-  .screens-rail { display: flex; flex-direction: column; align-items: center; gap: 6px;
-                  padding: 8px 6px; z-index: 45;
-                  background: var(--nv-bar-bg, rgba(255,255,255,0.92));
-                  border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.10));
-                  border-radius: 14px;
-                  box-shadow: var(--nv-bar-shadow, 0 8px 30px rgba(15,23,42,0.12));
-                  backdrop-filter: blur(18px) saturate(1.5);
-                  -webkit-backdrop-filter: blur(18px) saturate(1.5);
-                  color: var(--nv-text, #1d1d1f); }
-  .screens-rail-cap { display: inline-flex; align-items: center; justify-content: center;
-                      width: 30px; height: 24px; color: var(--nv-text-muted, rgba(29,29,31,0.65));
-                      opacity: 0.9; }
-  .screens-rail-divider { width: 20px; height: 1px; margin: 1px 0 3px;
-                          background: var(--nv-divider, rgba(15,23,42,0.14)); }
-  .screens-rail-btn { position: relative; width: 34px; height: 34px; padding: 0; border: 0;
-                      cursor: pointer;
-                      display: inline-flex; align-items: center; justify-content: center;
-                      background: transparent; border-radius: 9px;
-                      color: var(--nv-text, #1d1d1f);
-                      transition: background 0.12s ease, transform 0.12s ease, opacity 0.12s ease; }
-  .screens-rail-btn:hover  { background: var(--nv-btn-hover, rgba(15,23,42,0.06)); }
-  .screens-rail-btn:active { transform: scale(0.94); }
-  .screens-rail-btn.active { background: var(--nv-accent, #2563eb);
-                             color: var(--nv-accent-text, #fff); }
-  /* Dimmed, not hidden: the button is how you find out the screen could
-     exist, and how you reach the instructions for attaching one. */
-  .screens-rail-btn.unavailable { opacity: 0.38; }
-  .screens-rail-btn.unavailable:hover { opacity: 0.7; }
-  .screens-rail-refresh { color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-
-  .screens-card { position: fixed; z-index: 50; width: 268px;
-                  background: var(--nv-bar-bg, rgba(255,255,255,0.96));
-                  border: 1px solid var(--nv-bar-border, rgba(15,23,42,0.10));
-                  border-radius: 13px;
-                  box-shadow: 0 10px 34px rgba(15,23,42,0.20);
-                  backdrop-filter: blur(18px) saturate(1.5);
-                  -webkit-backdrop-filter: blur(18px) saturate(1.5);
-                  color: var(--nv-text, #1d1d1f);
-                  animation: screens-card-in 0.12s ease-out; }
-  @keyframes screens-card-in { from { opacity: 0; transform: translateX(6px); }
-                               to   { opacity: 1; transform: translateX(0); } }
-  @media (prefers-reduced-motion: reduce) { .screens-card { animation: none; } }
-  .screens-card-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-                       border-bottom: 1px solid var(--nv-divider, rgba(15,23,42,0.10)); }
-  .screens-card-title { font: 600 12px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-                        letter-spacing: 0.02em; }
-  .screens-card-close { margin-left: auto; border: 0; background: transparent; cursor: pointer;
-                        font-size: 12px; padding: 2px 4px;
-                        color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-  .screens-card-body { padding: 11px 12px 13px; }
-  .screens-card-status { margin: 0 0 8px;
-                         font: 600 11px/1.35 -apple-system, sans-serif;
-                         color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-  .screens-card-note { margin: 0 0 10px;
-                       font: 400 11.5px/1.45 -apple-system, sans-serif;
-                       color: var(--nv-text-muted, rgba(29,29,31,0.65)); }
-  .screens-steps { margin: 0 0 11px; padding-left: 17px;
-                   display: flex; flex-direction: column; gap: 6px;
-                   font: 400 11.5px/1.45 -apple-system, sans-serif;
-                   color: var(--nv-text, #1d1d1f); }
-  .screens-steps li { overflow-wrap: anywhere; }
-  .screens-card-btn { width: 100%; padding: 8px 12px; border: 0; border-radius: 8px;
-                      cursor: pointer; font: 600 12px/1 -apple-system, sans-serif;
-                      color: var(--nv-accent-text, #fff); background: var(--nv-accent, #2563eb); }
-  .screens-card-btn:disabled { opacity: 0.6; cursor: default; }
-
-  @media (max-width: 560px) {
-    .screens-card { width: auto; left: 12px; right: 12px; }
-  }
-  `;
-
-  function injectCSS() {
-    if (document.getElementById('screens-rail-css')) return;
-    const style = document.createElement('style');
-    style.id = 'screens-rail-css';
-    style.textContent = CSS;
-    document.head.appendChild(style);
-  }
-
+  // No CSS here — the rail and its card are styled by the focus-mode
+  // stylesheet in sim-native.html, beside the plugin rail it shares a
+  // shape with. See the note there.
   root.ScreensRail = ScreensRail;
-  root.ScreensRail.injectCSS = injectCSS;
 })(window);
