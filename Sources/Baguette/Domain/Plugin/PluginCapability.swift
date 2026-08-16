@@ -39,6 +39,16 @@ enum PluginCapability: String, Equatable, Sendable, CaseIterable, Comparable {
     case apps
     /// Add photos or videos to the device's library.
     case media
+    /// Open a deep link, and read the URL schemes the device's apps
+    /// answer to. One capability for the pair, on the `interface`
+    /// precedent: a plugin that can open *any* URL is not meaningfully
+    /// restrained by hiding the list of which ones exist.
+    ///
+    /// Deliberately apart from `apps`, which installs software. This one
+    /// only launches what is already there, and a plugin that wants to
+    /// fire a deep link shouldn't have to be trusted to put an
+    /// executable on the device.
+    case openURL = "open-url"
     /// List simulators and their state.
     case simulators
 

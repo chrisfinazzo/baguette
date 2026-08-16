@@ -81,12 +81,37 @@ private extension Plugin {
     }
 }
 
+private extension PanelPrompt {
+    /// What the page needs to draw the field and post what was typed.
+    /// `arg` travels because the browser builds `{"args": {arg: value}}`
+    /// — it's an object key, never markup.
+    var dictionary: [String: Any] {
+        var out: [String: Any] = [
+            "arg": arg, "submit": submit, "filter": filter,
+            "complete": complete, "history": history,
+        ]
+        if let placeholder { out["placeholder"] = placeholder }
+        return out
+    }
+}
+
+private extension PanelControl {
+    /// What the page needs to draw the ticks and post them back.
+    var dictionary: [String: Any] {
+        ["kind": kind.rawValue, "arg": arg, "submit": submit]
+    }
+}
+
 private extension PanelBody {
     func dictionary(qualifiedBy plugin: Plugin) -> [String: Any] {
         switch self {
-        case .list(let source, let rowAction):
-            var body: [String: Any] = ["kind": "list", "source": plugin.qualified(source)]
-            if let rowAction { body["rowAction"] = rowAction.rawValue }
+        case .list(let list):
+            var body: [String: Any] = ["kind": "list", "source": plugin.qualified(list.source)]
+            if let rowAction = list.rowAction { body["rowAction"] = rowAction.rawValue }
+            // Absent rather than null when unused, so a panel that
+            // predates a field projects byte-for-byte as it always did.
+            if let prompt = list.prompt { body["prompt"] = prompt.dictionary }
+            if let control = list.control { body["control"] = control.dictionary }
             return body
         }
     }

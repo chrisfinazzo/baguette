@@ -39,6 +39,11 @@ enum PluginRoute {
         case "location":          return .location
         case "apps":              return .apps
         case "media":             return .media
+        // Launching what's already installed, not installing it — see
+        // the note on `PluginCapability.openURL` for why that's a
+        // different power from `apps`.
+        case "openurl",
+             "schemes.json":      return .openURL
         // `/files` is the browser's drag-and-drop endpoint and routes by
         // file extension, so the capability it demands would depend on
         // the bytes rather than the path. A content-dependent check is

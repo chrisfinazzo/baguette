@@ -64,6 +64,32 @@ test('a run row without args still invokes its command', () => {
   );
 });
 
+test('a fill row hands its text to the panel prompt', () => {
+  // The other actions do something *with* a row. This one types it into
+  // the field above, which is what a list under a text box means: the
+  // deep-link panel used to open a bare `account://` on click, when what
+  // you want is that scheme in the box ready for the rest of the path.
+  const Action = PluginRowAction();
+  assert.deepEqual(
+    new Action('fill').intent({ title: 'account://', fill: 'account://' }),
+    { kind: 'fill', text: 'account://' }
+  );
+});
+
+test('a fill row uses its own text, not the label it displays', () => {
+  const Action = PluginRowAction();
+  assert.deepEqual(
+    new Action('fill').intent({ title: 'Account (SpringBoard)', fill: 'account://' }),
+    { kind: 'fill', text: 'account://' }
+  );
+});
+
+test('a row with nothing to fill is inert', () => {
+  const Action = PluginRowAction();
+  assert.equal(new Action('fill').intent({ title: 'Nothing to report' }), null);
+  assert.equal(new Action('fill').actionable({ title: 'Nothing to report' }), false);
+});
+
 test('a run row naming no command is inert', () => {
   const Action = PluginRowAction();
   assert.equal(new Action('run').intent({ title: 'Dark' }), null);

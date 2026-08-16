@@ -201,6 +201,9 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
     case unknownRowAction(name: String)
     case unknownCommandSource(id: String)
     case unknownCapability(name: String)
+    case missingPromptArg
+    case unknownRowControl(name: String)
+    case missingControlArg
 
     var description: String {
         switch self {
@@ -233,6 +236,21 @@ enum PluginManifestError: Error, Equatable, CustomStringConvertible {
                 """
         case .unknownCommandSource(let id):
             return "panel body names command \"\(id)\", which this plugin does not contribute"
+        case .missingPromptArg:
+            return """
+                a panel's "prompt" is missing a non-empty "arg" — without it \
+                the typed text has no key to arrive under
+                """
+        case .unknownRowControl(let name):
+            return """
+                unknown control kind \"\(name)\" — use one of: \
+                \(RowControl.allCases.map(\.rawValue).joined(separator: ", "))
+                """
+        case .missingControlArg:
+            return """
+                a panel's "control" is missing a non-empty "arg" — without it \
+                the ticked rows have no key to arrive under
+                """
         case .unknownCapability(let name):
             return """
                 unknown capability \"\(name)\" — use one of: \

@@ -36,6 +36,8 @@ struct Baguette: AsyncParsableCommand {
             LocationCommand.self,
             InstallCommand.self,
             AddMediaCommand.self,
+            OpenURLCommand.self,
+            SchemesCommand.self,
             PluginsCommand.self,
             BakeryCommand.self,
             DiagDigitizerTrackpadCommand.self,

@@ -34,6 +34,7 @@
      *          |{kind:'tap', point:{x:number,y:number}}
      *          |{kind:'copy', text:string}
      *          |{kind:'run', command:string, args:object}
+     *          |{kind:'fill', text:string}
      *          |null}
      */
     intent(row) {
@@ -50,6 +51,11 @@
           // and demanding one would make every such row inert. Args
           // default to {} so the caller has a single shape to post.
           return row.run ? { kind: 'run', command: row.run, args: row.args || {} } : null;
+        case 'fill':
+          // The row's own text, never its title: a title is display
+          // text, so truncating or translating it would silently change
+          // what gets typed into the field.
+          return row.fill ? { kind: 'fill', text: row.fill } : null;
         default:
           return null;
       }

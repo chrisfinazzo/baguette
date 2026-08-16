@@ -134,7 +134,7 @@ struct PluginTests {
                         id: "panel\(index)",
                         title: "Panel \(index)",
                         icon: panelIcon,
-                        body: .list(source: commandIDs.first ?? "", rowAction: nil)
+                        body: .list(ListBody(source: commandIDs.first ?? ""))
                     )
                 }
             )

@@ -73,10 +73,20 @@ A plugin is a directory containing `baguette-plugin.json`:
   - `copy` — put the row's `copy` string on the clipboard
   - `run` — invoke the command named by the row's `run`, passing its
     `args`, and re-render the panel from the answer
+  - `fill` — put the row's `fill` text into the panel's own `prompt`,
+    focus it, and leave the caret at the end. The list becomes
+    completion rather than a launcher: clicking `account://` gives you
+    that scheme in the box ready for the path, instead of opening a bare
+    scheme nobody meant. It deliberately does **not** submit
 
   A row missing what the action needs isn't clickable: no `frame` for
-  `highlight` / `tap`, no `copy` for `copy`, no `run` for `run`. An
-  unknown `rowAction` is inert rather than resolved to the nearest match.
+  `highlight` / `tap`, no `copy` for `copy`, no `run` for `run`, no
+  `fill` for `fill`. An unknown `rowAction` is inert rather than
+  resolved to the nearest match.
+- **`body.prompt`** adds a text field above the rows — see
+  [Panels you can type into](#panels-you-can-type-into).
+- **`body.control`** makes rows tickable — see
+  [Panels you can tick](#panels-you-can-tick--bodycontrol).
 
 Contributions are namespaced by plugin: `a11y:audit`. Two plugins can
 both ship a `reload`.
@@ -117,6 +127,14 @@ The command prints **one JSON object** on stdout and exits:
   its centre with no conversion. Omit the frame and a `highlight` /
   `tap` row isn't clickable.
 - `copy` is the string a `rowAction: "copy"` row puts on the clipboard.
+- `fill` is the string a `rowAction: "fill"` row types into the panel's
+  `prompt`. Kept separate from `title` because a title is display text —
+  truncating, decorating or translating it would otherwise silently
+  change what gets typed.
+- `state` / `value` / `group` make a row a **tickable control** — see
+  [Panels you can tick](#panels-you-can-tick--bodycontrol). A row with no
+  `state` is an ordinary row, which is how headings survive in a panel
+  full of switches.
 - `run` names one of *this plugin's* command ids, and `args` is an
   object handed to it — see below. `args` without `run` is an error, not
   a silently-inert row.
@@ -177,6 +195,156 @@ from the panel's own `source`, never from the row — and this is still an
 HTTP call to the same command endpoint the panel opens with. No plugin
 code runs in the page.
 
+## Panels you can type into — `body.prompt`
+
+Every panel above is a *report*: the host runs a command and draws what
+comes back. Some tools need the other direction — a deep link is
+interesting precisely because nobody has typed it yet, and a list of
+rows has nowhere to put a value that doesn't exist.
+
+```jsonc
+{ "id": "open", "title": "Deep Links", "icon": "link",
+  "body": { "kind": "list", "source": "open", "rowAction": "fill",
+            "prompt": { "arg": "url", "placeholder": "myapp://path",
+                        "submit": "Open", "filter": true,
+                        "complete": true, "history": true } } }
+```
+
+Submitting invokes the panel's **own** `source` command with what was
+typed, under the key `arg` names:
+
+```json
+{ "command": "deeplink:open", "url": "…", "token": "…", "udid": "…",
+  "args": { "url": "myapp://profile/42" } }
+```
+
+That is exactly the path `rowAction: "run"` already takes — same body,
+same endpoint — so this adds a widget, not an execution model. Still one
+command per panel, still no plugin code in the page. The command tells
+the two cases apart by whether `args` arrived: absent means "just show
+me what's there".
+
+- **`arg`** is required. A field that submitted into nowhere would look
+  like a working control and do nothing, so a manifest without it is
+  refused at `baguette plugin validate` rather than drawn.
+- **`submit`** is the button's label; it defaults to `Run`.
+- **`placeholder`** is the greyed hint. Both are manifest text, so the
+  host sets them with `setAttribute` / `textContent` — a plugin still
+  supplies no markup.
+- **`filter`** narrows the rows already on screen as you type, matching
+  over `title` and `subtitle`. It does **not** re-run the command: a
+  command is a subprocess with a ten-second budget, so per-keystroke
+  invocations are the wrong shape, but the rows it already returned are
+  right there. Omit it and the list stays a fixed reference.
+
+  A row you have typed *past* stays visible — once the field starts with
+  a row's own text, that row keeps matching. Otherwise picking
+  `account://` and then typing the path would make the suggestion vanish
+  at the next character and leave the list reading "Nothing matches" for
+  the rest of the URL, fighting the thing it exists to help with.
+- **`complete`** finishes the word: the rest of the best candidate is
+  drawn greyed after the caret, and `Tab` — or `→` at the end of the
+  field — accepts it. A list you have to point at is slower than a bar
+  that completes. `Esc` dismisses the suggestion without clearing what
+  you typed.
+
+  Completion appends to what you typed rather than swapping the
+  candidate in, so `ACC` completes to `ACCount://hello`: the bar
+  finishes your word instead of rewriting it under the caret.
+- **`history`** remembers what you submit and puts it on `↑` / `↓`.
+  It is also the *first* completion source, ahead of the rows — having
+  opened `account://hello`, typing `acc` offers that back rather than the
+  bare `account://` scheme, because a link you actually used is a better
+  guess than one that merely exists.
+
+  Kept by the browser in `localStorage`, per panel, capped at 25. It is a
+  convenience for the person typing, not state the plugin owns: it never
+  rides the wire, and **a plugin never sees what you typed before** — only
+  what you submit to it.
+
+An empty field submits nothing rather than spending a subprocess to be
+told it was empty. What you typed survives the re-render, so tweaking a
+path and firing again doesn't mean retyping the URL.
+
+`prompt` is **additive**, which is why `apiVersion` stays 1: a baguette
+that predates it ignores the key and renders the plain list. For a
+well-written plugin that's a working panel with one affordance missing,
+not a broken one — so keep the rows useful on their own.
+
+## Panels you can tick — `body.control`
+
+A settings list needs rows that are *on* or *off*. Before this, a plugin
+wrote that into the row title — `display.py` shipped `"● Light"` /
+`"○ Dark"` — which is a plugin drawing a control glyph inside a string,
+in a page whose whole premise is that the host owns every pixel. Escaping
+made it safe, not right: the host couldn't style it, a screen reader read
+a bullet, and "which one is on" was legible only to a human eye.
+
+So the row says what's on, and the manifest says what on looks like:
+
+```jsonc
+{ "id": "display", "title": "Display & Text Size", "icon": "wrench",
+  "body": { "kind": "list", "source": "display",
+            "control": { "kind": "radio", "arg": "settings", "submit": "Apply" } } }
+```
+
+```json
+{ "ok": true, "rows": [
+  { "title": "Appearance" },
+  { "title": "Light", "state": "on",  "value": "appearance:light", "group": "appearance" },
+  { "title": "Dark",  "state": "off", "value": "appearance:dark",  "group": "appearance" }
+] }
+```
+
+- **`control.kind`** is `switch` | `checkbox` | `radio`. Purely
+  cosmetic — grouping is yours, since the panel re-renders from your own
+  answer after every submit. An unknown kind is a **parse error**, not a
+  fallback: a checkbox silently drawn as a switch would misrepresent
+  whether ticking two at once is allowed, and that's a lie about
+  behaviour rather than a substituted picture.
+- **`control.arg`** is required, and is the key the ticked values arrive
+  under.
+- **`state`** is `on` | `off`, and is what the **device** last reported —
+  never what the user has clicked since.
+- **`value`** is what a ticked row submits. Required alongside `state`;
+  a tick carrying nothing is a control you can't act on.
+- **`group`** says which options a `radio` is exclusive within. This is
+  what lets one panel ask more than one question: without it, picking
+  "Dark" would unpick the text size. Rows naming no group share one
+  implicit group. Meaningless for `switch` / `checkbox`.
+- A row with **no `state`** isn't a control — so section headings and
+  plain notes keep rendering as themselves, and an ordinary
+  `rowAction` row still works beside the ticks.
+
+### Ticking is local; submitting is one call
+
+A tick costs **no subprocess**. The panel accumulates ticks and sends
+them together when the submit button is pressed:
+
+```json
+{ "command": "a11y:display", "args": { "settings": ["appearance:dark", "contentSize:large"] } }
+```
+
+**Always an array**, including for `radio`, which yields one element —
+one shape means you write one branch rather than discovering a scalar
+case by reading this page twice. An empty array is a real instruction
+("turn all of these off"), not a no-op.
+
+The cost of batching is that between the tick and the answer, a row shows
+state the device hasn't confirmed. The host draws those rows as
+**pending** rather than letting them look settled, and the button counts
+them (`Apply (2)`). When your answer comes back, the panel rebuilds every
+tick from it — so a setting the device refused snaps back to the truth
+instead of staying stuck the way it was clicked.
+
+Relative actions don't belong in a batch. `display.py` keeps *Smaller* /
+*Larger* as `rowAction: "run"` rows, because ticking a relative change
+and applying it later would apply it from wherever the value had got to
+by then, not from where it was when you clicked.
+
+Like `prompt`, `control` is additive, so `apiVersion` stays 1 — an older
+baguette ignores it and renders a plain list.
+
 ## The rail
 
 Plugins live in their own strip on the right edge of focus mode, apart
@@ -209,11 +377,18 @@ closed set, and it is **enforced**, not documentation:
 | `location` | `POST`/`DELETE /simulators/:udid/location` |
 | `apps` | `POST /simulators/:udid/apps` — install an app |
 | `media` | `POST /simulators/:udid/media` — add photos / videos |
+| `open-url` | `POST /simulators/:udid/openurl`, `GET /simulators/:udid/schemes.json` — open a deep link, list registered schemes |
 | `simulators` | `GET /simulators.json` |
 
 `apps` and `media` are deliberately separate: one puts a picture in the
 photo library, the other puts an executable on the device. A plugin that
 seeds test images shouldn't have to be trusted to install software.
+
+`open-url` sits apart from `apps` for the same reason in the other
+direction — it only launches software that is already there. Reading and
+opening are one capability rather than two, on the `interface`
+precedent: a plugin that can open *any* URL isn't meaningfully
+restrained by hiding the list of which ones an app registered.
 
 The browser's drag-and-drop endpoint, `POST /simulators/:udid/files`,
 takes either and works out which from the file — convenient for a person
@@ -315,6 +490,23 @@ adding a `baguette.json` at its root — its *menu*:
 
 `path` is repo-relative and must stay inside the repo. The rest of the
 repo can be anything — a bakery doesn't have to be a dedicated project.
+
+### The official bakery
+
+baguette's own repo is one. Its `baguette.json` offers the plugins that
+are maintained alongside baguette but deliberately **not** bundled with
+it:
+
+```bash
+baguette bakery add tddworks/baguette
+baguette plugin install deeplink
+```
+
+The split is the point. `a11y` ships inside the binary because a fresh
+install should have something in the rail. Everything else — starting
+with [`deeplink`](deep-links.md) — is official, supported, and still
+something you choose. The rail's length stays a count of what you asked
+for.
 
 ### Installing (CLI)
 

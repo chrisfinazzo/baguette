@@ -65,8 +65,12 @@
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +
      panels from /plugins.json. Host-rendered only: no plugin script,
      CSS or markup is ever loaded into this page. `plugin-row-action.js`
-     carries the click semantics and must load first. -->
+     carries the click semantics, `plugin-prompt.js` the text-field
+     semantics and `plugin-control.js` the tick semantics; all three must
+     load first. -->
 <script src="/plugin-row-action.js"></script>
+<script src="/plugin-prompt.js"></script>
+<script src="/plugin-control.js"></script>
 <script src="/sim-plugins.js"></script>
 <!-- Companion screens — the CarPlay display and the paired Apple Watch,
      offered from their own rail. `screens/companion-screens.js` is the

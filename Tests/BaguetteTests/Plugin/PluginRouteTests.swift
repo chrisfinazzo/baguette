@@ -67,6 +67,22 @@ struct PluginRouteTests {
         #expect(PluginRoute.capability(path: "/simulators/U/interface.json") == .interface)
     }
 
+    @Test func `opening a link and listing schemes demand open-url`() {
+        // One capability for the pair, on the `interface` precedent: a
+        // plugin that can open *any* URL is not meaningfully restrained
+        // by hiding the list of which ones an app registered.
+        #expect(PluginRoute.capability(path: "/simulators/U/openurl") == .openURL)
+        #expect(PluginRoute.capability(path: "/simulators/U/schemes.json") == .openURL)
+    }
+
+    @Test func `opening a link is not covered by the app-install capability`() {
+        // `apps` puts an executable on the device; `open-url` launches
+        // one that's already there. A plugin that only wants to fire a
+        // deep link must not have to be trusted to install software.
+        #expect(PluginCapability.openURL != .apps)
+        #expect(PluginRoute.capability(path: "/simulators/U/openurl") != .apps)
+    }
+
     @Test func `a real udid is carried in the path like any other segment`() {
         #expect(
             PluginRoute.capability(path: "/simulators/AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/input")

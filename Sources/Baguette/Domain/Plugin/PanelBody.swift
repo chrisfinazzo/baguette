@@ -76,14 +76,48 @@ struct PluginPanel: Equatable, Sendable {
 enum PanelBody: Equatable, Sendable {
     /// Rows come from running the plugin's `source` command and
     /// reading the `rows` array off its JSON answer.
-    case list(source: String, rowAction: RowAction?)
+    case list(ListBody)
 
     static func parsing(dict: [String: Any], declaredCommands: Set<String>) throws -> PanelBody {
         let kind = dict["kind"] as? String ?? ""
         guard kind == "list" else {
             throw PluginManifestError.unknownPanelBody(kind: kind)
         }
+        return .list(try ListBody.parsing(dict: dict, declaredCommands: declaredCommands))
+    }
+}
 
+/// Everything a `kind: "list"` body declares.
+///
+/// A struct rather than the enum case's associated values, because every
+/// optional field added here would otherwise be a source break at every
+/// construction site — Swift can't default an associated value. `prompt`
+/// cost four unrelated test edits to add that way; `control` cost none.
+/// The panel contract grows by *addition*, so the shape it grows into
+/// has to make addition free.
+struct ListBody: Equatable, Sendable {
+    /// The command whose `rows` fill the panel.
+    let source: String
+    /// What clicking a row does. `nil` leaves rows inert.
+    let rowAction: RowAction?
+    /// A text field above the rows. `nil` for a read-only report.
+    let prompt: PanelPrompt?
+    /// Tickable controls on the rows. `nil` for a plain list.
+    let control: PanelControl?
+
+    init(
+        source: String,
+        rowAction: RowAction? = nil,
+        prompt: PanelPrompt? = nil,
+        control: PanelControl? = nil
+    ) {
+        self.source = source
+        self.rowAction = rowAction
+        self.prompt = prompt
+        self.control = control
+    }
+
+    static func parsing(dict: [String: Any], declaredCommands: Set<String>) throws -> ListBody {
         let source = dict["source"] as? String ?? ""
         guard declaredCommands.contains(source) else {
             throw PluginManifestError.unknownCommandSource(id: source)
@@ -97,7 +131,161 @@ enum PanelBody: Equatable, Sendable {
             rowAction = parsed
         }
 
-        return .list(source: source, rowAction: rowAction)
+        return ListBody(
+            source: source,
+            rowAction: rowAction,
+            prompt: try (dict["prompt"] as? [String: Any]).map(PanelPrompt.parsing(dict:)),
+            control: try (dict["control"] as? [String: Any]).map(PanelControl.parsing(dict:))
+        )
+    }
+}
+
+/// Tickable controls on a panel's rows, and what submitting them means.
+///
+/// Before this, a plugin wanting a settings list wrote its state into
+/// the row *title* — `display.py` shipped `"● Light"` / `"○ Dark"` —
+/// which is a plugin drawing a control glyph inside a string, in a page
+/// whose whole premise is that the host owns every pixel. Escaping made
+/// it safe, not right: the host couldn't style it, a screen reader read
+/// a bullet, and "which one is on" was unreadable to anything but a
+/// human eye.
+///
+/// So state moves onto the row (`ResultRow.state`) and the *drawing*
+/// moves here. The plugin says what's on; baguette says what on looks
+/// like.
+///
+/// Ticking is **local** — it costs no subprocess. The panel accumulates
+/// ticks and sends them together when the submit button is pressed,
+/// which is the trade this makes deliberately: one child process per
+/// *batch* instead of one per tick, at the price of rows briefly showing
+/// state the device hasn't confirmed. The host marks those rows pending
+/// rather than letting them look settled, because a control that lies
+/// about the device is worse than one that's slow.
+struct PanelControl: Equatable, Sendable {
+    /// Which glyph family the host draws. Purely cosmetic: grouping is
+    /// the plugin's business, since it re-renders the whole panel from
+    /// its own answer after every submit.
+    let kind: RowControl
+    /// The key the ticked rows' `value`s are submitted under, i.e. the
+    /// command sees `{"args": {"<arg>": ["camera", "mic"]}}`.
+    ///
+    /// **Always an array**, including for `radio`, which yields one
+    /// element. One shape means a plugin has one branch to write rather
+    /// than a scalar case it discovers by reading the docs twice.
+    let arg: String
+    /// The submit button's label.
+    let submit: String
+
+    init(kind: RowControl, arg: String, submit: String = "Apply") {
+        self.kind = kind
+        self.arg = arg
+        self.submit = submit
+    }
+
+    static func parsing(dict: [String: Any]) throws -> PanelControl {
+        let rawKind = dict["kind"] as? String ?? ""
+        guard let kind = RowControl(rawValue: rawKind) else {
+            throw PluginManifestError.unknownRowControl(name: rawKind)
+        }
+        guard let arg = dict["arg"] as? String, !arg.isEmpty else {
+            throw PluginManifestError.missingControlArg
+        }
+        return PanelControl(kind: kind, arg: arg, submit: dict["submit"] as? String ?? "Apply")
+    }
+}
+
+/// The control families baguette draws. A closed set for the same
+/// reason `PluginIcon` is one: the name reaches a protected page.
+///
+/// Unlike an icon, an unknown one **throws** rather than degrading —
+/// a checkbox silently drawn as a switch would misrepresent whether
+/// ticking two rows at once is allowed, and that's a lie about
+/// behaviour rather than a substituted picture.
+enum RowControl: String, Equatable, Sendable, CaseIterable {
+    /// Independent on/off. Several may be on at once.
+    case `switch`
+    /// Many-of-many, in a set that belongs together.
+    case checkbox
+    /// One-of-many; the host clears the others when one is ticked.
+    case radio
+}
+
+/// A text field above a panel's rows, and what submitting it means.
+///
+/// Every panel before this one was a report: the host ran a command and
+/// drew what came back. Some tools need the opposite direction — a deep
+/// link is interesting precisely because nobody has typed it yet — and a
+/// list of rows has nowhere to put a value that doesn't exist.
+///
+/// Submitting invokes the panel's **own** `source` command with the
+/// typed text under `arg`, which is exactly the path `rowAction: "run"`
+/// already takes. So this adds a widget, not an execution model: still
+/// one command per panel, still an HTTP call to the same endpoint the
+/// panel opens with, still no plugin code in the page.
+///
+/// The field is optional and additive on purpose. A baguette that
+/// predates it ignores the key and renders the plain list, which for a
+/// well-written plugin is a working panel with one affordance missing —
+/// so `apiVersion` doesn't move.
+struct PanelPrompt: Equatable, Sendable {
+    /// The key the typed text is submitted under, i.e. the command sees
+    /// `{"args": {"<arg>": "<typed>"}}`. Required: a field that
+    /// submitted into nowhere would look like a working control and do
+    /// nothing, so a manifest without it is refused rather than drawn.
+    let arg: String
+    /// Greyed hint inside the empty field. `nil` leaves it blank.
+    let placeholder: String?
+    /// The submit button's label.
+    let submit: String
+    /// Whether typing also filters the rows already on screen.
+    ///
+    /// A command is a subprocess with a bounded budget, so re-running it
+    /// per keystroke is the wrong shape — but the rows it *already*
+    /// returned are right there, and narrowing them locally gives back
+    /// the feel of completion for the price of a string comparison.
+    let filter: Bool
+    /// Whether the field finishes the word for you: the rest of the best
+    /// candidate drawn greyed after the caret, accepted with `Tab` or
+    /// `→`. A list you have to point at is slower than a bar that
+    /// completes.
+    let complete: Bool
+    /// Whether submissions are remembered for `↑` / `↓`.
+    ///
+    /// Kept by the browser, per panel. It's a convenience for the person
+    /// typing, not state the plugin owns — so it doesn't ride the wire,
+    /// and a plugin never sees what you typed before.
+    let history: Bool
+
+    init(
+        arg: String,
+        placeholder: String? = nil,
+        submit: String = "Run",
+        filter: Bool = false,
+        complete: Bool = false,
+        history: Bool = false
+    ) {
+        self.arg = arg
+        self.placeholder = placeholder
+        self.submit = submit
+        self.filter = filter
+        self.complete = complete
+        self.history = history
+    }
+
+    static func parsing(dict: [String: Any]) throws -> PanelPrompt {
+        guard let arg = dict["arg"] as? String, !arg.isEmpty else {
+            throw PluginManifestError.missingPromptArg
+        }
+        return PanelPrompt(
+            arg: arg,
+            placeholder: dict["placeholder"] as? String,
+            // A label is chrome, not meaning — default rather than
+            // demand one, the way `title` already falls back to `id`.
+            submit: dict["submit"] as? String ?? "Run",
+            filter: dict["filter"] as? Bool ?? false,
+            complete: dict["complete"] as? Bool ?? false,
+            history: dict["history"] as? Bool ?? false
+        )
     }
 }
 
@@ -121,6 +309,16 @@ enum RowAction: String, Equatable, Sendable, CaseIterable {
     /// Still no plugin code in the page — the click is an HTTP call to
     /// the same command endpoint the panel already opens with.
     case run
+    /// Put the row's `fill` text into the panel's own `prompt`, focus
+    /// it, and leave the caret at the end.
+    ///
+    /// The others all *act* on a row. This one hands it to the field
+    /// above, which is what a list of suggestions under a text box has
+    /// always meant. The deep-link panel named it: clicking `account://`
+    /// used to open a bare scheme with no path, when what anyone wants
+    /// is that scheme in the box, ready for the rest of the URL. It
+    /// turns a list from a launcher into completion.
+    case fill
 }
 
 /// When a contribution is offered. A closed set, evaluated by the host

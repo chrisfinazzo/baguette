@@ -24,7 +24,7 @@ struct PluginRunActionTests {
             dict: ["kind": "list", "source": "settings", "rowAction": "run"],
             declaredCommands: ["settings"]
         )
-        #expect(body == .list(source: "settings", rowAction: .run))
+        #expect(body == .list(ListBody(source: "settings", rowAction: .run)))
     }
 
     @Test func `an unknown row action is still refused`() {

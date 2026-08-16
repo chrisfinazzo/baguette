@@ -134,6 +134,7 @@ struct Server: Sendable {
         registerBakeryRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerDeepLinkRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in
@@ -1110,7 +1111,10 @@ struct Server: Sendable {
             switch error {
             case .extractFailed, .archiveTooLarge, .noAppInArchive:
                 return .badArchive(reason: error.description)
-            case .installFailed:
+            // `openFailed` / `listFailed` can't reach an upload, but the
+            // switch has to name them: the compiler is the only thing
+            // that will notice when a new `AppsError` case does.
+            case .installFailed, .openFailed, .listFailed:
                 return .dispatchFailed
             }
         } catch {
