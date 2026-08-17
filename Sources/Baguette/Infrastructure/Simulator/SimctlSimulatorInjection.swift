@@ -1,0 +1,114 @@
+import Foundation
+
+/// `SimulatorInjection` backed by `xcrun simctl spawn <udid> launchctl …`.
+///
+/// Arming is a **read-modify-write**, because `DYLD_INSERT_LIBRARIES` is a
+/// single string shared by every injecting feature:
+///
+/// ```
+/// launchctl getenv DYLD_INSERT_LIBRARIES        → what's armed now
+///   → InjectedDylibs.adding / .removing         → merge by dylib filename
+/// launchctl setenv DYLD_INSERT_LIBRARIES <join> → write it back
+/// launchctl unsetenv DYLD_INSERT_LIBRARIES      → or drop it entirely
+/// ```
+///
+/// Writing a bare path instead would mean the second feature to arm
+/// silently disarms the first. Dropping the variable on any teardown would
+/// mean whichever feature stops first disarms the other.
+///
+/// All of it is scoped to the simulator's launchd domain, so the value
+/// survives until the simulator reboots. Re-arming on boot is the caller's
+/// responsibility.
+///
+/// The orchestration here is pure — argv assembly, stdout collection, the
+/// `Subprocess` exit handshake, and the merge — so this file is
+/// unit-covered end-to-end via `MockSubprocess`. The `Foundation.Process`
+/// plumbing lives in `HostSubprocess`.
+final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
+    private let subprocess: any Subprocess
+    private let xcrun: URL
+
+    private static let variable = "DYLD_INSERT_LIBRARIES"
+
+    init(
+        subprocess: any Subprocess = HostSubprocess(),
+        xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun")
+    ) {
+        self.subprocess = subprocess
+        self.xcrun = xcrun
+    }
+
+    func arm(dylibPath: String, on simulator: any Simulator) async throws {
+        let armed = await currentDylibs(on: simulator)
+        try await write(armed.adding(dylibPath), on: simulator)
+    }
+
+    func disarm(dylibPath: String, on simulator: any Simulator) async throws {
+        let armed = await currentDylibs(on: simulator)
+        try await write(armed.removing(dylibPath), on: simulator)
+    }
+
+    /// Reads what's armed right now.
+    ///
+    /// A failed read is **not** an error: a simulator that never had the
+    /// variable set is the normal case on a fresh boot, and failing the arm
+    /// over it would make injection unusable. Either way the answer is
+    /// "nothing armed".
+    private func currentDylibs(on simulator: any Simulator) async -> InjectedDylibs {
+        let read = try? await spawn(arguments: [
+            "simctl", "spawn", simulator.udid,
+            "launchctl", "getenv", Self.variable,
+        ])
+        return InjectedDylibs.parsing(read)
+    }
+
+    private func write(_ dylibs: InjectedDylibs, on simulator: any Simulator) async throws {
+        // An empty value is not the same as no value — dyld reports an
+        // empty entry as a library it failed to load — so the last dylib
+        // leaving takes the whole variable with it.
+        let arguments = dylibs.isEmpty
+            ? ["launchctl", "unsetenv", Self.variable]
+            : ["launchctl", "setenv", Self.variable, dylibs.environmentValue]
+        _ = try await spawn(arguments: ["simctl", "spawn", simulator.udid] + arguments)
+    }
+
+    /// Runs one `xcrun` invocation, returning whatever it wrote to stdout.
+    @discardableResult
+    private func spawn(arguments: [String]) async throws -> String {
+        final class Output: @unchecked Sendable {
+            var data = Data()
+        }
+        let output = Output()
+        return try await withCheckedThrowingContinuation { continuation in
+            do {
+                try subprocess.run(
+                    executable: xcrun,
+                    arguments: arguments,
+                    onBytes: { output.data.append($0) },
+                    onExit: { code in
+                        if code == 0 {
+                            continuation.resume(
+                                returning: String(decoding: output.data, as: UTF8.self))
+                        } else {
+                            continuation.resume(
+                                throwing: SimulatorInjectionError.simctlFailed(status: code))
+                        }
+                    }
+                )
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+}
+
+enum SimulatorInjectionError: Error, Equatable, CustomStringConvertible {
+    case simctlFailed(status: Int32)
+
+    var description: String {
+        switch self {
+        case .simctlFailed(let status):
+            return "xcrun simctl exited \(status) while arming/disarming an injected dylib"
+        }
+    }
+}
