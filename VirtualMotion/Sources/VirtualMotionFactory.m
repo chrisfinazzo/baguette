@@ -122,9 +122,15 @@ CMPedometerData *VMMakePedometerData(NSDate *start, NSDate *end, long steps,
         [data setValue:end forKey:@"fEndDate"];
         [data setValue:@(steps) forKey:@"fNumberOfSteps"];
         [data setValue:@(metres) forKey:@"fDistance"];
-        if (cadenceHz > 0) [data setValue:@(cadenceHz) forKey:@"fCurrentCadence"];
-        // Pace is seconds per metre — the reciprocal of speed.
-        if (speed > 0) [data setValue:@(1.0 / speed) forKey:@"fCurrentPace"];
+        // Cadence and pace are step measures, so both are gated on this kind
+        // actually taking steps. Reporting a pace while cycling — with zero
+        // steps and zero distance behind it — would hand an app a figure
+        // nothing else it reads agrees with.
+        if (cadenceHz > 0) {
+            [data setValue:@(cadenceHz) forKey:@"fCurrentCadence"];
+            // Pace is seconds per metre, the reciprocal of speed.
+            if (speed > 0) [data setValue:@(1.0 / speed) forKey:@"fCurrentPace"];
+        }
     } @catch (NSException *e) {
         return nil;
     }

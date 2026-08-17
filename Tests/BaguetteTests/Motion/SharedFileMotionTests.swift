@@ -109,6 +109,29 @@ struct SharedFileMotionTests {
         #expect(threw)
     }
 
+    @Test func `publish reports a missing dylib rather than arming an empty path`() async {
+        // A build that didn't ship VirtualMotion.dylib has nothing to arm.
+        // Arming an empty entry would make dyld log a load failure for every
+        // app launched afterwards, and publishing an intent nothing reads
+        // would look like success while doing nothing at all.
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("motion-\(UUID().uuidString).json")
+        let injection = MockSimulatorInjection()
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("U")
+        let motion = SharedFileMotion(fileURL: url, dylibPath: nil, injection: injection)
+
+        var threw = false
+        do {
+            try await motion.publish(walking(), on: sim)
+        } catch {
+            threw = true
+            #expect((error as? MotionError) == .dylibMissing)
+        }
+        #expect(threw)
+        verify(injection).arm(dylibPath: .any, on: .any).called(0)
+    }
+
     @Test func `publishes into a directory that does not exist yet`() async throws {
         // The shared path is configurable, and a caller pointing at a fresh
         // directory shouldn't have to create it first.

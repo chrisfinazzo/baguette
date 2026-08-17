@@ -14,8 +14,34 @@
 #import <CoreMotion/CoreMotion.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import <os/log.h>
 #import "VirtualMotionIntent.h"
 #import "VirtualMotionFactory.h"
+
+/// Diagnostics go to the unified log **only** — never NSLog.
+///
+/// This dylib is loaded into *every* process launched in the simulator while
+/// motion is armed, including the short-lived `launchctl` that baguette
+/// spawns to read `DYLD_INSERT_LIBRARIES`. NSLog writes to stderr, and the
+/// simulator's stdout/stderr channel carries leftovers between spawned
+/// processes, so a banner printed here can come back as part of the value
+/// baguette is trying to read. `InjectedDylibs.parsing` defends against that
+/// too, but the dylib has no business writing to a host process's streams in
+/// the first place. Read these with:
+///   xcrun simctl spawn <udid> log stream --predicate 'subsystem == "com.baguette.motion"'
+static void VMLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
+static void VMLog(NSString *format, ...) {
+    static os_log_t logger;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        logger = os_log_create("com.baguette.motion", "inject");
+    });
+    va_list args;
+    va_start(args, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    os_log(logger, "%{public}s", message.UTF8String);
+}
 
 static const double kDefaultInterval = 1.0 / 60.0;
 static const double kMinInterval = 0.01;         // 100 Hz ceiling
@@ -345,7 +371,7 @@ static void VMInstallActivityHooks(void) {
     VMReplace(cls, @selector(stopActivityUpdates), (IMP)VMStopActivityUpdates);
     VMReplace(cls, @selector(queryActivityStartingFromDate:toDate:toQueue:withHandler:),
               (IMP)VMQueryActivity);
-    NSLog(@"[VirtualMotion] activity hooks installed");
+    VMLog(@"[VirtualMotion] activity hooks installed");
 }
 
 static void VMInstallPedometerHooks(void) {
@@ -362,7 +388,7 @@ static void VMInstallPedometerHooks(void) {
     VMReplace(cls, @selector(stopPedometerUpdates), (IMP)VMStopPedometerUpdates);
     VMReplace(cls, @selector(queryPedometerDataFromDate:toDate:withHandler:),
               (IMP)VMQueryPedometer);
-    NSLog(@"[VirtualMotion] pedometer hooks installed");
+    VMLog(@"[VirtualMotion] pedometer hooks installed");
 }
 
 static void VMInstallManagerHooks(VMFactoryHealth health) {
@@ -402,14 +428,14 @@ static void VMInstallManagerHooks(VMFactoryHealth health) {
     VMReplace(cls, @selector(isMagnetometerAvailable), (IMP)VMManagerNo);
     VMReplace(cls, @selector(magnetometerData), (IMP)VMMagnetometerDataProperty);
 
-    NSLog(@"[VirtualMotion] motion-manager hooks installed (accelerometer=%d deviceMotion=%d)",
+    VMLog(@"[VirtualMotion] motion-manager hooks installed (accelerometer=%d deviceMotion=%d)",
           health.accelerometer, health.deviceMotion);
 }
 
 __attribute__((constructor)) static void VirtualMotionInit(void) {
     VMFactoryHealth health = VMFactorySelfCheck();
     if (!health.activity && !health.pedometer && !health.accelerometer && !health.deviceMotion) {
-        NSLog(@"[VirtualMotion] self-check failed on every surface — installing nothing. "
+        VMLog(@"[VirtualMotion] self-check failed on every surface — installing nothing. "
               @"CoreMotion's private layout has probably moved; apps will see the "
               @"platform's own 'unavailable' rather than fabricated data.");
         return;
@@ -418,7 +444,7 @@ __attribute__((constructor)) static void VirtualMotionInit(void) {
     if (health.pedometer) VMInstallPedometerHooks();
     if (health.accelerometer || health.deviceMotion) VMInstallManagerHooks(health);
     if (!health.activity || !health.pedometer || !health.accelerometer || !health.deviceMotion) {
-        NSLog(@"[VirtualMotion] partial install — activity=%d pedometer=%d accelerometer=%d "
+        VMLog(@"[VirtualMotion] partial install — activity=%d pedometer=%d accelerometer=%d "
               @"deviceMotion=%d", health.activity, health.pedometer, health.accelerometer,
               health.deviceMotion);
     }

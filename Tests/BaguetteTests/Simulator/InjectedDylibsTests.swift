@@ -83,6 +83,32 @@ struct InjectedDylibsTests {
         #expect(dylibs.paths == [theirs])
     }
 
+    @Test func `keeps only absolute dylib paths, ignoring anything else`() {
+        // Not hypothetical: a simulator's stdout channel carries leftover
+        // output from *previously* spawned processes, so
+        // `simctl spawn … launchctl getenv` can hand back log lines — even
+        // truncated mid-line — with the real value appended. Captured
+        // verbatim from a booted iOS 26.5 sim with an injected dylib loaded.
+        //
+        // Parsing that naively would write the noise back into
+        // DYLD_INSERT_LIBRARIES, and it would grow on every arm.
+        let polluted = """
+            2026-08-17 21:50:52.592 launchctl[34422:19519657] [VirtualMotion] activity hooks installed
+            2026-08-17 21:50:36.156 launchctl[33979:\(motion)
+            """
+        #expect(InjectedDylibs.parsing(polluted).paths == [motion])
+    }
+
+    @Test func `ignores a relative path`() {
+        // dyld needs an absolute path, and a bare word is far more likely to
+        // be noise than a library anyone meant to inject.
+        #expect(InjectedDylibs.parsing("VirtualCamera.dylib").isEmpty)
+    }
+
+    @Test func `ignores a path that is not a dylib`() {
+        #expect(InjectedDylibs.parsing("/usr/lib/thing.txt").isEmpty)
+    }
+
     @Test func `matches by dylib filename, not by directory`() {
         // The sha-keyed install directory differs per release; the filename
         // is what identifies the feature's dylib.

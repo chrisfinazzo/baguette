@@ -19,12 +19,14 @@ final class SharedFileMotion: Motion, @unchecked Sendable {
     static let defaultPath = "/tmp/BaguetteMotion.json"
 
     private let fileURL: URL
-    private let dylibPath: String
+    /// `nil` when this build didn't ship the dylib — publishing then fails
+    /// loudly rather than arming nothing.
+    private let dylibPath: String?
     private let injection: any SimulatorInjection
 
     init(
         fileURL: URL = URL(fileURLWithPath: SharedFileMotion.defaultPath),
-        dylibPath: String,
+        dylibPath: String?,
         injection: any SimulatorInjection = SimctlSimulatorInjection()
     ) {
         self.fileURL = fileURL
@@ -33,6 +35,10 @@ final class SharedFileMotion: Motion, @unchecked Sendable {
     }
 
     func publish(_ intent: MotionIntent, on simulator: any Simulator) async throws {
+        // Refuse before touching anything: an empty DYLD_INSERT_LIBRARIES
+        // entry makes dyld log a load failure for every app launched
+        // afterwards, and an intent nobody reads looks like success.
+        guard let dylibPath, !dylibPath.isEmpty else { throw MotionError.dylibMissing }
         let directory = fileURL.deletingLastPathComponent()
         if !FileManager.default.fileExists(atPath: directory.path) {
             try FileManager.default.createDirectory(
@@ -51,6 +57,22 @@ final class SharedFileMotion: Motion, @unchecked Sendable {
         // leave a live reader with nothing to read. Callers park the device
         // with a stationary publish first, and that parked value is what a
         // running app keeps seeing.
+        guard let dylibPath, !dylibPath.isEmpty else { return }
         try await injection.disarm(dylibPath: dylibPath, on: simulator)
+    }
+}
+
+/// Failure modes the motion surface surfaces. Maps to a CLI exit message /
+/// HTTP error body.
+enum MotionError: Error, Equatable, CustomStringConvertible {
+    /// This build doesn't carry `VirtualMotion.dylib`, so there's nothing to
+    /// inject and nothing would read a published intent.
+    case dylibMissing
+
+    var description: String {
+        switch self {
+        case .dylibMissing:
+            return "VirtualMotion.dylib is not bundled in this build"
+        }
     }
 }

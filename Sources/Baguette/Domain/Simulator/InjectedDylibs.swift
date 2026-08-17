@@ -26,19 +26,33 @@ struct InjectedDylibs: Equatable, Sendable {
     /// this, since dyld treats an empty entry as a path it failed to load.
     var environmentValue: String { paths.joined(separator: ":") }
 
-    /// Reads an existing `DYLD_INSERT_LIBRARIES` value.
+    /// Reads an existing `DYLD_INSERT_LIBRARIES` value, keeping only
+    /// segments that are actually absolute dylib paths.
     ///
-    /// Tolerates what `launchctl getenv` actually hands back: a trailing
-    /// newline, surrounding whitespace, and empty segments from a stray
-    /// colon.
+    /// The filtering is not fussiness. Reading this value means running
+    /// `simctl spawn <udid> launchctl getenv`, and a simulator's stdout
+    /// channel carries **leftover output from previously spawned
+    /// processes** — including lines truncated mid-word. Any dylib already
+    /// injected logs a banner as it loads, so the read can come back as log
+    /// noise with the real value appended. Writing that back would fill
+    /// `DYLD_INSERT_LIBRARIES` with junk dyld then fails to load, and it
+    /// would grow on every arm.
+    ///
+    /// Also tolerates what `launchctl getenv` legitimately returns: a
+    /// trailing newline, surrounding whitespace, and empty segments.
     static func parsing(_ environmentValue: String?) -> InjectedDylibs {
-        let raw = environmentValue?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let paths = raw
+        let paths = (environmentValue ?? "")
             .split(separator: ":")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .filter(isDylibPath)
         return InjectedDylibs(paths: paths)
+    }
+
+    /// dyld only accepts absolute paths, and every dylib baguette injects
+    /// ends in `.dylib`. Anything else in the value is noise.
+    private static func isDylibPath(_ candidate: String) -> Bool {
+        candidate.hasPrefix("/") && candidate.hasSuffix(".dylib")
+            && !candidate.contains("\n")
     }
 
     /// Arms `path`, replacing any other build of the **same dylib**.
