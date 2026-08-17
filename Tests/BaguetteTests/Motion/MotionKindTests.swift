@@ -42,4 +42,31 @@ struct MotionKindTests {
         // Dead-reckoning jitter around the pin shouldn't read as walking.
         #expect(MotionKind.from(speed: 0.1) == .stationary)
     }
+
+    /// These five numbers are **measured**, not documented: the private
+    /// `CLMotionActivity.type` field was swept 0…9 against a booted iOS
+    /// 26.5 / 27.0 runtime and the public `CMMotionActivity` flags read
+    /// back. They live here, under test, so the injected dylib never has
+    /// to know them — it copies the number it is handed.
+    ///
+    /// The enum is not dense: `2` also reads as stationary, and `3` / `7` /
+    /// `9` read as no flags at all. Only the values below are trusted.
+    @Test func `carries the measured CLMotionActivity type for each kind`() {
+        #expect(MotionKind.unknown.coreMotionType == 0)
+        #expect(MotionKind.stationary.coreMotionType == 1)
+        #expect(MotionKind.walking.coreMotionType == 4)
+        #expect(MotionKind.automotive.coreMotionType == 5)
+        #expect(MotionKind.cycling.coreMotionType == 6)
+        #expect(MotionKind.running.coreMotionType == 8)
+    }
+
+    @Test func `never maps a kind onto one of the untrusted enum values`() {
+        // 2 / 3 / 7 / 9 exist in the enum but either duplicate another
+        // state or read as nothing. If a future kind lands on one of them
+        // that's a mapping bug, not a new capability.
+        let untrusted: Set<Int32> = [2, 3, 7, 9]
+        for kind in MotionKind.allCases {
+            #expect(!untrusted.contains(kind.coreMotionType))
+        }
+    }
 }

@@ -38,6 +38,26 @@ enum MotionKind: String, Equatable, Sendable, CaseIterable {
     private static let runningCeiling = 4.5      // between Run 3.5 and Cycle 6
     private static let cyclingCeiling = 8.5      // between Cycle 6 and Drive 13.4
 
+    /// The private `CLMotionActivity.type` value that makes
+    /// `CMMotionActivity` report this kind.
+    ///
+    /// **Measured, not documented.** The field was swept 0…9 inside a
+    /// booted iOS 26.5 / 27.0 runtime and the public flags read back. The
+    /// enum is not dense — `2` duplicates stationary, and `3` / `7` / `9`
+    /// read as no flags at all — so only these six values are trusted.
+    /// Resolving it here means the injected dylib copies a number it was
+    /// handed instead of carrying a mapping of its own.
+    var coreMotionType: Int32 {
+        switch self {
+        case .unknown: return 0
+        case .stationary: return 1
+        case .walking: return 4
+        case .automotive: return 5
+        case .cycling: return 6
+        case .running: return 8
+        }
+    }
+
     /// Classifies a speed in metres per second.
     ///
     /// A **negative** speed is CoreLocation's "unknown", not a standstill —
