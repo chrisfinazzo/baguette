@@ -40,7 +40,8 @@ struct PluginAccessTests {
         let grants = PluginGrants()
         let token = grants.issue(plugin: "a11y", capabilities: [.describeUI])
         for path in ["/simulators/U/screenshot.jpg", "/simulators/U/apps",
-                     "/simulators/U/media", "/simulators.json"] {
+                     "/simulators/U/media", "/simulators.json",
+                     "/simulators/U/openurl", "/simulators/U/schemes.json"] {
             guard case .refused = PluginAccess.decide(token: token, path: path, grants: grants) else {
                 Issue.record("\(path) should be refused"); return
             }
@@ -69,6 +70,26 @@ struct PluginAccessTests {
             }
             #expect(message.contains("no capability"))
         }
+    }
+
+    @Test func `a deep-link plugin reaches both its routes and nothing else`() {
+        // `open-url` is one capability over one surface: see what's
+        // registered, open one. It must not carry the authority to
+        // install an app, which is the neighbouring `apps` power.
+        let grants = PluginGrants()
+        let token = grants.issue(plugin: "deeplink", capabilities: [.openURL])
+        for path in ["/simulators/U/openurl", "/simulators/U/schemes.json"] {
+            #expect(
+                PluginAccess.decide(token: token, path: path, grants: grants) == .granted,
+                "\(path) should be granted"
+            )
+        }
+        guard case .refused(let message) = PluginAccess.decide(
+            token: token, path: "/simulators/U/apps", grants: grants
+        ) else {
+            Issue.record("open-url must not reach the app-install route"); return
+        }
+        #expect(message == #"this plugin did not declare the "apps" capability"#)
     }
 
     // MARK: - callers that aren't plugins

@@ -1,0 +1,34 @@
+{
+  "name": "deeplink",
+  "version": "1.2.0",
+  "apiVersion": 1,
+  "description": "Open deep links on the focused simulator, and list the URL schemes its apps answer to",
+  "icon": "link",
+  "capabilities": ["open-url"],
+  "contributes": {
+    "commands": [
+      { "id": "open", "title": "Open a deep link", "run": ["/usr/bin/python3", "bin/open.py"] }
+    ],
+    "panels": [
+      {
+        "id": "open",
+        "title": "Deep Links",
+        "icon": "link",
+        "when": "simulator.booted",
+        "body": {
+          "kind": "list",
+          "source": "open",
+          "rowAction": "fill",
+          "prompt": {
+            "arg": "url",
+            "placeholder": "myapp://path",
+            "submit": "Open",
+            "filter": true,
+            "complete": true,
+            "history": true
+          }
+        }
+      }
+    ]
+  }
+}

@@ -58,12 +58,37 @@ struct ResultRow: Equatable, Sendable {
     let frame: Rect?
     /// Payload for `RowAction.copy`.
     let copy: String?
+    /// Payload for `RowAction.fill` — what this row types into the
+    /// panel's prompt.
+    ///
+    /// Separate from `title` on purpose: a title is display text, so it
+    /// may be truncated, decorated or translated, and reusing it would
+    /// make every one of those a silent change to what gets typed.
+    let fill: String?
     /// Command id to invoke for `RowAction.run` — one of the ids this
     /// plugin contributes. Absent on the rows that just report.
     let run: String?
     /// Arguments handed to that command, in the context JSON it reads
     /// on stdin. Only meaningful alongside `run`.
     let args: PluginArgs?
+    /// Whether this row's control is on, when the panel declares one.
+    /// `nil` means the row isn't a control at all — which is how a
+    /// section header or a plain note keeps rendering as itself inside a
+    /// panel full of switches.
+    let state: RowState?
+    /// What a ticked row submits under the control's `arg`. Required
+    /// alongside `state`: a tick that carried nothing would be a control
+    /// the plugin can't act on.
+    let value: String?
+    /// Which set of options a `radio` row is exclusive within.
+    ///
+    /// This is what lets one panel ask more than one question. A
+    /// settings panel is normally several independent choices at once —
+    /// appearance, contrast and text size — and without groups, picking
+    /// "Dark" would unpick the text size. Rows naming none share one
+    /// implicit group, which is the single-question panel. Meaningless
+    /// for `switch` / `checkbox`, which have no exclusivity to express.
+    let group: String?
 
     init(
         title: String,
@@ -71,16 +96,24 @@ struct ResultRow: Equatable, Sendable {
         severity: RowSeverity = .info,
         frame: Rect? = nil,
         copy: String? = nil,
+        fill: String? = nil,
         run: String? = nil,
-        args: [String: Any]? = nil
+        args: [String: Any]? = nil,
+        state: RowState? = nil,
+        value: String? = nil,
+        group: String? = nil
     ) {
         self.title = title
         self.subtitle = subtitle
         self.severity = severity
         self.frame = frame
         self.copy = copy
+        self.fill = fill
         self.run = run
         self.args = args.flatMap(PluginArgs.init)
+        self.state = state
+        self.value = value
+        self.group = group
     }
 
     static func parsing(dict: [String: Any], index: Int) throws -> ResultRow {
@@ -117,14 +150,37 @@ struct ResultRow: Equatable, Sendable {
             args = object
         }
 
+        // `state` / `value` travel together for the same reason `run` and
+        // `args` do: a tick with nothing to submit is a control the
+        // plugin can't act on, and rendering it anyway makes a switch
+        // that flips and changes nothing.
+        var state: RowState?
+        if let rawState = dict["state"] {
+            guard let name = rawState as? String, let parsed = RowState(rawValue: name) else {
+                throw PluginResultError.unknownRowState(
+                    name: (rawState as? String) ?? String(describing: rawState), index: index
+                )
+            }
+            guard let value = dict["value"] as? String, !value.isEmpty else {
+                throw PluginResultError.stateWithoutValue(index: index)
+            }
+            state = parsed
+        }
+
         return ResultRow(
             title: title,
             subtitle: dict["subtitle"] as? String,
             severity: severity,
             frame: try frameValue(dict["frame"], index: index),
             copy: dict["copy"] as? String,
+            fill: dict["fill"] as? String,
             run: run,
-            args: args
+            args: args,
+            state: state,
+            // Only meaningful alongside `state`; a bare `value` on a
+            // plain row is ignored rather than made up into a control.
+            value: state == nil ? nil : dict["value"] as? String,
+            group: state == nil ? nil : dict["group"] as? String
         )
     }
 
@@ -154,6 +210,17 @@ enum RowSeverity: String, Equatable, Sendable, CaseIterable {
     case info, warn, error
 }
 
+/// Whether a tickable row is on, as the **device** last reported it.
+///
+/// Not what the user has clicked since: the page tracks pending ticks
+/// separately, so a row whose local tick disagrees with this can be
+/// drawn as unconfirmed rather than settled. This value is always the
+/// plugin's last word, which is what makes "what you see is what the
+/// device reports" survive batching.
+enum RowState: String, Equatable, Sendable, CaseIterable {
+    case on, off
+}
+
 /// Why a plugin's answer couldn't be rendered. Every case names the
 /// offending row so the author can find it.
 enum PluginResultError: Error, Equatable, CustomStringConvertible {
@@ -164,11 +231,23 @@ enum PluginResultError: Error, Equatable, CustomStringConvertible {
     case malformedRun(index: Int)
     case malformedArgs(index: Int)
     case argsWithoutRun(index: Int)
+    case unknownRowState(name: String, index: Int)
+    case stateWithoutValue(index: Int)
 
     var description: String {
         switch self {
         case .malformedJSON:
             return "plugin did not print a JSON object on stdout"
+        case .unknownRowState(let name, let index):
+            return """
+                row \(index) has state \"\(name)\" — use one of: \
+                \(RowState.allCases.map(\.rawValue).joined(separator: ", "))
+                """
+        case .stateWithoutValue(let index):
+            return """
+                row \(index) has \"state\" but no non-empty \"value\" — \
+                ticking it would submit nothing
+                """
         case .malformedRun(let index):
             return "row \(index) has a \"run\" that isn't a non-empty command id"
         case .malformedArgs(let index):

@@ -1816,6 +1816,148 @@
   #simNativeView .plugin-row-sub {
     color: var(--nv-text-muted); font-size: 11px; overflow-wrap: anywhere;
   }
+  /* A row saying the filter matched nothing — a note, not an entry, so
+     it carries no severity dot and doesn't look clickable. */
+  #simNativeView .plugin-row-empty { cursor: default; padding-left: 14px; }
+  #simNativeView .plugin-row-empty:hover { background: none; }
+
+  /* A panel's text field (`prompt`). Sits above the rows, inside the
+     scroll container's sticky top so it stays reachable in a long list —
+     it's the control, the rows below it are the reference. Metrics are
+     shared with the add-a-bakery modal's field so the two read as the
+     same widget. */
+  #simNativeView .plugin-prompt {
+    display: flex; gap: 8px; padding: 10px 14px;
+    position: sticky; top: 0; z-index: 1;
+    background: var(--nv-bar-bg);
+    border-bottom: 1px solid var(--nv-bar-border);
+  }
+  /* The field stacks an input over a ghost layer. Both carry identical
+     box metrics and the same font, which is what lets the un-typed
+     remainder line up with the caret without measuring any text. */
+  #simNativeView .plugin-prompt-field { position: relative; flex: 1; min-width: 0; }
+  #simNativeView .plugin-prompt-input,
+  #simNativeView .plugin-prompt-ghost {
+    padding: 6px 8px; border-radius: 8px;
+    border: 1px solid transparent;
+    font: 400 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    box-sizing: border-box;
+  }
+  #simNativeView .plugin-prompt-input {
+    position: relative; width: 100%;
+    appearance: none; -webkit-appearance: none;
+    background: var(--nv-fmt-track-bg);
+    border-color: var(--nv-bar-border);
+    color: var(--nv-text);
+    min-width: 0;
+  }
+  #simNativeView .plugin-prompt-input:focus {
+    outline: none; border-color: var(--nv-accent);
+  }
+  #simNativeView .plugin-prompt-ghost {
+    position: absolute; inset: 0; z-index: 1;
+    white-space: pre; overflow: hidden;
+    pointer-events: none;
+  }
+  /* The typed half is drawn and then made invisible — it is the spacer
+     that puts the remainder under the caret. */
+  #simNativeView .plugin-prompt-typed { color: transparent; }
+  #simNativeView .plugin-prompt-rest { color: var(--nv-text-muted); opacity: 0.75; }
+  #simNativeView .plugin-prompt-go { flex: 0 0 auto; padding: 6px 12px; }
+
+  /* Tickable rows. The glyph family is chosen by the manifest but drawn
+     entirely here — a plugin names `switch` / `checkbox` / `radio` and
+     never supplies a mark of its own. */
+  /* Centring is done by the layout, not by arithmetic: the content box
+     is 12px (15 minus two 1.5px borders), so any hand-computed margin
+     has to be a half-pixel to land in the middle — and the first attempt
+     used 3px, leaving the dot a pixel high. */
+  #simNativeView .plugin-tick {
+    flex: 0 0 auto; margin-top: 1px;
+    width: 15px; height: 15px; box-sizing: border-box;
+    border: 1.5px solid var(--nv-text-muted);
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  #simNativeView .plugin-tick[data-control="checkbox"] { border-radius: 4px; }
+  #simNativeView .plugin-tick[data-control="radio"]    { border-radius: 50%; }
+  #simNativeView .plugin-tick[data-on="true"] {
+    background: var(--nv-accent); border-color: var(--nv-accent);
+  }
+  /* The checkmark / dot, drawn with a pseudo-element so the row markup
+     carries no glyph of its own. */
+  #simNativeView .plugin-tick[data-control="checkbox"][data-on="true"]::after {
+    content: ''; width: 3px; height: 7px;
+    border: solid var(--nv-accent-text);
+    border-width: 0 1.6px 1.6px 0;
+    /* A rotated tick's visual mass sits below its box centre, so the
+       geometric centre reads a pixel low. This is the one nudge that is
+       an optical correction rather than a miscalculation. */
+    margin-bottom: 2px;
+    transform: rotate(45deg);
+  }
+  #simNativeView .plugin-tick[data-control="radio"][data-on="true"]::after {
+    content: ''; width: 5px; height: 5px;
+    border-radius: 50%; background: var(--nv-accent-text);
+  }
+  /* A switch is a pill, so it overrides the square metrics above. */
+  #simNativeView .plugin-tick[data-control="switch"] {
+    width: 26px; height: 15px; border-radius: 999px;
+    position: relative;
+  }
+  #simNativeView .plugin-tick[data-control="switch"]::after {
+    content: ''; position: absolute; top: 1.5px; left: 1.5px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--nv-text-muted);
+    transition: transform 0.12s ease, background 0.12s ease;
+  }
+  #simNativeView .plugin-tick[data-control="switch"][data-on="true"]::after {
+    background: var(--nv-accent-text); transform: translateX(11px);
+  }
+
+  /* A section heading inside a panel of controls. It carries no dot:
+     an `info` dot in the same column as a radio reads as a third,
+     disabled control state, and once every row in the gutter is a
+     circle the hierarchy is gone. Set in small caps against the
+     options rather than looking like one of them. */
+  #simNativeView .plugin-row-heading {
+    padding: 14px 14px 4px;
+    font: 600 9.5px/1 -apple-system, sans-serif;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--nv-text-faint, var(--nv-text-muted));
+  }
+  #simNativeView .plugin-row-heading:first-child { padding-top: 10px; }
+  #simNativeView .plugin-row-heading .plugin-row-title { font: inherit; letter-spacing: inherit; }
+  /* An ordinary action row among controls — "Smaller" / "Larger". No
+     tick, so it aligns with the option labels instead of hanging in the
+     control column pretending to be one. */
+  #simNativeView .plugin-row-inset { padding-left: 37px; }
+  #simNativeView .plugin-row-inset .plugin-dot { display: none; }
+
+  /* A row whose tick hasn't been confirmed by the device yet. Batching
+     buys one subprocess per Apply instead of one per tick; this is the
+     price, drawn rather than hidden — a control that looks settled while
+     the device says otherwise is worse than one that's slow. */
+  #simNativeView .plugin-row-pending {
+    background: color-mix(in srgb, var(--nv-accent) 8%, transparent);
+  }
+  #simNativeView .plugin-row-pending .plugin-row-title { font-style: italic; }
+  #simNativeView .plugin-row-pending .plugin-tick {
+    border-style: dashed;
+  }
+
+  /* The batch-submit bar. Outside the scrolling body so it stays put —
+     a submit button you have to scroll to find is one you forget to
+     press, and with batching that means losing the edit. */
+  #simNativeView .plugin-apply {
+    display: flex; justify-content: flex-end;
+    padding: 10px 14px;
+    border-top: 1px solid var(--nv-bar-border);
+  }
+  #simNativeView .plugin-apply-btn { padding: 6px 14px; }
+  #simNativeView .plugin-apply-btn:disabled { opacity: 0.4; cursor: default; }
+
   /* The box drawn over the live screen for a `highlight` row. */
   #simNativeView .plugin-highlight {
     position: absolute; z-index: 30; pointer-events: none;

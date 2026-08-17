@@ -1,6 +1,6 @@
 {
   "name": "a11y",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "apiVersion": 1,
   "description": "Accessibility audit for the current screen, and the display settings to run it under",
   "icon": "accessibility",
@@ -23,7 +23,12 @@
         "title": "Display & Text Size",
         "icon": "wrench",
         "when": "simulator.booted",
-        "body": { "kind": "list", "source": "display", "rowAction": "run" }
+        "body": {
+          "kind": "list",
+          "source": "display",
+          "rowAction": "run",
+          "control": { "kind": "radio", "arg": "settings", "submit": "Apply" }
+        }
       }
     ]
   }

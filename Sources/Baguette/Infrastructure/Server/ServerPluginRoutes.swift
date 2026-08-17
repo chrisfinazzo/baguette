@@ -283,10 +283,16 @@ extension ResultRow {
         var out: [String: Any] = ["title": title, "severity": severity.rawValue]
         if let subtitle { out["subtitle"] = subtitle }
         if let copy { out["copy"] = copy }
+        if let fill { out["fill"] = fill }
         // Round-tripped verbatim: the browser sends `run` + `args` back
         // to the command that authored them. baguette is the postman.
         if let run { out["run"] = run }
         if let args { out["args"] = args.object }
+        // Absent on a plain row, so a panel that ships no controls
+        // projects exactly as it did before controls existed.
+        if let state { out["state"] = state.rawValue }
+        if let value { out["value"] = value }
+        if let group { out["group"] = group }
         if let frame {
             out["frame"] = [
                 "x": frame.origin.x, "y": frame.origin.y,

@@ -119,13 +119,13 @@ struct PluginManifestTests {
     @Test func `parsing reads a list body bound to a contributed command`() throws {
         let manifest = try PluginManifest.parsing(json: Self.fixturePanel)
         let panel = try #require(manifest.panels.first)
-        #expect(panel.body == .list(source: "audit", rowAction: .highlight))
+        #expect(panel.body == .list(ListBody(source: "audit", rowAction: .highlight)))
     }
 
     @Test func `a panel's rowAction is nil when the manifest omits it`() throws {
         let manifest = try PluginManifest.parsing(json: Self.fixturePanelNoRowAction)
         let panel = try #require(manifest.panels.first)
-        #expect(panel.body == .list(source: "audit", rowAction: nil))
+        #expect(panel.body == .list(ListBody(source: "audit")))
     }
 
     @Test func `parsing reads a panel's when condition`() throws {

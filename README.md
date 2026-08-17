@@ -227,6 +227,15 @@ baguette <command> [options]
                                              Stream os_log output. Levels are
                                              the three the iOS-runtime accepts.
 
+  # Deep links. `https://` dispatches fine and then opens SAFARI rather
+  # than your app — the simulator doesn't resolve associated domains — so
+  # openurl warns before doing it. See docs/features/deep-links.md.
+  openurl --udid <UDID> <url>                Open a deep link, e.g.
+                                             'myapp://profile/42'
+  schemes --udid <UDID> [--json]             URL schemes the device's apps
+                                             registered, ranked: an app's own
+                                             scheme before its aliases
+
   # Long-lived gesture pipe
   input --udid <UDID>                        Read newline-delimited JSON
                                              gestures from stdin
@@ -348,6 +357,8 @@ rejected.
 | `POST` | `/simulators/:udid/interface`              | set any subset; answers with the resulting state |
 | `GET`  | `/simulators/:udid/describe-ui.json`       | accessibility tree over HTTP (`?x=&y=` hit-tests a point) |
 | `POST` | `/simulators/:udid/input`                  | one gesture envelope — same JSON `baguette input` takes |
+| `POST` | `/simulators/:udid/openurl?url=…`          | open a deep link; answers where it went (`app` / `browser` + warning) |
+| `GET`  | `/simulators/:udid/schemes.json?q=`        | URL schemes the device's apps registered, ranked |
 | `GET`  | `/plugins.json`                            | installed plugin manifests   |
 | `POST` | `/plugins/:id/commands/:cmd?udid=`         | run one plugin contribution, answer its rows |
 | `GET`  | `/bakeries.json`                           | trusted bakeries + pinned commits |
@@ -434,11 +445,17 @@ ever loaded into baguette's process or into the served page: it declares
 a panel, baguette draws it with host markup.
 
 ```bash
-baguette bakery add tddworks/baguette-plugins   # trust a source, once
-baguette plugin install a11y                    # or: plugin install owner/repo/a11y
-baguette plugin show a11y                       # what it may do, before you install
+baguette bakery add tddworks/baguette           # trust a source, once
+baguette plugin install deeplink                # or: plugin install owner/repo/deeplink
+baguette plugin show deeplink                   # what it may do, before you install
 baguette serve --plugin-dir ./my-plugins        # local authoring, nothing installed
 ```
+
+baguette's own repo is the **official bakery**. Only `a11y` ships inside
+the binary, so a fresh install has something in the rail; everything
+else it maintains — starting with
+[`deeplink`](docs/features/deep-links.md) — is official and still
+something you choose to install.
 
 Two properties define the security model:
 
@@ -657,8 +674,14 @@ feature lives in one place across both layers.
 │   │   │                             content size) + InterfaceAppearance /
 │   │   │                             InterfaceContrast / ContentSize /
 │   │   │                             ContentSizeChange / InterfaceUpdate
+│   │   ├── Apps/                     AppBundle / AppArchive (install) +
+│   │   │                             DeepLink / InstalledApp / SchemeSuggestion
+│   │   │                             (open a link; rank what's openable) +
+│   │   │                             @Mockable Apps aggregate
 │   │   ├── Plugin/                   PluginManifest / Plugin / Plugins aggregate +
-│   │   │                             Contribution / PanelBody / PluginResult +
+│   │   │                             Contribution / PanelBody / ListBody /
+│   │   │                             PanelPrompt / PanelControl /
+│   │   │                             PluginResult +
 │   │   │                             PluginCapability / PluginGrants /
 │   │   │                             PluginRoute + PluginAccess (what a plugin
 │   │   │                             may reach, decided in one place)
@@ -694,6 +717,8 @@ feature lives in one place across both layers.
 │   │   ├── Orientation/              PurpleWorkspacePortOrientation (GSEvent)
 │   │   ├── Logs/                     SimDeviceLogStream + HostSubprocess
 │   │   ├── Interface/                SimctlInterface (`simctl ui`)
+│   │   ├── Apps/                     SimctlApps (`simctl install` / `openurl` /
+│   │   │                             `listapps` + the Info.plist scheme read)
 │   │   ├── Plugin/                   FileSystemPlugins + PluginRoot (bundled /
 │   │   │                             installed / --plugin-dir lookup)
 │   │   ├── Bakery/                   FileSystemBakeries + GitCheckout (shallow,
@@ -722,6 +747,8 @@ feature lives in one place across both layers.
 │       ├── sim-ax-inspector.js       Accessibility-tree overlay
 │       ├── sim-plugins.js            Plugins rail + panels (host-drawn)
 │       ├── plugin-row-action.js      what clicking a plugin row means
+│       ├── plugin-prompt.js          what a plugin panel's text field means
+│       ├── plugin-control.js         what ticking a plugin row means
 │       ├── recorder.js               In-browser MP4 recorder
 │       ├── frame-decoder.js          MJPEG / AVCC strategy
 │       ├── stream-session.js         WebSocket + paint loop

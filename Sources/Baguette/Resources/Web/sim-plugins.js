@@ -93,6 +93,26 @@
       this.log = log || (() => {});
       this.plugins = [];
       this.openPanelID = null;
+      // What's typed in the open panel's prompt, if it has one. Held
+      // here rather than read off the DOM because every command answer
+      // re-renders the card — losing what you typed on the round trip
+      // would make "tweak the path and fire again" impossible.
+      this.promptValue = '';
+      // Whether the field should hold focus after a render. Stays false
+      // through the "Running…" placeholder — grabbing focus before
+      // there's a field to type into would just bounce — and is set once
+      // the panel's first answer draws one. You opened a panel with a
+      // text field to type in it.
+      this.promptFocused = false;
+      this.openPluginName = null;
+      // The rows the open panel last returned, kept so `filter` can
+      // narrow them without re-running the command.
+      this.rows = [];
+      // Local tick state for a panel with controls: `{value: bool}`.
+      // Diverges from the rows' reported state between a tick and the
+      // Apply that confirms it, which is exactly what marks a row
+      // pending. Rebuilt from every fresh answer.
+      this.ticks = {};
       this.rail = null;
       this.host = null;
       // The hover flyout: at most one open, owned by one group button.
@@ -361,6 +381,18 @@
 
     close() {
       this.openPanelID = null;
+      this.openPluginName = null;
+      this.promptValue = '';
+      this.promptFocused = false;
+      this.rows = [];
+      this.ticks = {};
+      // What's been submitted from this panel's prompt, newest first,
+      // and where ↑/↓ currently sits in it (-1 = not browsing).
+      this.history = [];
+      this.historyAt = -1;
+      // Escape hides the ghost without clearing the field; typing again
+      // brings it back.
+      this.ghostSuppressed = false;
       this.host.innerHTML = '';
       this.host.hidden = true;
       this.onHighlight(null);
@@ -369,7 +401,19 @@
 
     async open(pluginName, panel) {
       this.openPanelID = panel.id;
+      this.openPluginName = pluginName;
       this.host.hidden = false;
+      // A fresh panel starts with an empty field and no rows; carrying
+      // the last panel's text across would submit it to a different
+      // plugin's command. Switching panels goes straight through here
+      // without passing `close`, so this is the only place that runs.
+      this.promptValue = '';
+      this.promptFocused = false;
+      this.rows = [];
+      this.ticks = {};
+      this.historyAt = -1;
+      this.ghostSuppressed = false;
+      this.history = this.promptFor(panel).remembers ? this.loadHistory(panel) : [];
       this.renderShell(pluginName, panel, '<div class="plugin-status">Running…</div>');
 
       const body = panel.body || {};
@@ -380,6 +424,157 @@
 
       const [id, cmd] = String(body.source).split(':');
       await this.invoke(pluginName, panel, id, cmd, null);
+    }
+
+    /// The panel's declared text field, as a decision object. Absent for
+    /// every panel that doesn't declare one, which is all of them until
+    /// a manifest opts in.
+    promptFor(panel) {
+      return new window.Baguette._PluginPrompt((panel.body || {}).prompt);
+    }
+
+    // --- inline completion + history ----------------------------------
+
+    /// Where history lives: per panel, so the deep-link bar and a
+    /// settings panel don't arrow through each other's entries.
+    historyKey(panel) {
+      return 'baguette.plugin-prompt.' + String(panel.id || '');
+    }
+
+    /// Reading is defensive because `localStorage` throws outright in
+    /// private mode and in some embedded webviews — a bar that can't
+    /// remember must still type.
+    loadHistory(panel) {
+      try {
+        const raw = window.localStorage.getItem(this.historyKey(panel));
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((e) => typeof e === 'string') : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    saveHistory(panel, history) {
+      try {
+        window.localStorage.setItem(this.historyKey(panel), JSON.stringify(history));
+      } catch (_) { /* full, or storage denied — not worth failing a click over */ }
+    }
+
+    /// What the bar may complete to: what you've used, then what the
+    /// plugin listed. Filtered rows only, so the ghost never offers
+    /// something the list is currently hiding.
+    promptCandidates(panel) {
+      const prompt = this.promptFor(panel);
+      const visible = this.rows.filter((row) => prompt.matches(row, this.promptValue));
+      return prompt.candidates(visible, this.history);
+    }
+
+    promptGhost(panel) {
+      if (this.ghostSuppressed) return '';
+      return this.promptFor(panel).ghost(this.promptValue, this.promptCandidates(panel));
+    }
+
+    /**
+     * Draw the un-typed remainder behind the field.
+     *
+     * The typed prefix is rendered too, but transparent — that's what
+     * makes the remainder line up with the caret without measuring text.
+     * Both halves go in via `textContent`, so a plugin's row text can't
+     * become markup on the way.
+     */
+    paintGhost(panel) {
+      const ghost = this.host.querySelector('.plugin-prompt-ghost');
+      if (!ghost) return;
+      ghost.textContent = '';
+      const rest = this.promptGhost(panel);
+      if (!rest) return;
+
+      const typed = document.createElement('span');
+      typed.className = 'plugin-prompt-typed';
+      typed.textContent = this.promptValue;
+      const remainder = document.createElement('span');
+      remainder.className = 'plugin-prompt-rest';
+      remainder.textContent = rest;
+      ghost.appendChild(typed);
+      ghost.appendChild(remainder);
+    }
+
+    /**
+     * Step through what's been submitted before. `↑` goes older.
+     *
+     * Stepping back past the newest entry restores the field to empty
+     * rather than sticking on the first one, so arrowing up and back
+     * down leaves you where you started.
+     */
+    recallHistory(panel, direction) {
+      if (!this.history.length) return;
+      const next = Math.min(this.history.length - 1, Math.max(-1, this.historyAt + direction));
+      this.historyAt = next;
+      this.promptValue = next < 0 ? '' : this.history[next];
+      // A recalled value is a whole entry, so a ghost completing it
+      // further would be suggesting something you didn't ask for.
+      this.ghostSuppressed = true;
+      const input = this.host.querySelector('.plugin-prompt-input');
+      if (input) {
+        input.value = this.promptValue;
+        input.setSelectionRange(this.promptValue.length, this.promptValue.length);
+      }
+      this.paintGhost(panel);
+      if (this.promptFor(panel).filters) {
+        this.paintRows(panel, (panel.body || {}).rowAction);
+      }
+    }
+
+    /**
+     * Put a row's text into the prompt and leave the caret after it.
+     *
+     * The point is to keep typing, so this deliberately does **not**
+     * submit: `account://` on its own is a scheme with no path, which is
+     * almost never what anyone means to open. The field becomes what you
+     * picked, and Enter is still yours to press.
+     */
+    fillPrompt(panel, text, rowAction) {
+      this.promptValue = text;
+      this.promptFocused = true;
+      // Picking a row is a fresh intent, so a ghost dismissed earlier is
+      // welcome again — it's how you get from `account://` to the path
+      // you used last time in one more keystroke.
+      this.ghostSuppressed = false;
+      this.historyAt = -1;
+      const input = this.host.querySelector('.plugin-prompt-input');
+      if (input) {
+        input.value = text;
+        input.focus();
+        input.setSelectionRange(text.length, text.length);
+      }
+      this.paintGhost(panel);
+      // Repaint the rows against the new filter value, but never through
+      // renderShell — that would rebuild the field and drop the caret we
+      // just placed.
+      if (this.promptFor(panel).filters) this.paintRows(panel, rowAction);
+    }
+
+    /**
+     * Submit the prompt: run the panel's own `source` command with what
+     * was typed. Identical to a `rowAction: "run"` click — same body,
+     * same endpoint — so the panel re-renders from what the command
+     * actually answered rather than from what the submit assumed.
+     */
+    submitPrompt(pluginName, panel) {
+      const prompt = this.promptFor(panel);
+      const args = prompt.args(this.promptValue);
+      if (!args) return;   // nothing typed; don't spend a subprocess
+      // Remembered on submit rather than on success: you typed it and
+      // meant it, and a link that failed is exactly the one you want to
+      // arrow back to and fix.
+      if (prompt.remembers) {
+        this.history = prompt.remember(this.history, this.promptValue);
+        this.historyAt = -1;
+        this.saveHistory(panel, this.history);
+      }
+      const [id, cmd] = String((panel.body || {}).source || '').split(':');
+      this.renderShell(pluginName, panel, '<div class="plugin-status">Running…</div>');
+      this.invoke(pluginName, panel, id, cmd, args);
     }
 
     /**
@@ -460,6 +655,8 @@
     }
 
     renderShell(pluginName, panel, innerHTML) {
+      const prompt = this.promptFor(panel);
+      const control = this.controlFor(panel);
       this.host.innerHTML =
         '<div class="plugin-card">'
         + '<div class="plugin-head">'
@@ -467,23 +664,262 @@
         +   '<span class="plugin-tag">' + escapeHTML(pluginName) + '</span>'
         +   '<button class="plugin-close" aria-label="Close">✕</button>'
         + '</div>'
-        + '<div class="plugin-body">' + innerHTML + '</div>'
+        + '<div class="plugin-body">'
+        +   (prompt.present ? '<div class="plugin-prompt"></div>' : '')
+        +   innerHTML
+        + '</div>'
+        // Outside `.plugin-body` so it stays put while the rows scroll —
+        // a submit button you have to scroll to find is one you forget
+        // to press, which with batching means losing the edit.
+        + (control.present ? '<div class="plugin-apply"></div>' : '')
         + '</div>';
       const close = this.host.querySelector('.plugin-close');
       if (close) close.addEventListener('click', () => this.close());
+      if (prompt.present) this.mountPrompt(pluginName, panel, prompt);
+      if (control.present) this.mountApply(pluginName, panel, control);
+    }
+
+    /**
+     * The batch-submit button, at the foot of a panel with controls.
+     *
+     * It says how many rows are waiting, because the whole cost of
+     * batching is that those rows are showing something the device
+     * hasn't confirmed — and a button that didn't count them would let
+     * you close the panel believing you'd applied something.
+     */
+    mountApply(pluginName, panel, control) {
+      const slot = this.host.querySelector('.plugin-apply');
+      if (!slot) return;
+
+      const button = document.createElement('button');
+      button.className = 'plugin-btn plugin-apply-btn';
+      slot.appendChild(button);
+      button.addEventListener('click', () => this.submitTicks(pluginName, panel, control));
+      this.paintApplyButton(panel);
+    }
+
+    /// Keep the button's label and enabled state honest as ticks change.
+    paintApplyButton(panel) {
+      const button = this.host.querySelector('.plugin-apply-btn');
+      if (!button) return;
+      const control = this.controlFor(panel);
+      const waiting = control.pending(this.ticks, this.rows).length;
+      button.textContent = waiting
+        ? control.submitLabel + ' (' + waiting + ')'
+        : control.submitLabel;
+      // Nothing pending means nothing to say to the device. Disabled
+      // rather than hidden, so the button doesn't appear and vanish
+      // under the cursor as you tick and untick.
+      button.disabled = waiting === 0;
+      const slot = this.host.querySelector('.plugin-apply');
+      if (slot) slot.classList.toggle('plugin-apply-dirty', waiting > 0);
+    }
+
+    /**
+     * Send every ticked value at once, then re-render from the answer.
+     *
+     * The panel deliberately does not keep its local ticks afterwards:
+     * `renderRows` rebuilds them from what the plugin reports, so a
+     * setting the device refused snaps back to the truth instead of
+     * staying stuck the way it was clicked.
+     */
+    submitTicks(pluginName, panel, control) {
+      const args = control.args(this.ticks, this.rows);
+      if (!args) return;
+      const [id, cmd] = String((panel.body || {}).source || '').split(':');
+      this.renderShell(pluginName, panel, '<div class="plugin-status">Applying…</div>');
+      this.invoke(pluginName, panel, id, cmd, args);
+    }
+
+    /**
+     * Build the text field with DOM calls rather than an HTML string.
+     *
+     * `placeholder` and the button label come from a manifest, which is
+     * untrusted text destined for the origin `isTrustedBrowserRequest`
+     * spends ~70 lines defending — so they go in via `setAttribute` and
+     * `textContent`, never `innerHTML`. Same rule as every other
+     * manifest string in this file.
+     */
+    mountPrompt(pluginName, panel, prompt) {
+      const slot = this.host.querySelector('.plugin-prompt');
+      if (!slot) return;
+
+      // The ghost sits *behind* the input, sharing its metrics, with the
+      // typed prefix rendered transparent so only the remainder shows.
+      // An overlay rather than a second value in the field itself, which
+      // would put text the user hasn't accepted into what Enter submits.
+      const field = document.createElement('div');
+      field.className = 'plugin-prompt-field';
+      const ghost = document.createElement('div');
+      ghost.className = 'plugin-prompt-ghost';
+      ghost.setAttribute('aria-hidden', 'true');
+
+      const input = document.createElement('input');
+      input.className = 'plugin-prompt-input';
+      input.type = 'text';
+      input.spellcheck = false;
+      input.setAttribute('placeholder', prompt.placeholder);
+      input.setAttribute('aria-label', panel.title);
+      input.value = this.promptValue;
+
+      const go = document.createElement('button');
+      go.className = 'plugin-btn plugin-prompt-go';
+      go.textContent = prompt.submitLabel;
+
+      field.appendChild(ghost);
+      field.appendChild(input);
+      slot.appendChild(field);
+      slot.appendChild(go);
+
+      const rowAction = (panel.body || {}).rowAction;
+      const retype = () => {
+        this.promptValue = input.value;
+        this.paintGhost(panel);
+        if (prompt.filters) this.paintRows(panel, rowAction);
+      };
+
+      input.addEventListener('input', () => {
+        // Typing leaves history browsing — otherwise the next ↑ would
+        // jump from a value you've since edited.
+        this.historyAt = -1;
+        // And it revives a ghost dismissed with Escape or stood down by
+        // a history recall. Suppression is about *that* value; once you
+        // type a different one there's a fresh suggestion to make, and
+        // leaving the flag set silently killed completion for the rest
+        // of the session.
+        this.ghostSuppressed = false;
+        retype();
+      });
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { this.submitPrompt(pluginName, panel); return; }
+
+        // Accept the ghost. `→` only counts at the very end of the
+        // field, so moving the caret through what you typed still moves
+        // the caret.
+        const atEnd = input.selectionStart === input.value.length
+                   && input.selectionEnd === input.value.length;
+        if ((event.key === 'Tab' || (event.key === 'ArrowRight' && atEnd))
+            && this.promptGhost(panel)) {
+          event.preventDefault();
+          input.value = prompt.accepted(input.value, this.promptCandidates(panel));
+          retype();
+          return;
+        }
+
+        if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && prompt.remembers) {
+          event.preventDefault();
+          this.recallHistory(panel, event.key === 'ArrowUp' ? 1 : -1);
+          return;
+        }
+
+        // Give up the suggestion without giving up what you typed.
+        if (event.key === 'Escape' && this.promptGhost(panel)) {
+          event.preventDefault();
+          this.ghostSuppressed = true;
+          this.paintGhost(panel);
+        }
+      });
+      go.addEventListener('click', () => this.submitPrompt(pluginName, panel));
+      this.paintGhost(panel);
+
+      // Re-focus after a re-render, so submitting and then typing again
+      // doesn't need a click. Caret to the end rather than selecting all
+      // — you're usually editing the path, not replacing the URL.
+      if (this.promptFocused) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
     }
 
     renderRows(pluginName, panel, rows, rowAction) {
-      if (!rows.length) {
+      this.rows = rows;
+      const prompt = this.promptFor(panel);
+      // A panel with a field is never "empty": the field is the point,
+      // and replacing it with "Nothing to report" would take away the
+      // only way to ask for something.
+      if (!rows.length && !prompt.present) {
         this.renderShell(pluginName, panel, '<div class="plugin-status">Nothing to report</div>');
         return;
       }
+      // The first answer is what draws the field, so this is the render
+      // that may take focus — you opened a panel with a text box to type
+      // in it. Every later render then restores it.
+      if (prompt.present) this.promptFocused = true;
+      // A fresh answer is the device's word on every control, so the
+      // pending ticks it just confirmed (or refused) are replaced by it
+      // rather than surviving to contradict it.
+      this.ticks = this.controlFor(panel).initialTicks(rows);
+      this.renderShell(pluginName, panel, this.rowsHTML(rows, rowAction, prompt, panel));
+      this.wireRows(pluginName, panel, rowAction);
+    }
+
+    /// Re-draw just the row list against the current filter and ticks,
+    /// leaving the field alone — repainting the whole card on every
+    /// keystroke would tear down the input being typed into.
+    paintRows(panel, rowAction) {
+      const prompt = this.promptFor(panel);
+      const list = this.host.querySelector('.plugin-rows');
+      const body = this.host.querySelector('.plugin-body');
+      const html = this.rowsHTML(this.rows, rowAction, prompt, panel);
+      if (list) list.outerHTML = html;
+      else if (body) body.insertAdjacentHTML('beforeend', html);
+      this.wireRows(null, panel, rowAction);
+      this.paintApplyButton(panel);
+    }
+
+    /// The panel's declared row controls, as a decision object.
+    controlFor(panel) {
+      return new window.Baguette._PluginControl((panel.body || {}).control);
+    }
+
+    rowsHTML(rows, rowAction, prompt, panel) {
       const action = new window.Baguette._PluginRowAction(rowAction);
-      const items = rows.map((row, index) => {
+      const control = this.controlFor(panel);
+      const pending = new Set(control.pending(this.ticks, rows));
+      // Carry each row's index in the *unfiltered* list, because that's
+      // what the click handler looks the row up by — filtering must not
+      // silently renumber which row a click resolves to.
+      const visible = rows
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => prompt.matches(row, this.promptValue));
+      if (!visible.length) {
+        return '<ul class="plugin-rows"><li class="plugin-row plugin-row-empty">'
+             + '<span class="plugin-row-text"><span class="plugin-row-sub">'
+             + (rows.length ? 'Nothing matches' : 'Nothing to report')
+             + '</span></span></li></ul>';
+      }
+      const items = visible.map(({ row, index }) => {
         const severity = SEVERITIES.includes(row.severity) ? row.severity : 'info';
-        const clickable = action.actionable(row) ? ' plugin-row-clickable' : '';
-        return '<li class="plugin-row' + clickable + '" data-index="' + index + '">'
-             + '<span class="plugin-dot" data-severity="' + severity + '"></span>'
+        const ticked = control.isControlRow(row);
+        // A control row is clickable because it ticks; a plain row falls
+        // through to whatever `rowAction` the panel declared. That's how
+        // a settings list keeps its section headings and can still mix
+        // in an ordinary action row.
+        const clickable = (ticked || action.actionable(row)) ? ' plugin-row-clickable' : '';
+        const unconfirmed = pending.has(row.value) ? ' plugin-row-pending' : '';
+        // In a panel of controls, a plain informational row is a section
+        // heading — the only thing display.py uses one for. Saying so in
+        // the markup is what lets it stop competing with the ticks: an
+        // `info` dot sitting in the same column as a radio reads as a
+        // third, disabled control state, and once every row in the
+        // gutter is a circle the hierarchy is gone. A `warn` / `error`
+        // dot still draws, because that one carries real meaning.
+        const heading = control.present && !ticked
+          && !action.actionable(row) && severity === 'info';
+        return '<li class="plugin-row' + clickable + unconfirmed
+             + (heading ? ' plugin-row-heading' : '')
+             + (control.present && !ticked && !heading ? ' plugin-row-inset' : '')
+             + '" data-index="' + index + '">'
+             + (ticked
+                  // The glyph is host markup driven by a boolean; the
+                  // manifest only ever chose which family to draw.
+                  ? '<span class="plugin-tick" data-control="' + control.kind + '"'
+                    + ' data-on="' + (this.ticks[row.value] ? 'true' : 'false') + '"'
+                    + ' role="' + (control.kind === 'radio' ? 'radio' : 'checkbox') + '"'
+                    + ' aria-checked="' + (this.ticks[row.value] ? 'true' : 'false') + '"></span>'
+                  : heading
+                      ? ''
+                      : '<span class="plugin-dot" data-severity="' + severity + '"></span>')
              + '<span class="plugin-row-text">'
              +   '<span class="plugin-row-title">' + escapeHTML(row.title) + '</span>'
              +   (row.subtitle
@@ -491,15 +927,33 @@
                    : '')
              + '</span></li>';
       }).join('');
-      this.renderShell(pluginName, panel, '<ul class="plugin-rows">' + items + '</ul>');
+      return '<ul class="plugin-rows">' + items + '</ul>';
+    }
 
+    /// Attach the row-click handler to whichever `.plugin-rows` is on
+    /// screen now. Re-attached after each paint because filtering
+    /// replaces the list element.
+    wireRows(pluginName, panel, rowAction) {
+      const name = pluginName || this.openPluginName;
+      const action = new window.Baguette._PluginRowAction(rowAction);
+      const control = this.controlFor(panel);
       const list = this.host.querySelector('.plugin-rows');
-      if (!list || !rowAction) return;
+      // A control-only panel declares no `rowAction` and still needs its
+      // clicks — bailing on `!rowAction` alone would leave every tick
+      // inert on exactly the panels this feature exists for.
+      if (!list || (!rowAction && !control.present)) return;
       list.addEventListener('click', (event) => {
         const li = event.target.closest('.plugin-row');
         if (!li) return;
-        const row = rows[Number(li.dataset.index)];
+        const row = this.rows[Number(li.dataset.index)];
         if (!row) return;
+        // A tickable row ticks. It costs no subprocess — the panel
+        // accumulates and sends them together when Apply is pressed.
+        if (control.isControlRow(row)) {
+          this.ticks = control.toggle(this.ticks, row, this.rows);
+          this.paintRows(panel, rowAction);
+          return;
+        }
         const intent = action.intent(row);
         if (!intent) return;   // an inert row stays inert, selection included
         for (const other of list.querySelectorAll('.plugin-row')) {
@@ -508,12 +962,13 @@
         if (intent.kind === 'highlight') this.onHighlight(intent.frame);
         if (intent.kind === 'tap') this.onTap(intent.point);
         if (intent.kind === 'copy') this.copyToClipboard(intent.text, li);
+        if (intent.kind === 'fill') this.fillPrompt(panel, intent.text, rowAction);
         if (intent.kind === 'run') {
           // The row names a command within its own plugin; the plugin
           // id comes from the panel's own source, so a row can never
           // reach into a different plugin.
           const pluginID = String((panel.body || {}).source || '').split(':')[0];
-          this.invoke(pluginName, panel, pluginID, intent.command, intent.args);
+          this.invoke(name, panel, pluginID, intent.command, intent.args);
         }
       });
     }

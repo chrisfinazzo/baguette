@@ -1,0 +1,7 @@
+{
+  "name": "tddworks/baguette",
+  "description": "Official baguette plugins",
+  "plugins": [
+    { "name": "deeplink", "path": "plugins/deeplink" }
+  ]
+}

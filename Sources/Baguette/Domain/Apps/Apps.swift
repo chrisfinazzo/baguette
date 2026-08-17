@@ -26,6 +26,17 @@ protocol Apps: Sendable {
     /// installable is inside, and `.installFailed` when simctl rejects
     /// the located app.
     func install(archive: AppArchive) async throws
+
+    /// Open a deep link on the device — the app that registered the
+    /// scheme comes to the foreground. Throws `AppsError.openFailed`
+    /// when simctl exits non-zero.
+    func open(_ link: DeepLink) async throws
+
+    /// Every app on the device, each carrying the URL schemes it
+    /// answers to. Throws `AppsError.listFailed` when simctl exits
+    /// non-zero; an app whose bundle can't be read still lists, with no
+    /// schemes, rather than dropping out of the roster.
+    func installed() async throws -> [InstalledApp]
 }
 
 /// Failure modes surfaced when installing an app. Maps to a CLI exit
@@ -36,11 +47,17 @@ enum AppsError: Error, Equatable, CustomStringConvertible {
     case extractFailed(status: Int32)
     case archiveTooLarge(bytes: Int64, limit: Int64)
     case noAppInArchive
+    case openFailed(status: Int32)
+    case listFailed(status: Int32)
 
     var description: String {
         switch self {
         case .installFailed(let status):
             return "xcrun simctl install exited \(status)"
+        case .openFailed(let status):
+            return "xcrun simctl openurl exited \(status)"
+        case .listFailed(let status):
+            return "xcrun simctl listapps exited \(status)"
         case .extractFailed(let status):
             return "ditto -x -k exited \(status) (corrupt zip?)"
         case .archiveTooLarge(let bytes, let limit):

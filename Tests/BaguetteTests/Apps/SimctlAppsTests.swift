@@ -200,4 +200,188 @@ struct SimctlAppsTests {
         }
         #expect(caught == .installFailed(status: 5))
     }
+
+    // MARK: deep links — openurl + the scheme inventory behind completion
+
+    /// Stub that plays a child which writes `output` to stdout and then
+    /// exits — the shape of `simctl listapps`, which answers on stdout
+    /// rather than through its exit code alone.
+    private func makeListingApps(
+        output: String, exitCode: Int32 = 0
+    ) -> (SimctlApps, Captures) {
+        let sub = MockSubprocess()
+        let captures = Captures()
+        given(sub).run(
+            executable: .any, arguments: .any, onBytes: .any, onExit: .any
+        ).willProduce { exe, args, onBytes, onExit in
+            captures.ran = true
+            captures.executable = exe
+            captures.arguments = args
+            onBytes(Data(output.utf8))
+            onExit(exitCode)
+        }
+        given(sub).terminate().willReturn()
+        return (SimctlApps(udid: "U", subprocess: sub), captures)
+    }
+
+    @Test func `opening a deep link spawns xcrun simctl openurl`() async throws {
+        let (apps, captures) = makeApps()
+        try await apps.open(DeepLink.from("myapp://profile/42")!)
+
+        #expect(captures.executable == URL(fileURLWithPath: "/usr/bin/xcrun"))
+        #expect(captures.arguments == ["simctl", "openurl", "U", "myapp://profile/42"])
+    }
+
+    @Test func `a non-zero simctl exit propagates as an open failure`() async {
+        let (apps, _) = makeApps(exitCode: 4)
+        var caught: AppsError?
+        do {
+            try await apps.open(DeepLink.from("myapp://profile")!)
+        } catch {
+            caught = error as? AppsError
+        }
+        #expect(caught == .openFailed(status: 4))
+    }
+
+    @Test func `the installed inventory spawns xcrun simctl listapps`() async throws {
+        let (apps, captures) = makeListingApps(output: "{ }")
+        _ = try await apps.installed()
+
+        #expect(captures.arguments == ["simctl", "listapps", "U"])
+    }
+
+    /// Materialise a throwaway `.app` carrying an `Info.plist` — the
+    /// second half of the inventory read. `listapps` reports the path;
+    /// the schemes come from the bundle it points at.
+    private func makeBundle(schemes: [String]) throws -> (URL, () -> Void) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-apps-\(UUID().uuidString)")
+        let bundle = dir.appendingPathComponent("MyApp.app")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let entries = schemes.map { "<string>\($0)</string>" }.joined()
+        try Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+          <key>CFBundleURLTypes</key>
+          <array><dict><key>CFBundleURLSchemes</key><array>\(entries)</array></dict></array>
+        </dict></plist>
+        """.utf8).write(to: bundle.appendingPathComponent("Info.plist"))
+        return (bundle, { try? FileManager.default.removeItem(at: dir) })
+    }
+
+    @Test func `the installed inventory reads schemes from each app's bundle`() async throws {
+        // simctl listapps reports no CFBundleURLTypes, so the schemes
+        // have to come from the Info.plist at the path it reports.
+        let (bundle, cleanup) = try makeBundle(schemes: ["myapp"])
+        defer { cleanup() }
+
+        let (apps, _) = makeListingApps(output: """
+        {
+            "com.example.MyApp" = {
+                CFBundleIdentifier = "com.example.MyApp";
+                CFBundleName = MyApp;
+                Path = "\(bundle.path)";
+            };
+        }
+        """)
+        let inventory = try await apps.installed()
+
+        #expect(inventory.map(\.bundleIdentifier) == ["com.example.MyApp"])
+        #expect(inventory.first?.schemes == ["myapp"])
+    }
+
+    @Test func `an app whose bundle has vanished still lists, with no schemes`() async throws {
+        let (apps, _) = makeListingApps(output: """
+        {
+            "com.example.Gone" = {
+                CFBundleIdentifier = "com.example.Gone";
+                CFBundleName = Gone;
+                Path = "/nowhere/Gone.app";
+            };
+        }
+        """)
+        let inventory = try await apps.installed()
+
+        #expect(inventory.map(\.bundleIdentifier) == ["com.example.Gone"])
+        #expect(inventory.first?.schemes == [])
+    }
+
+    @Test func `stdout arriving in several chunks still parses`() async throws {
+        // A child's output lands in arbitrary chunks; the adapter has to
+        // accumulate before parsing rather than parse each chunk.
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, onBytes: .any, onExit: .any
+        ).willProduce { _, _, onBytes, onExit in
+            onBytes(Data(#"{ "com.example.MyApp" = { CFBundleN"#.utf8))
+            onBytes(Data(#"ame = MyApp; }; }"#.utf8))
+            onExit(0)
+        }
+        given(sub).terminate().willReturn()
+
+        let inventory = try await SimctlApps(udid: "U", subprocess: sub).installed()
+        #expect(inventory.map(\.bundleIdentifier) == ["com.example.MyApp"])
+    }
+
+    @Test func `a non-zero simctl exit propagates as a listing failure`() async {
+        let (apps, _) = makeListingApps(output: "", exitCode: 2)
+        var caught: AppsError?
+        do {
+            _ = try await apps.installed()
+        } catch {
+            caught = error as? AppsError
+        }
+        #expect(caught == .listFailed(status: 2))
+    }
+
+    // MARK: - what a failure tells the user
+
+    @Test func `every app failure names the command that produced it`() {
+        // These strings are the whole of what a user sees when simctl
+        // refuses: the CLI prints them and the upload route puts them in
+        // its 4xx body. Naming the verb is what turns "it failed" into
+        // something you can re-run by hand to see the real error.
+        #expect(AppsError.installFailed(status: 1).description
+                == "xcrun simctl install exited 1")
+        #expect(AppsError.openFailed(status: 4).description
+                == "xcrun simctl openurl exited 4")
+        #expect(AppsError.listFailed(status: 2).description
+                == "xcrun simctl listapps exited 2")
+        #expect(AppsError.extractFailed(status: 5).description
+                == "ditto -x -k exited 5 (corrupt zip?)")
+        #expect(AppsError.noAppInArchive.description
+                == "no single .app bundle at the top level of the zip")
+        #expect(AppsError.archiveTooLarge(bytes: 9, limit: 4).description
+                == "archive inflates to 9 bytes, over the 4-byte cap (zip bomb?)")
+    }
+
+    // MARK: - the child that never starts
+
+    struct SpawnRefused: Error, Equatable {}
+
+    /// A `Subprocess` that refuses to launch — a missing binary, or a
+    /// path we aren't allowed to execute.
+    private func refusingToSpawn() -> SimctlApps {
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, onBytes: .any, onExit: .any
+        ).willThrow(SpawnRefused())
+        given(sub).terminate().willReturn()
+        return SimctlApps(udid: "U", subprocess: sub)
+    }
+
+    @Test func `a child that never starts surfaces instead of hanging`() async {
+        // Every verb here waits on a continuation the child's exit
+        // callback resumes. A spawn that throws means that callback never
+        // fires, so the error has to be resumed by hand — miss it and the
+        // caller waits forever on a process that was never there, which
+        // is worse than any failure it could report.
+        var caught: [Error] = []
+        do { try await refusingToSpawn().open(DeepLink.from("myapp://x")!) } catch { caught.append(error) }
+        do { _ = try await refusingToSpawn().installed() } catch { caught.append(error) }
+
+        #expect(caught.count == 2)
+        #expect(caught.allSatisfy { $0 is SpawnRefused })
+    }
 }

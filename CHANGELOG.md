@@ -10,6 +10,54 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **Deep links — `baguette openurl <url>` and `baguette schemes`.** Opens a link
+  on a booted simulator, and lists the URL schemes its apps registered (ranked:
+  an app's own scheme before its reverse-DNS and `exp+` aliases). Unlike
+  `simctl openurl` / `idb open` / Maestro, `openurl` warns that `https://` lands
+  in **Safari** rather than your app — the simulator doesn't resolve associated
+  domains, so dispatch succeeds and your app never comes up. Schemes need two
+  reads:
+  `simctl listapps` gives the roster and each app's `Path` but not
+  `CFBundleURLTypes`, so those come from `<Path>/Info.plist`. Over HTTP as
+  `POST /simulators/:udid/openurl` and `GET /simulators/:udid/schemes.json`,
+  reachable by a plugin holding the new `open-url` capability — which is apart
+  from `apps`, since this only launches software that is already installed.
+  See [`docs/features/deep-links.md`](docs/features/deep-links.md).
+
+- **A deep-link panel, as an installable official plugin.** Not in the toolbar —
+  baguette ships the toolbar, this is a thing you choose:
+
+  ```bash
+  baguette bakery add tddworks/baguette
+  baguette plugin install deeplink
+  ```
+
+  This makes baguette's own repo a bakery. Only `a11y` still ships inside the
+  binary; everything else maintained alongside baguette is official *and*
+  installed on purpose.
+
+- **Plugin panels can be operated, not just read.** A panel was a report: the
+  host ran a command and drew the rows. It can now carry a text field
+  (`body.prompt`) and tickable rows (`body.control` — switches, checkboxes,
+  radios, grouped so one panel can ask several questions). Both invoke the
+  panel's own `source` command with `args`, which is the path `rowAction: "run"`
+  already took, so this adds widgets rather than an execution model — still no
+  plugin code in the page.
+
+  The field completes as you type (`Tab` / `→` to accept), remembers the last 25
+  submissions on `↑` / `↓`, filters the rows already on screen, and takes a row's
+  text on click via `rowAction: "fill"` — so a list of suggestions behaves like a
+  URL bar instead of a launcher. History is browser-side: a plugin sees what you
+  submit, never what you typed before.
+
+  Ticks are local and batched — no subprocess per tick, and rows the device
+  hasn't confirmed are drawn pending until the submit returns. Every answer
+  rebuilds them from what the plugin reported, so a refused setting snaps back.
+  `a11y`'s display panel uses this (`1.2.0`) and no longer writes `"● Light"` /
+  `"○ Dark"` into row titles. All of it is additive — `apiVersion` stays 1.
+
 ### Changed
 
 - **The plugins rail follows the focus-mode design system.** The rail, its
