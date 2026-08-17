@@ -2085,7 +2085,7 @@ struct Server: Sendable {
                 }
                 source = wantImage ? .image(path: path) : .video(path: path)
             }
-            guard let dylibPath = VirtualCameraInstaller.installIfNeeded() else {
+            guard let dylibPath = InjectedDylibInstaller.installIfNeeded(.camera) else {
                 try? await outbound.write(.text(
                     #"{"type":"camera_state","ok":false,"error":"VirtualCamera.dylib is not bundled in this build"}"#
                 ))
