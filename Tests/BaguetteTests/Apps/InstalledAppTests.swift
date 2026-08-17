@@ -148,6 +148,28 @@ struct InstalledAppTests {
         #expect(InstalledApp.schemes(inInfoPlist: Data("nonsense".utf8)) == [])
     }
 
+    // MARK: - the invariant holds however the value is built
+
+    @Test func `schemes are normalised by the initialiser, not just by the parser`() {
+        // The type documents lower-cased, de-duplicated schemes, and
+        // `SchemeSuggestion.matching` relies on it — it lower-cases the
+        // needle and then compares against the stored scheme, so an
+        // upper-cased one silently never matches. Only the plist parser
+        // enforced it, which left every other way of building one free
+        // to break it.
+        let app = InstalledApp(
+            bundleIdentifier: "com.example.MyApp",
+            name: "My App",
+            schemes: ["MyApp", "myapp", "COM.Example.MyApp"]
+        )
+        #expect(app.schemes == ["myapp", "com.example.myapp"])
+    }
+
+    @Test func `an upper-cased scheme is still matchable once normalised`() {
+        let apps = [InstalledApp(bundleIdentifier: "a", name: "A", schemes: ["MyApp"])]
+        #expect(SchemeSuggestion.matching("myapp", in: apps).map(\.scheme) == ["myapp"])
+    }
+
     @Test func `an app takes on the schemes read from its bundle`() {
         let app = Self.app("com.example.MyApp")?.withSchemes(["myapp"])
         #expect(app?.schemes == ["myapp"])

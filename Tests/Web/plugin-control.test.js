@@ -208,3 +208,26 @@ test('the glyph family is reported for the host to draw', () => {
   assert.equal(new Control(CHECKBOX).kind, 'checkbox');
   assert.equal(new Control(RADIO).kind, 'radio');
 });
+
+test('a control kind the page cannot draw is refused, not passed through', () => {
+  // `kind` is interpolated straight into `data-control` and `role`
+  // attributes. The Swift parser restricts it to three values, but this
+  // file must not depend on that: /plugins.json is the same untrusted
+  // manifest text every other string here is escaped for, and one
+  // malformed value would otherwise close the attribute and open a new
+  // one. Same closed-set treatment `SEVERITIES` already gets.
+  const Control = PluginControl();
+  assert.equal(new Control({ kind: 'dial', arg: 'e' }).present, false);
+  assert.equal(new Control({ kind: 'radio" data-x="injected', arg: 'e' }).present, false);
+  assert.equal(new Control({ kind: 'dial', arg: 'e' }).kind, null);
+});
+
+test('a refused control kind ticks nothing and submits nothing', () => {
+  // Refusing must be inert all the way through, not just at `kind` —
+  // otherwise the rows would still tick while drawing no glyph.
+  const Control = PluginControl();
+  const control = new Control({ kind: 'dial', arg: 'e' });
+  assert.equal(control.isControlRow({ state: 'on', value: 'x' }), false);
+  assert.deepEqual(control.initialTicks(ROWS), {});
+  assert.equal(control.args({}, ROWS), null);
+});

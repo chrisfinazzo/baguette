@@ -3,9 +3,11 @@
 
 Opening the panel lists every URL scheme the device's apps registered,
 so the answer to "what can I even open here?" is on screen before you
-type anything. Each row is a `rowAction: "run"` row, so clicking one
-opens `scheme://` immediately; the field above submits to this same
-command with whatever you typed.
+type anything. Each row is a `rowAction: "fill"` row: clicking one puts
+that scheme in the field with the caret after it, ready for the path,
+rather than opening a bare scheme nobody meant. Submitting the field is
+what actually opens, and comes back to this same command as
+`args.url`.
 
 The one thing this says that `xcrun simctl openurl` doesn't: an
 `https://` link dispatches perfectly happily and then opens **Safari**,

@@ -45,10 +45,20 @@
      */
     get present() {
       return !!(this.spec && typeof this.spec.arg === 'string' && this.spec.arg
-                && typeof this.spec.kind === 'string' && this.spec.kind);
+                && PluginControl.kinds.includes(this.spec.kind));
     }
 
-    /** Which glyph family the host draws: switch / checkbox / radio. */
+    /**
+     * Which glyph family the host draws: switch / checkbox / radio.
+     *
+     * Resolved against the closed set rather than passed through. The
+     * Swift parser already restricts it, but this file must not lean on
+     * that: `/plugins.json` is the same untrusted manifest text every
+     * other string here is escaped for, and `kind` is interpolated
+     * straight into `data-control` and `role` attributes — one malformed
+     * value would close the attribute and open one of its own. Same
+     * treatment `SEVERITIES` gets in sim-plugins.js.
+     */
     get kind() {
       return this.present ? this.spec.kind : null;
     }
@@ -67,6 +77,7 @@
      * headings.
      */
     isControlRow(row) {
+      if (!this.present) return false;   // no control declared, or one we can't draw
       return !!(row && (row.state === 'on' || row.state === 'off') && row.value);
     }
 
@@ -160,6 +171,12 @@
       return { [this.spec.arg]: on };
     }
   }
+
+  /// The glyph families this page can draw, mirroring `RowControl` in
+  /// Domain/Plugin/PanelBody.swift. A closed set on both sides: the host
+  /// refuses an unknown one at parse time, and the page refuses to
+  /// render one it was somehow handed anyway.
+  PluginControl.kinds = ['switch', 'checkbox', 'radio'];
 
   root.Baguette = root.Baguette || {};
   root.Baguette._PluginControl = PluginControl;

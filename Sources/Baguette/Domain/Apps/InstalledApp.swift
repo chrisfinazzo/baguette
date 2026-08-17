@@ -49,7 +49,19 @@ public struct InstalledApp: Equatable, Sendable {
         self.bundleIdentifier = bundleIdentifier
         self.name = name
         self.bundlePath = bundlePath
-        self.schemes = schemes
+        // Normalised here rather than only where plists are parsed,
+        // because the invariant is load-bearing: `SchemeSuggestion`
+        // lower-cases the needle and compares it against the stored
+        // scheme, so an upper-cased one matches nothing at all. Anything
+        // that documents an invariant and leaves its initialiser free to
+        // break it is documenting a hope.
+        self.schemes = Self.normalised(schemes)
+    }
+
+    /// Lower-cased, de-duplicated, in declaration order.
+    static func normalised(_ schemes: [String]) -> [String] {
+        var seen: Set<String> = []
+        return schemes.map { $0.lowercased() }.filter { seen.insert($0).inserted }
     }
 
     /// The same app, with schemes read from its bundle attached.
@@ -101,10 +113,6 @@ public struct InstalledApp: Equatable, Sendable {
               let types = root["CFBundleURLTypes"] as? [[String: Any]]
         else { return [] }
 
-        var seen: Set<String> = []
-        return types
-            .flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
-            .map { $0.lowercased() }
-            .filter { seen.insert($0).inserted }
+        return normalised(types.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] })
     }
 }

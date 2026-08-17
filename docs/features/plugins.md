@@ -84,7 +84,7 @@ A plugin is a directory containing `baguette-plugin.json`:
   `fill` for `fill`. An unknown `rowAction` is inert rather than
   resolved to the nearest match.
 - **`body.prompt`** adds a text field above the rows — see
-  [Panels you can type into](#panels-you-can-type-into).
+  [Panels you can type into](#panels-you-can-type-into--bodyprompt).
 - **`body.control`** makes rows tickable — see
   [Panels you can tick](#panels-you-can-tick--bodycontrol).
 

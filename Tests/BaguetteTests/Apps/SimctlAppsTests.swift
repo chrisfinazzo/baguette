@@ -334,4 +334,54 @@ struct SimctlAppsTests {
         }
         #expect(caught == .listFailed(status: 2))
     }
+
+    // MARK: - what a failure tells the user
+
+    @Test func `every app failure names the command that produced it`() {
+        // These strings are the whole of what a user sees when simctl
+        // refuses: the CLI prints them and the upload route puts them in
+        // its 4xx body. Naming the verb is what turns "it failed" into
+        // something you can re-run by hand to see the real error.
+        #expect(AppsError.installFailed(status: 1).description
+                == "xcrun simctl install exited 1")
+        #expect(AppsError.openFailed(status: 4).description
+                == "xcrun simctl openurl exited 4")
+        #expect(AppsError.listFailed(status: 2).description
+                == "xcrun simctl listapps exited 2")
+        #expect(AppsError.extractFailed(status: 5).description
+                == "ditto -x -k exited 5 (corrupt zip?)")
+        #expect(AppsError.noAppInArchive.description
+                == "no single .app bundle at the top level of the zip")
+        #expect(AppsError.archiveTooLarge(bytes: 9, limit: 4).description
+                == "archive inflates to 9 bytes, over the 4-byte cap (zip bomb?)")
+    }
+
+    // MARK: - the child that never starts
+
+    struct SpawnRefused: Error, Equatable {}
+
+    /// A `Subprocess` that refuses to launch — a missing binary, or a
+    /// path we aren't allowed to execute.
+    private func refusingToSpawn() -> SimctlApps {
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, onBytes: .any, onExit: .any
+        ).willThrow(SpawnRefused())
+        given(sub).terminate().willReturn()
+        return SimctlApps(udid: "U", subprocess: sub)
+    }
+
+    @Test func `a child that never starts surfaces instead of hanging`() async {
+        // Every verb here waits on a continuation the child's exit
+        // callback resumes. A spawn that throws means that callback never
+        // fires, so the error has to be resumed by hand — miss it and the
+        // caller waits forever on a process that was never there, which
+        // is worse than any failure it could report.
+        var caught: [Error] = []
+        do { try await refusingToSpawn().open(DeepLink.from("myapp://x")!) } catch { caught.append(error) }
+        do { _ = try await refusingToSpawn().installed() } catch { caught.append(error) }
+
+        #expect(caught.count == 2)
+        #expect(caught.allSatisfy { $0 is SpawnRefused })
+    }
 }

@@ -717,6 +717,8 @@ feature lives in one place across both layers.
 │   │   ├── Orientation/              PurpleWorkspacePortOrientation (GSEvent)
 │   │   ├── Logs/                     SimDeviceLogStream + HostSubprocess
 │   │   ├── Interface/                SimctlInterface (`simctl ui`)
+│   │   ├── Apps/                     SimctlApps (`simctl install` / `openurl` /
+│   │   │                             `listapps` + the Info.plist scheme read)
 │   │   ├── Plugin/                   FileSystemPlugins + PluginRoot (bundled /
 │   │   │                             installed / --plugin-dir lookup)
 │   │   ├── Bakery/                   FileSystemBakeries + GitCheckout (shallow,

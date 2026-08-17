@@ -31,6 +31,10 @@ struct CommandParsingTests {
     @Test func `openurl parses the url argument`() throws {
         let cmd = try OpenURLCommand.parse(["--udid", "U", "myapp://profile/42"])
         #expect(cmd.url == "myapp://profile/42")
+        // The udid too, or this passes unchanged if `DeviceOption` ever
+        // stops binding for this command — which is the wiring the test
+        // exists to pin.
+        #expect(cmd.options.udid == "U")
         #expect(OpenURLCommand.configuration.commandName == "openurl")
     }
 

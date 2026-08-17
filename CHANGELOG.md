@@ -17,7 +17,8 @@ For releases prior to this changelog, see the
   an app's own scheme before its reverse-DNS and `exp+` aliases). Unlike
   `simctl openurl` / `idb open` / Maestro, `openurl` warns that `https://` lands
   in **Safari** rather than your app — the simulator doesn't resolve associated
-  domains, so dispatch succeeds and nothing opens. Schemes need two reads:
+  domains, so dispatch succeeds and your app never comes up. Schemes need two
+  reads:
   `simctl listapps` gives the roster and each app's `Path` but not
   `CFBundleURLTypes`, so those come from `<Path>/Info.plist`. Over HTTP as
   `POST /simulators/:udid/openurl` and `GET /simulators/:udid/schemes.json`,

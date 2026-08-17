@@ -92,6 +92,19 @@ test('a suggestion stays visible once you have typed past it', () => {
   assert.equal(prompt.matches({ title: 'myapp://' }, 'account://settings'), false);
 });
 
+test('a row is matched on the text it would fill in, not only on its label', () => {
+  // `fill` is what actually goes into the field; `title` is display text
+  // and may be decorated or translated. Searching only the label hides
+  // the completion whenever the two differ — type `://` against a row
+  // labelled "Account (SpringBoard)" and it disappears.
+  const Prompt = PluginPrompt();
+  const prompt = new Prompt(SPEC);
+  const row = { title: 'Account (SpringBoard)', fill: 'account://' };
+  assert.equal(prompt.matches(row, 'account'), true);
+  assert.equal(prompt.matches(row, '://'), true);
+  assert.equal(prompt.matches(row, 'zzz'), false);
+});
+
 test('typing past a suggestion is matched on the fill text when there is one', () => {
   const Prompt = PluginPrompt();
   const prompt = new Prompt(SPEC);

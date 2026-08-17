@@ -161,7 +161,12 @@
       if (!needle) return true;
       if (!row) return false;
 
-      const hay = ((row.title || '') + ' ' + (row.subtitle || '')).toLowerCase();
+      // `fill` is searched alongside the display fields: it is the text
+      // that actually goes into the box, while a title may be decorated
+      // or translated. Searching only the label hides the completion
+      // whenever the two differ.
+      const hay = [row.title, row.subtitle, row.fill]
+        .filter(Boolean).join(' ').toLowerCase();
       if (hay.includes(needle)) return true;
 
       // A suggestion you have typed *past* stays visible. Picking
