@@ -498,7 +498,10 @@ DELETE http://localhost:8421/simulators/<UDID>/network   (clear, running apps in
 **Only URLSession-shaped traffic is conditioned.** REST, GraphQL and image
 loading are; `URLSessionWebSocketTask`, `NWConnection`/Network.framework,
 raw sockets and most gRPC are not — structurally, since `URLProtocol` is
-part of the URL Loading System. For an app whose realtime layer is a
+part of the URL Loading System. **`WKWebView` and Safari page loads are not
+conditioned either**: WebKit fetches page resources in its own networking
+process. A hybrid app's native `fetch` calls are throttled while the web
+content beside them is not. `examples/NetworkProbe` demonstrates both. For an app whose realtime layer is a
 WebSocket, `--offline` degrades its request traffic without the app
 noticing it went offline. Loss is request-level (a proportion of requests
 fail immediately), not packet-level. A debug React Native build has its JS

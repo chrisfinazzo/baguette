@@ -315,11 +315,14 @@ Wired (use freely):
   **Network** card, with an amber toolbar dot whenever conditioning is on.
   **Same relaunch rule as motion** — only apps launched after `network set`
   are conditioned; changing it afterwards needs no relaunch.
-  **Two limits to state rather than discover:** only URLSession-shaped
+  **Three limits to state rather than discover:** only URLSession-shaped
   traffic is conditioned (WebSockets, `NWConnection` and raw sockets are
   not — so for an app whose realtime layer is a WebSocket, `--offline`
-  will not feel offline), and loss is request-level rather than
-  packet-level. See
+  will not feel offline); **`WKWebView` / Safari page loads are not
+  conditioned**, since WebKit loads them in its own networking process, so
+  a hybrid app is throttled natively but not in its web content; and loss
+  is request-level rather than packet-level. `examples/NetworkProbe` is a
+  one-screen app that shows the URLSession/WKWebView split. See
   [`docs/features/network.md`](../../docs/features/network.md).
 
 NOT wired (skill should NOT propose these):

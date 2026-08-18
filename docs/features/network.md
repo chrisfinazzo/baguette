@@ -213,6 +213,26 @@ An unconditioned state is not "intercept and re-issue at full speed" either:
 `canInitWithRequest:` declines outright, so a cleared condition costs a
 running app nothing.
 
+## Seeing it work
+
+[`examples/NetworkProbe`](../../examples/NetworkProbe) is a one-screen iOS
+app that fetches the same URL two ways and prints how long each took:
+
+```bash
+./examples/NetworkProbe/build.sh <UDID>          # build + install
+baguette network set --udid <UDID> --latency 3000
+xcrun simctl launch --terminate-running-process <UDID> com.baguette.networkprobe
+```
+
+Tap **Fetch — URLSession** and it reports something like
+`URLSession 200 in 3564 ms`. Tap **Load — WKWebView** and it returns
+promptly, because WebKit's page loads are not conditioned — the two numbers
+next to each other are the clearest statement of what this feature does and
+does not reach.
+
+No Xcode project: one ObjC file compiled against the iphonesimulator SDK and
+packaged into a `.app` by hand, the same way the injected dylibs are built.
+
 ## Forgetting this is on is the real hazard
 
 A forgotten camera override is obvious — the picture is wrong. A forgotten
@@ -247,6 +267,19 @@ read, and this one has to be believed.
   Loading System; `URLSessionWebSocketTask`, `NWConnection` /
   Network.framework, raw sockets, and most gRPC stacks bypass it entirely and
   are **not conditioned**. This is structural, not an oversight.
+
+- **`WKWebView` and Safari page loads are not conditioned.** WebKit fetches
+  page resources in its own networking process, on a path `URLProtocol` does
+  not sit on. Measured: with a 2 000 ms latency armed, launching Safari and
+  opening a page conditioned Safari's *own* `URLSession` traffic
+  (`configuration.apple.com`, the SafeBrowsing service) and **none** of the
+  page load.
+
+  This matters well beyond Safari — a hybrid app's native `fetch` calls are
+  conditioned while the web content inside its `WKWebView` is not, so the
+  same screen can be half-throttled. [`examples/NetworkProbe`](../../examples/NetworkProbe)
+  puts the two side by side if you want to see it rather than take it on
+  trust.
 
   It bites harder than it sounds. Testing against a driver app whose realtime
   layer is a WebSocket, `--offline` failed every REST call with
