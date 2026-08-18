@@ -73,10 +73,18 @@
       };
     }
 
-    /** Filename fragment: `appstore-6.9-1290x2796`, or bare dimensions. */
+    /**
+     * Filename fragment: `appstore-6.9-1290x2796`, or bare dimensions at
+     * native size. Ratio specs carry a colon, which is legal in an HFS+
+     * filename but which the Finder renders as a slash — `16:9-…` shows
+     * up in Downloads as `16/9-…`. Sanitising here, once, is what keeps
+     * screenshots and recordings naming their files identically.
+     */
     slug(width, height) {
       const dims = `${Math.round(width)}x${Math.round(height)}`;
-      return this.size.isNative ? dims : `${this.size.spec}-${dims}`;
+      if (this.size.isNative) return dims;
+      const spec = this.size.spec.replace(/[^A-Za-z0-9._-]+/g, '-');
+      return `${spec}-${dims}`;
     }
 
     /**

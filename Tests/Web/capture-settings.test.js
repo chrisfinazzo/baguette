@@ -101,6 +101,21 @@ test('names the capture so downloads say what size they came out at', () => {
   assert.equal(new (CaptureSettings())().slug(1290, 2796), '1290x2796');
 });
 
+// A colon is legal in an HFS+ filename but the Finder renders it as a
+// slash, so `16:9-...` shows up as `16/9-...` in the user's Downloads.
+// Sanitise here, once, so screenshots and recordings name files the same.
+test('keeps a ratio spec filename-safe', () => {
+  const s = new (CaptureSettings())({ size: '16:9' });
+  assert.equal(s.slug(4971, 2796), '16-9-4971x2796');
+});
+
+test('leaves an already-safe spec alone', () => {
+  assert.equal(
+    new (CaptureSettings())({ size: '1920x1080' }).slug(1920, 1080),
+    '1920x1080-1920x1080'
+  );
+});
+
 // ── persistence ──────────────────────────────────────────────
 
 test('restores a previously persisted selection', () => {
