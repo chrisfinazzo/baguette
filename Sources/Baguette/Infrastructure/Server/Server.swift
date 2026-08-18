@@ -825,6 +825,7 @@ struct Server: Sendable {
         "farm",
         "network",
         "screens",
+        "toolbar",
         "vendor/leaflet",
     ]
 
@@ -1724,7 +1725,7 @@ struct Server: Sendable {
                 model: installed,
                 variants: options.variants,
                 rotation: options.rotation,
-                outputSize: options.size ?? sourceSize,
+                outputSize: options.outputSize(source: sourceSize),
                 fit: options.fit,
                 background: options.background,
                 screenGlass: options.screenGlass

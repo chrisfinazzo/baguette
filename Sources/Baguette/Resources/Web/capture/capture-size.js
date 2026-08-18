@@ -35,10 +35,17 @@
      * @param {number} [spec.width]   fixed kind: exact pixels
      * @param {number} [spec.height]  fixed kind: exact pixels
      * @param {number} [spec.ratio]   ratio kind: width / height
+     * @param {string} [spec.code]    the chip's spelling — at most four
+     *        tabular characters, so the toolbar can hold one width
      */
-    constructor({ id, label, spec, kind, width, height, ratio }) {
+    constructor({ id, label, code, spec, kind, width, height, ratio }) {
       this.id = id;
       this.label = label;
+      // The toolbar chip used to render `label`, so it was "Native"
+      // (54px) one moment and "App Store iPad 13″" (132px) the next —
+      // the one control whose width the user changes by using it, in a
+      // bar that is a single row of fixed-size controls.
+      this.code = code || spec;
       this.spec = spec;
       this.kind = kind;
       this.width = width || 0;
@@ -87,6 +94,10 @@
         return new CaptureSize({
           id: 'custom',
           label: `${width} × ${height}`,
+          // "1920x1080" is wider than the label it would replace, so
+          // the chip says Custom and the popover's resolved dimensions
+          // say which.
+          code: 'Custom',
           spec: `${width}x${height}`,
           kind: 'fixed',
           width,
@@ -112,6 +123,21 @@
 
     get isNative() {
       return this.kind === 'native';
+    }
+
+    /**
+     * The shape this size wants, as width / height — or `null` for
+     * `native`, which has no shape of its own and takes the source's.
+     *
+     * Read straight off the value rather than recovered from a
+     * `resolve()` call: resolve rounds to whole pixels, and 1778/1000
+     * is not 16/9. Callers draw it (the chip's glyph) or stream at it,
+     * and both want the ratio the user asked for.
+     */
+    aspect() {
+      if (this.isNative) return null;
+      if (this.kind === 'ratio') return this.ratio > 0 ? this.ratio : null;
+      return this.width > 0 && this.height > 0 ? this.width / this.height : null;
     }
 
     /** The canvas dimensions this size wants for a given source. */
@@ -173,20 +199,20 @@
   // nothing shares mutable state. `spec` is what goes on the wire and into
   // localStorage; for presets it is just the id.
   const PRESETS = [
-    { id: 'native', label: 'Native', spec: 'native', kind: 'native' },
+    { id: 'native', label: 'Native', code: 'Auto', spec: 'native', kind: 'native' },
     {
-      id: 'appstore-6.9', label: 'App Store 6.9″', spec: 'appstore-6.9',
+      id: 'appstore-6.9', label: 'App Store 6.9″', code: '6.9″', spec: 'appstore-6.9',
       kind: 'fixed', width: 1290, height: 2796,
     },
     {
-      id: 'appstore-6.5', label: 'App Store 6.5″', spec: 'appstore-6.5',
+      id: 'appstore-6.5', label: 'App Store 6.5″', code: '6.5″', spec: 'appstore-6.5',
       kind: 'fixed', width: 1242, height: 2688,
     },
     {
-      id: 'appstore-ipad-13', label: 'App Store iPad 13″', spec: 'appstore-ipad-13',
+      id: 'appstore-ipad-13', label: 'App Store iPad 13″', code: '13″', spec: 'appstore-ipad-13',
       kind: 'fixed', width: 2064, height: 2752,
     },
-    { id: 'square', label: 'Square', spec: 'square', kind: 'ratio', ratio: 1 },
+    { id: 'square', label: 'Square', code: '1:1', spec: 'square', kind: 'ratio', ratio: 1 },
     { id: '16:9', label: 'Landscape 16:9', spec: '16:9', kind: 'ratio', ratio: 16 / 9 },
     { id: '9:16', label: 'Portrait 9:16', spec: '9:16', kind: 'ratio', ratio: 9 / 16 },
     { id: '4:3', label: 'Classic 4:3', spec: '4:3', kind: 'ratio', ratio: 4 / 3 },

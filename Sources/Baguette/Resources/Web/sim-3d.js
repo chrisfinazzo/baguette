@@ -224,13 +224,23 @@
   };
 
   /**
-   * Adopt the toolbar's CaptureSettings. Deliberately does NOT restart the
-   * stream: the live view keeps its own screen-sized framing (see
-   * `outputSize`), and the chosen size only applies to what gets saved —
-   * a one-shot re-render at full resolution.
+   * Adopt the toolbar's CaptureSettings.
+   *
+   * The stream keeps the stage's own SHAPE whatever the pick — framing
+   * a saved 3D image is the camera's job, and reshaping the live view
+   * to the target aspect makes it worse, not better. What the pick can
+   * change is the stream's DENSITY (`streamBudget`), and only across
+   * the native/sized line. So a restart happens at most once per
+   * session, on the first size the user picks, not on every change:
+   * switching between two sized presets, or touching fit, background
+   * or the bezel, leaves the stream alone.
    */
   Sim3DPanel.prototype.setCaptureSettings = function (settings) {
+    const before = Sim3DPanel.streamBudget(this.captureSettings);
     this.captureSettings = settings || null;
+    if (!this.session) return;
+    if (Sim3DPanel.streamBudget(this.captureSettings) === before) return;
+    this.start();
   };
 
   Sim3DPanel.prototype.detach = function () {
@@ -393,13 +403,107 @@
     });
   };
 
+  /**
+   * How a RECORDING should place the stage canvas into the picked size.
+   *
+   * A screenshot in 3D re-renders server-side at the exact size, so it
+   * is always framed. A recording can't — BrowserRecorder composites the
+   * stage canvas frame by frame as it arrives. The stage is a viewport
+   * onto a scene: a device standing in the middle of empty margins. So
+   * letterboxing the WHOLE stage into a tall App Store canvas shrinks
+   * the device into the emptiness instead of cropping the emptiness
+   * away, which is how a 6.9" recording came out as a small phone adrift
+   * in bands.
+   *
+   * Crop as far as the target allows, and no further: `cover` when the
+   * target is narrower than the stage — it eats the side margins and
+   * keeps full height — and `contain` when it is wider, because past
+   * that point there is no more device to show, only bars, and cropping
+   * into the device is worse than a bar beside it.
+   *
+   * Pure and static so the arithmetic is testable without a canvas.
+   *
+   * @param {object|null} settings  a CaptureSettings
+   * @param {{width:number,height:number}} stage  the stage canvas
+   * @returns {'cover'|'contain'}
+   */
+  Sim3DPanel.recordingFit = function (settings, stage) {
+    const size = settings && settings.size;
+    const width = (stage && stage.width) || 0;
+    const height = (stage && stage.height) || 0;
+    if (!size || size.isNative || !(width > 0) || !(height > 0)) return 'contain';
+    const target = size.resolve(width, height);
+    if (!target || !(target.width > 0) || !(target.height > 0)) return 'contain';
+    return target.width / target.height < width / height ? 'cover' : 'contain';
+  };
+
+  /**
+   * How many pixels the live stream may spend on its long side.
+   *
+   * 1600 ordinarily — enough to look right on a retina stage without
+   * asking the encoder for more than the view can show. More once the
+   * user has picked an output size, because a picked size is a claim
+   * about quality and a 3D RECORDING pays for the stream's density
+   * twice over: `recordingFit` crops the stage to the target's shape,
+   * so a 6.9" crop of a 1600 × 1129 stage is only 521 px wide and gets
+   * upscaled 2.5x to reach 1290. A denser stream is nearly free —
+   * measured on an M-series Mac, the RealityKit render takes 0.67s at
+   * 924 x 652 and 0.72s at 3200 x 2258, 12x the area for 7% more wall
+   * clock — and the live view is unaffected: same shape, shown at the
+   * same size by `object-fit: contain`, just sharper.
+   *
+   * Screenshots don't need any of this. They re-render server-side at
+   * the exact size, off the stream entirely.
+   */
+  Sim3DPanel.streamBudget = function (settings) {
+    const size = settings && settings.size;
+    return size && !size.isNative ? 2560 : 1600;
+  };
+
+  /**
+   * The live stream's pixel box: always the stage's own SHAPE, at a
+   * density the picked size decides.
+   *
+   * At `native` the stream matches the stage's device pixels, bounded
+   * by [480, 1600] — enough to look right, no more than the view can
+   * show. Once a size is picked the long side takes the WHOLE budget,
+   * supersampling the stage rather than merely being allowed to match
+   * it, because a recording keeps only the cropped fraction of these
+   * pixels. Downsampling the result for display is antialiasing, so
+   * the live view gets better, not worse.
+   *
+   * Scaling rather than clamping each side is the other half. The
+   * per-side clamp this replaces turned a 3800 x 1240 stage into
+   * 1600 x 1240 — aspect 3.07 rendered as 1.29 — so the camera framed
+   * a different scene than the stage was showing and `object-fit:
+   * contain` letterboxed the difference back out.
+   *
+   * Pure and static so the arithmetic is testable without a canvas.
+   */
+  Sim3DPanel.streamBox = function (stage, settings) {
+    const width = (stage && stage.width) || 960;
+    const height = (stage && stage.height) || 960;
+    const long = Math.max(width, height);
+    if (!(long > 0)) return { width: 960, height: 960 };
+    const budget = Sim3DPanel.streamBudget(settings);
+    const size = settings && settings.size;
+    const target = size && !size.isNative
+      ? budget
+      : Math.max(480, Math.min(budget, long));
+    const scale = target / long;
+    return {
+      width: Math.round(width * scale),
+      height: Math.round(height * scale),
+    };
+  };
+
   Sim3DPanel.prototype.outputSize = function () {
     const rect = this.stage ? this.stage.getBoundingClientRect() : null;
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    return {
-      width: Math.max(480, Math.min(1600, Math.round((rect && rect.width || 960) * ratio))),
-      height: Math.max(480, Math.min(1600, Math.round((rect && rect.height || 960) * ratio))),
-    };
+    return Sim3DPanel.streamBox({
+      width: Math.round((rect && rect.width || 960) * ratio),
+      height: Math.round((rect && rect.height || 960) * ratio),
+    }, this.captureSettings);
   };
 
   Sim3DPanel.prototype.setState = function (message, busy, error) {

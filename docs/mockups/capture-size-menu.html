@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Capture size menu — mockup</title>
+<!--
+  ────────────────────────────────────────────────────────────────────
+  Baguette · Capture size menu — design mockup (single file, no build)
+  ────────────────────────────────────────────────────────────────────
+
+  The problem, in two parts.
+
+  1. THE CHIP IS ELASTIC. It renders the preset's full label, so it is
+     "Native" (54px) one moment and "App Store iPad 13″" (132px) the
+     next. The focus toolbar is a single centred row of fixed-size
+     controls; a chip that grows by 78px shoves every icon left and, on
+     a narrow window, pushes the row into its horizontal scroller. The
+     one control whose width the user changes by using it is the one
+     control that should not change width.
+
+  2. THE POPOVER IS A COLUMN. Nine presets stacked one per row, then
+     Custom, Fit, Background and Device, each with its own heading —
+     ~520px tall before the note. On a 720px-tall window opened from a
+     toolbar at the top, that is most of the screen; on a laptop with
+     the sidebar out it clips.
+
+  Three directions are mocked below, live and clickable. A + B are chip
+  treatments and are mutually exclusive; C is the popover and pairs
+  with either.
+
+    A · GLYPH + CODE      fixed 78px chip. An aspect glyph drawn to the
+                          real ratio, plus a terse code (6.9″, 1:1,
+                          9:16). Reads as a *setting with a value*, the
+                          way the fps and format controls beside it do.
+
+    B · ICON ONLY         a 30px .ico-btn in the strip, aspect glyph,
+                          accent dot when the size isn't native. The
+                          most compact; the value is only legible once
+                          you know the glyph, so the tooltip and the
+                          popover header carry the name.
+
+    C · ASPECT GRID       the popover, rebuilt. Nine presets become a
+                          3×3 grid of thumbnails drawn at their true
+                          ratio — you pick a *shape*, which is what the
+                          choice actually is — and Custom / Fit /
+                          Background / Device collapse behind one
+                          "Options" disclosure. ~300px instead of 520.
+
+  Recommendation: A + C. B is here because it is the honest minimum and
+  worth seeing beside A before ruling it out — but the size is a value
+  the user sets and re-reads, not a mode they toggle, and the icon
+  strip is where modes live.
+
+  Nothing here is wired to a stream; the "resolved" pixel numbers are
+  computed from a stand-in 1428 × 2984 composite (an iPhone 17 Pro Max
+  bezel composite at capture scale) so the arithmetic on screen is the
+  arithmetic CaptureSize actually does.
+-->
+<style>
+  /* ── Theme tokens — lifted verbatim from sim-native.html so the
+     mockup matches focus mode pixel-for-pixel. Default dark; the
+     [data-theme="light"] block + media query flip to light. ─────── */
+  #view {
+    color-scheme: light dark;
+    --nv-page-bg:        #1a1a1f;
+    --nv-bar-bg:         rgba(20, 20, 24, 0.78);
+    --nv-bar-border:     rgba(255, 255, 255, 0.08);
+    --nv-bar-shadow:     0 8px 24px rgba(0, 0, 0, 0.45);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --nv-text:           #f5f5f7;
+    --nv-text-muted:     rgba(245, 245, 247, 0.55);
+    --nv-text-faint:     rgba(245, 245, 247, 0.5);
+    --nv-divider:        rgba(255, 255, 255, 0.12);
+    --nv-btn:            rgba(255, 255, 255, 0.06);
+    --nv-btn-hover:      rgba(255, 255, 255, 0.10);
+    --nv-btn-active:     rgba(255, 255, 255, 0.18);
+    --nv-panel:          #232329;
+    --nv-fmt-track-bg:   rgba(255, 255, 255, 0.06);
+    --nv-fmt-track-border: rgba(255, 255, 255, 0.06);
+    --nv-fmt-btn-text:   rgba(245, 245, 247, 0.65);
+    --nv-accent:         #2563eb;
+    --nv-accent-text:    #fff;
+    --nv-scrim:          rgba(0, 0, 0, 0.55);
+  }
+  #view[data-theme="light"] {
+    --nv-page-bg:        #f1f3f6;
+    --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+    --nv-bar-border:     rgba(15, 23, 42, 0.08);
+    --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    --nv-text:           #1d1d1f;
+    --nv-text-muted:     rgba(29, 29, 31, 0.65);
+    --nv-text-faint:     rgba(29, 29, 31, 0.55);
+    --nv-divider:        rgba(15, 23, 42, 0.14);
+    --nv-btn:            rgba(15, 23, 42, 0.05);
+    --nv-btn-hover:      rgba(15, 23, 42, 0.09);
+    --nv-btn-active:     rgba(15, 23, 42, 0.12);
+    --nv-panel:          #ffffff;
+    --nv-fmt-track-bg:   rgba(15, 23, 42, 0.06);
+    --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
+    --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
+    --nv-scrim:          rgba(15, 23, 42, 0.32);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font: 400 13px/1.5 ui-sans-serif, -apple-system, system-ui, sans-serif;
+  }
+  #view {
+    min-height: 100vh;
+    background: var(--nv-page-bg);
+    color: var(--nv-text);
+    padding: 28px 24px 96px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  h1 {
+    font: 700 20px/1.3 inherit; margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .sub { color: var(--nv-text-muted); font-size: 12px; margin: 0 0 28px; }
+
+  h2 {
+    font: 700 12px/1 inherit; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--nv-text-faint);
+    margin: 40px 0 10px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  h2 .tag {
+    float: right; letter-spacing: 0; text-transform: none;
+    font-weight: 600; color: var(--nv-accent);
+  }
+  .note {
+    color: var(--nv-text-muted); font-size: 12px;
+    margin: 0 0 16px; max-width: 62ch;
+  }
+  .note code {
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--nv-btn); padding: 1px 4px; border-radius: 4px;
+  }
+
+  /* ── The focus toolbar, reproduced ─────────────────────────────── */
+  .bar-stage {
+    padding: 20px 0 12px;
+    display: flex; justify-content: center;
+    overflow: visible;
+  }
+  .nv-bar {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 44px; padding: 0 10px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  }
+  .nv-name { font: 700 13px/1 inherit; white-space: nowrap; }
+  .nv-os   { font: 500 11px/1 inherit; color: var(--nv-text-faint); }
+  .nv-fps  {
+    color: var(--nv-text-muted); white-space: nowrap; padding: 0 2px;
+    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .fmt-picker {
+    display: inline-flex; align-items: stretch; padding: 2px;
+    background: var(--nv-fmt-track-bg);
+    border: 1px solid var(--nv-fmt-track-border);
+    border-radius: 999px;
+  }
+  .fmt-btn {
+    appearance: none; border: 0; padding: 0 10px; height: 22px;
+    background: transparent; color: var(--nv-fmt-btn-text);
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.04em; border-radius: 999px; cursor: pointer;
+  }
+  .fmt-btn.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  }
+  .tb-actions { display: inline-flex; align-items: center; gap: 2px; }
+  .ico-btn {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0;
+    background: transparent; border: 0; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .ico-btn:hover { background: var(--nv-btn-hover); }
+  .ico-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  .ico-btn svg { display: block; }
+
+  /* ── A · glyph + code chip ─────────────────────────────────────── */
+  .cap { position: relative; display: inline-flex; }
+  .cap-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 8px; border-radius: 7px; cursor: pointer;
+    font: 600 11px/1 ui-sans-serif, -apple-system, system-ui, sans-serif;
+    white-space: nowrap;
+    color: var(--nv-text);
+    background: var(--nv-btn);
+    border: 1px solid var(--nv-divider);
+  }
+  .cap-chip:hover { background: var(--nv-btn-hover); }
+  .cap-chip[aria-expanded="true"] {
+    border-color: var(--nv-accent); color: var(--nv-accent);
+  }
+  /* The width that stops the toolbar dancing. Every code fits in 4
+     tabular characters ("9:16", "6.9″", "13″", "1:1"); the box is
+     sized for the widest and the rest are centred in it. */
+  .cap-code {
+    min-width: 34px; text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .cap-chip .caret { width: 11px; height: 11px; flex: none; opacity: 0.6; }
+
+  /* The aspect glyph: a rectangle drawn at the real ratio inside a
+     13×13 box. It is the only part of the control that says what the
+     choice IS rather than what it is called. */
+  .ratio-glyph {
+    width: 13px; height: 13px; flex: none;
+    display: grid; place-items: center;
+  }
+  .ratio-glyph i {
+    display: block; border: 1.5px solid currentColor; border-radius: 2px;
+  }
+
+  /* ── B · icon-only chip ────────────────────────────────────────── */
+  .ico-btn .ratio-glyph i { border-width: 1.6px; }
+  .ico-btn .dot {
+    position: absolute; right: 4px; top: 4px;
+    width: 5px; height: 5px; border-radius: 999px;
+    background: var(--nv-accent);
+    box-shadow: 0 0 0 1.5px var(--nv-bar-bg);
+  }
+  .ico-btn.active .dot { background: var(--nv-accent-text); }
+
+  /* ── C · the popover ───────────────────────────────────────────── */
+  .cap-pop {
+    position: absolute; z-index: 60; top: calc(100% + 8px); right: 0;
+    width: 268px; padding: 10px;
+    border-radius: 12px;
+    background: var(--nv-panel);
+    border: 1px solid var(--nv-divider);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
+    font: 500 11px/1.4 ui-sans-serif, -apple-system, system-ui, sans-serif;
+    color: var(--nv-text);
+  }
+  .cap-pop[hidden] { display: none; }
+  .cap-head {
+    display: flex; align-items: baseline; gap: 6px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--nv-text-faint);
+    margin: 0 0 7px; padding: 0 2px;
+  }
+  .cap-head .now {
+    margin-left: auto; letter-spacing: 0; text-transform: none;
+    font-weight: 600; font-size: 10px; color: var(--nv-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The grid. Three columns of aspect thumbnails; the thumb is drawn
+     at the preset's true ratio inside a fixed 46px-tall cell, so the
+     row of them reads as a row of SHAPES. */
+  .cap-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  }
+  .cap-grid button {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    padding: 7px 4px 6px; border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: inherit; cursor: pointer;
+    font: inherit;
+  }
+  .cap-grid button:hover { background: var(--nv-btn-hover); }
+  .cap-grid button[aria-checked="true"] {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+  }
+  .cap-thumb {
+    height: 34px; display: grid; place-items: center;
+  }
+  .cap-thumb i {
+    display: block; border: 1.5px solid currentColor; border-radius: 2.5px;
+    opacity: 0.9;
+  }
+  .cap-grid .lbl {
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+  .cap-grid .px {
+    font-size: 8.5px; font-variant-numeric: tabular-nums;
+    color: var(--nv-text-faint);
+  }
+  .cap-grid button[aria-checked="true"] .px { color: rgba(255,255,255,0.75); }
+
+  /* The disclosure. Everything that isn't the size lives behind it,
+     because in practice a user sets fit / background / bezel once and
+     changes the size ten times. */
+  .cap-more {
+    margin-top: 8px; border-top: 1px solid var(--nv-divider);
+    padding-top: 7px;
+  }
+  .cap-more > summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--nv-text-faint);
+    padding: 2px;
+  }
+  .cap-more > summary::-webkit-details-marker { display: none; }
+  .cap-more > summary .sum {
+    margin-left: auto; letter-spacing: 0; text-transform: none;
+    font-weight: 500; color: var(--nv-text-muted);
+  }
+  .cap-more > summary .chev { transition: transform 0.15s ease; }
+  .cap-more[open] > summary .chev { transform: rotate(180deg); }
+  .cap-more-body { padding: 8px 2px 2px; display: grid; gap: 9px; }
+
+  .cap-row { display: flex; align-items: center; gap: 8px; }
+  .cap-row > .k {
+    width: 62px; flex: none;
+    font-size: 10px; color: var(--nv-text-muted);
+  }
+  .cap-seg {
+    display: flex; flex: 1; gap: 2px; padding: 2px; border-radius: 7px;
+    background: var(--nv-btn);
+  }
+  .cap-seg button {
+    flex: 1; padding: 4px 0; border: 0; border-radius: 5px; cursor: pointer;
+    background: transparent; color: inherit; font: 600 10px/1 inherit;
+  }
+  .cap-seg button[aria-checked="true"] {
+    background: var(--nv-panel); box-shadow: 0 1px 2px rgba(0,0,0,0.28);
+  }
+  .cap-row input[type="text"] {
+    flex: 1; min-width: 0; height: 24px; padding: 0 7px;
+    border: 1px solid var(--nv-divider); border-radius: 6px;
+    background: var(--nv-btn); color: inherit; font: inherit;
+  }
+  .cap-row input[type="color"] {
+    width: 28px; height: 24px; padding: 0; cursor: pointer;
+    border: 1px solid var(--nv-divider); border-radius: 6px; background: none;
+  }
+  .cap-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+  /* ── side-by-side comparison rail ──────────────────────────────── */
+  .rail {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px; margin-top: 8px;
+  }
+  .card {
+    border: 1px solid var(--nv-divider); border-radius: 12px;
+    padding: 14px; background: var(--nv-btn);
+  }
+  .card h3 {
+    margin: 0 0 3px; font: 700 12px/1 inherit;
+  }
+  .card p { margin: 0 0 12px; font-size: 11px; color: var(--nv-text-muted); }
+  .card .demo {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 52px; border-radius: 8px;
+    background: var(--nv-page-bg); border: 1px solid var(--nv-divider);
+  }
+  .widths {
+    margin-top: 10px; font: 500 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-faint);
+  }
+  .widths b { color: var(--nv-text-muted); font-weight: 600; }
+
+  .theme-toggle {
+    position: fixed; right: 16px; bottom: 16px;
+    width: 36px; height: 36px; display: inline-flex;
+    align-items: center; justify-content: center;
+    background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 999px; box-shadow: var(--nv-bar-shadow);
+    backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text); cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div id="view" data-theme="light">
+<div class="wrap">
+
+  <h1>Capture size menu</h1>
+  <p class="sub">
+    The chip stops resizing the toolbar, and the popover stops being a
+    column. Live and clickable — pick sizes and watch the bar.
+  </p>
+
+  <!-- ══ TODAY ══════════════════════════════════════════════════ -->
+  <h2>Today <span class="tag">baseline</span></h2>
+  <p class="note">
+    The chip renders <code>preset.label</code>. Picking
+    <b>App&nbsp;Store&nbsp;iPad&nbsp;13″</b> after <b>Native</b> widens it by
+    78px and shifts every icon in the row. The popover is ~520px tall.
+  </p>
+  <div class="bar-stage"><div class="nv-bar" id="barToday"></div></div>
+
+  <!-- ══ A ══════════════════════════════════════════════════════ -->
+  <h2>A · Glyph + code <span class="tag">recommended</span></h2>
+  <p class="note">
+    A rectangle drawn at the real aspect, plus the code in a
+    <code>min-width:34px</code> tabular box. Every selection is the same
+    78px wide, so the toolbar is still. The full name is one click away
+    and is also the chip's <code>title</code>.
+  </p>
+  <div class="bar-stage"><div class="nv-bar" id="barA"></div></div>
+
+  <!-- ══ B ══════════════════════════════════════════════════════ -->
+  <h2>B · Icon only</h2>
+  <p class="note">
+    A 30px <code>.ico-btn</code> that joins the strip, with an accent dot
+    when the size isn't native. Nothing to reflow at all — but the value
+    is unreadable until you learn the glyph, and the icon strip is where
+    <em>modes</em> live, not values.
+  </p>
+  <div class="bar-stage"><div class="nv-bar" id="barB"></div></div>
+
+  <!-- ══ widths ═════════════════════════════════════════════════ -->
+  <h2>What each costs the bar</h2>
+  <div class="rail">
+    <div class="card">
+      <h3>Today</h3>
+      <p>Width tracks the label.</p>
+      <div class="demo" id="demoToday"></div>
+      <div class="widths" id="widthsToday"></div>
+    </div>
+    <div class="card">
+      <h3>A · Glyph + code</h3>
+      <p>Fixed. Reads as a value.</p>
+      <div class="demo" id="demoA"></div>
+      <div class="widths" id="widthsA"></div>
+    </div>
+    <div class="card">
+      <h3>B · Icon only</h3>
+      <p>Fixed and minimal.</p>
+      <div class="demo" id="demoB"></div>
+      <div class="widths" id="widthsB"></div>
+    </div>
+  </div>
+
+  <!-- ══ C ══════════════════════════════════════════════════════ -->
+  <h2>C · Aspect grid <span class="tag">the popover</span></h2>
+  <p class="note">
+    Nine rows become a 3×3 grid of shapes drawn at their true ratio —
+    picking an output size <em>is</em> picking a shape, so show the
+    shape. Custom, Fit, Background and Device collapse behind one
+    disclosure that remembers its state: in practice those are set once
+    and the size is changed ten times. ~300px open, ~220px closed,
+    against 520px today.
+  </p>
+  <div class="bar-stage" style="align-items:flex-start;min-height:360px">
+    <div class="nv-bar" id="barC"></div>
+  </div>
+
+</div>
+</div>
+
+<button class="theme-toggle" id="themeToggle" title="Toggle theme">
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>
+</button>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── the catalogue, mirroring Domain/Capture + capture-size.js ─────
+  // `code` is the new terse spelling; `label` is what exists today.
+  const SOURCE = { width: 1428, height: 2984 };   // composite at capture scale
+  const PRESETS = [
+    { id: 'native',           label: 'Native',             code: 'Auto',  kind: 'native' },
+    { id: 'appstore-6.9',     label: 'App Store 6.9″',     code: '6.9″',  kind: 'fixed', w: 1290, h: 2796 },
+    { id: 'appstore-6.5',     label: 'App Store 6.5″',     code: '6.5″',  kind: 'fixed', w: 1242, h: 2688 },
+    { id: 'appstore-ipad-13', label: 'App Store iPad 13″', code: '13″',   kind: 'fixed', w: 2064, h: 2752 },
+    { id: 'square',           label: 'Square',             code: '1:1',   kind: 'ratio', r: 1 },
+    { id: '16:9',             label: 'Landscape 16:9',     code: '16:9',  kind: 'ratio', r: 16 / 9 },
+    { id: '9:16',             label: 'Portrait 9:16',      code: '9:16',  kind: 'ratio', r: 9 / 16 },
+    { id: '4:3',              label: 'Classic 4:3',        code: '4:3',   kind: 'ratio', r: 4 / 3 },
+    { id: '4:5',              label: 'Social 4:5',         code: '4:5',   kind: 'ratio', r: 4 / 5 },
+  ];
+
+  /** The same growth rule CaptureSize.resolve uses: never downscale. */
+  function resolve(p, src) {
+    if (p.kind === 'native') return { width: src.width, height: src.height };
+    if (p.kind === 'fixed')  return { width: p.w, height: p.h };
+    return src.width / src.height > p.r
+      ? { width: src.width, height: Math.round(src.width / p.r) }
+      : { width: Math.round(src.height * p.r), height: src.height };
+  }
+
+  const aspectOf = (p) => {
+    const r = resolve(p, SOURCE);
+    return r.width / r.height;
+  };
+
+  /** A rectangle at `aspect`, fitted into a box `size` px on its long side. */
+  function shape(aspect, size, className) {
+    const w = aspect >= 1 ? size : Math.round(size * aspect);
+    const h = aspect >= 1 ? Math.round(size / aspect) : size;
+    return '<span class="' + className + '"><i style="width:' + w +
+      'px;height:' + h + 'px"></i></span>';
+  }
+
+  const CARET =
+    '<svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' +
+    '<polyline points="6 9 12 15 18 9"/></svg>';
+
+  const ICONS = {
+    back:   'M15 18l-6-6 6-6',
+    mic:    'M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v4',
+    cube:   'M12 2l9 5v10l-9 5-9-5V7z M12 12l9-5 M12 12v10 M12 12L3 7',
+    ax:     'M12 3v18M3 12h18',
+    bars:   'M4 20V10M10 20V4M16 20v-8M22 20v-5',
+    pin:    'M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z M12 10a1 1 0 1 0 0 .01',
+    cam:    'M3 7h11v10H3zM17 10l4-3v10l-4-3z',
+    logs:   'M4 5h16v14H4zM8 9h8M8 13h5',
+    home:   'M4 11l8-7 8 7v9H4z',
+    shot:   'M4 8h4l2-2h4l2 2h4v11H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+    rec:    'M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+    apps:   'M8 4h12v12H8zM4 8v12h12',
+    shake:  'M9 5v14M15 5v14M5 9v6M19 9v6',
+  };
+  const ico = (d, cls) =>
+    '<button class="ico-btn ' + (cls || '') + '" tabindex="-1">' +
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="' +
+    d + '"/></svg></button>';
+
+  /** Everything in the bar except the size control. */
+  function barLead() {
+    return ico(ICONS.back) +
+      '<span class="nv-name">iPhone 17 Pro Max</span>' +
+      '<span class="nv-os">iOS 26.4</span>' +
+      '<span class="nv-fps">19 fps · 3D</span>' +
+      '<div class="fmt-picker">' +
+        '<button class="fmt-btn active">H.264</button>' +
+        '<button class="fmt-btn">MJPEG</button>' +
+      '</div>' +
+      '<div class="tb-actions">' +
+        ico(ICONS.mic) + ico(ICONS.cube, 'active') + ico(ICONS.ax) +
+        ico(ICONS.bars) + ico(ICONS.pin) + ico(ICONS.cam) + ico(ICONS.logs) +
+        ico(ICONS.home) + ico(ICONS.shot) + ico(ICONS.rec) + ico(ICONS.apps) +
+        ico(ICONS.shake) +
+      '</div>';
+  }
+
+  // ── one live selection shared by every variant, so clicking a size
+  //    in any of them updates all of them and the width table below ──
+  const state = {
+    sizeId: '9:16',
+    fit: 'contain',
+    background: '#ffffff',
+    withFrame: true,
+    optionsOpen: false,
+  };
+  const current = () => PRESETS.find((p) => p.id === state.sizeId) || PRESETS[0];
+
+  // ── chip renderers ───────────────────────────────────────────────
+
+  /** Today: the full label. */
+  function chipToday(p) {
+    return '<button class="cap-chip" data-chip="today" aria-expanded="false">' +
+      '<span>' + p.label + '</span>' + CARET + '</button>';
+  }
+
+  /** A: aspect glyph + terse code in a fixed box. */
+  function chipA(p) {
+    return '<button class="cap-chip" data-chip="a" aria-expanded="false" title="' +
+      p.label + '">' + shape(aspectOf(p), 11, 'ratio-glyph') +
+      '<span class="cap-code">' + p.code + '</span>' + CARET + '</button>';
+  }
+
+  /** B: the icon strip's own idiom. */
+  function chipB(p) {
+    return '<button class="ico-btn" data-chip="b" aria-expanded="false" title="Capture size: ' +
+      p.label + '">' + shape(aspectOf(p), 13, 'ratio-glyph') +
+      (p.kind === 'native' ? '' : '<span class="dot"></span>') + '</button>';
+  }
+
+  // ── C: the popover ───────────────────────────────────────────────
+  function popover() {
+    const cur = current();
+    const r = resolve(cur, SOURCE);
+
+    const cell = (p) => {
+      const res = resolve(p, SOURCE);
+      return '<button data-size="' + p.id + '" role="menuitemradio" aria-checked="' +
+        (p.id === cur.id) + '">' +
+        shape(aspectOf(p), 30, 'cap-thumb') +
+        '<span class="lbl">' + p.code + '</span>' +
+        '<span class="px">' + res.width + '×' + res.height + '</span>' +
+        '</button>';
+    };
+
+    const seg = (name, values, active) => '<div class="cap-seg">' +
+      values.map((v) => '<button data-' + name + '="' + v + '" aria-checked="' +
+        (v === active) + '">' + v[0].toUpperCase() + v.slice(1) +
+        '</button>').join('') + '</div>';
+
+    const summary = [
+      cur.kind === 'native' ? null : state.fit,
+      state.withFrame ? 'bezel' : 'no bezel',
+    ].filter(Boolean).join(' · ');
+
+    return '<div class="cap-pop" data-pop>' +
+      '<p class="cap-head">Output size' +
+        '<span class="now">' + r.width + '×' + r.height + '</span></p>' +
+      '<div class="cap-grid">' + PRESETS.map(cell).join('') + '</div>' +
+      '<details class="cap-more"' + (state.optionsOpen ? ' open' : '') + '>' +
+        '<summary>Options<span class="sum">' + summary + '</span>' +
+          '<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" ' +
+          'stroke="currentColor" stroke-width="2.6" stroke-linecap="round" ' +
+          'stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</summary>' +
+        '<div class="cap-more-body">' +
+          '<div class="cap-row"><span class="k">Custom</span>' +
+            '<input type="text" placeholder="1920x1080 or 3:2"></div>' +
+          '<div class="cap-row"><span class="k">Fit</span>' +
+            seg('fit', ['contain', 'cover', 'stretch'], state.fit) + '</div>' +
+          '<div class="cap-row"><span class="k">Background</span>' +
+            '<input type="color" value="' + state.background + '">' +
+            '<label><input type="checkbox"><span>Transparent</span></label></div>' +
+          '<div class="cap-row"><span class="k">Device</span>' +
+            '<label><input type="checkbox"' + (state.withFrame ? ' checked' : '') +
+            '><span>Include bezel</span></label></div>' +
+        '</div>' +
+      '</details>' +
+      '</div>';
+  }
+
+  // ── render ───────────────────────────────────────────────────────
+  const el = (id) => document.getElementById(id);
+
+  function render() {
+    const p = current();
+
+    el('barToday').innerHTML = barLead() +
+      '<span class="cap">' + chipToday(p) + popover() + '</span>';
+    el('barA').innerHTML = barLead() +
+      '<span class="cap">' + chipA(p) + popover() + '</span>';
+    el('barB').innerHTML = barLead() +
+      '<span class="cap">' + chipB(p) + popover() + '</span>';
+    el('barC').innerHTML = barLead() +
+      '<span class="cap">' + chipA(p) + popover() + '</span>';
+
+    // the C bar shows its popover open, since that's the thing on show
+    const cPop = el('barC').querySelector('[data-pop]');
+    cPop.removeAttribute('hidden');
+    el('barC').querySelector('.cap-chip').setAttribute('aria-expanded', 'true');
+
+    // every other popover starts closed
+    ['barToday', 'barA', 'barB'].forEach((id) => {
+      el(id).querySelector('[data-pop]').setAttribute('hidden', '');
+    });
+
+    // the width comparison, measured rather than asserted
+    el('demoToday').innerHTML = chipToday(p);
+    el('demoA').innerHTML = chipA(p);
+    el('demoB').innerHTML = chipB(p);
+    measure();
+  }
+
+  /** Lay every preset out off-screen and report the real chip widths. */
+  function measure() {
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'position:fixed;left:-9999px;top:0;display:flex;gap:4px';
+    document.getElementById('view').appendChild(probe);
+
+    const rows = { today: [], a: [], b: [] };
+    PRESETS.forEach((p) => {
+      probe.innerHTML = chipToday(p);
+      rows.today.push([p.code, Math.round(probe.firstChild.getBoundingClientRect().width)]);
+      probe.innerHTML = chipA(p);
+      rows.a.push([p.code, Math.round(probe.firstChild.getBoundingClientRect().width)]);
+      probe.innerHTML = chipB(p);
+      rows.b.push([p.code, Math.round(probe.firstChild.getBoundingClientRect().width)]);
+    });
+    probe.remove();
+
+    const summarise = (list) => {
+      const widths = list.map((r) => r[1]);
+      const min = Math.min.apply(null, widths);
+      const max = Math.max.apply(null, widths);
+      return '<b>' + min + '–' + max + 'px</b><br>swing <b>' + (max - min) + 'px</b>';
+    };
+    el('widthsToday').innerHTML = summarise(rows.today);
+    el('widthsA').innerHTML = summarise(rows.a);
+    el('widthsB').innerHTML = summarise(rows.b);
+  }
+
+  // ── interaction ──────────────────────────────────────────────────
+  document.addEventListener('click', (event) => {
+    const chip = event.target.closest('[data-chip]');
+    if (chip) {
+      const pop = chip.parentElement.querySelector('[data-pop]');
+      const open = chip.getAttribute('aria-expanded') === 'true';
+      document.querySelectorAll('[data-pop]').forEach((n) => {
+        if (n !== pop && !n.closest('#barC')) n.setAttribute('hidden', '');
+      });
+      document.querySelectorAll('[data-chip]').forEach((n) => {
+        if (n !== chip && !n.closest('#barC')) n.setAttribute('aria-expanded', 'false');
+      });
+      pop.toggleAttribute('hidden', open);
+      chip.setAttribute('aria-expanded', String(!open));
+      return;
+    }
+
+    const size = event.target.closest('[data-size]');
+    if (size) { state.sizeId = size.dataset.size; render(); return; }
+
+    const fit = event.target.closest('[data-fit]');
+    if (fit) { state.fit = fit.dataset.fit; state.optionsOpen = true; render(); return; }
+
+    if (event.target.matches('.cap-more summary, .cap-more summary *')) {
+      // let <details> do its thing, then remember it
+      setTimeout(() => {
+        const d = event.target.closest('details');
+        if (d) state.optionsOpen = d.open;
+      }, 0);
+      return;
+    }
+
+    if (!event.target.closest('.cap')) {
+      document.querySelectorAll('[data-pop]').forEach((n) => {
+        if (!n.closest('#barC')) n.setAttribute('hidden', '');
+      });
+      document.querySelectorAll('[data-chip]').forEach((n) => {
+        if (!n.closest('#barC')) n.setAttribute('aria-expanded', 'false');
+      });
+    }
+  });
+
+  document.addEventListener('change', (event) => {
+    if (event.target.type === 'checkbox' &&
+        /bezel/i.test(event.target.parentElement.textContent)) {
+      state.withFrame = event.target.checked;
+      state.optionsOpen = true;
+      render();
+    }
+  });
+
+  el('themeToggle').addEventListener('click', () => {
+    const view = el('view');
+    view.setAttribute('data-theme',
+      view.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

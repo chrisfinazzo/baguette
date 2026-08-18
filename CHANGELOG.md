@@ -49,6 +49,13 @@ For releases prior to this changelog, see the
   `--offline` will not feel offline to it. See
   [`docs/features/network.md`](docs/features/network.md).
 
+
+---
+
+## [0.1.92] - 2026-08-18
+
+### Added
+
 - **Motion — `baguette motion start|set|stop`, and a walk that drives it.**
   Makes a simulator's apps read `CMMotionActivity` (walking, running,
   cycling, automotive), `CMPedometer` counters, and `CMMotionManager`
@@ -860,7 +867,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.91...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.92...HEAD
+[0.1.92]: https://github.com/tddworks/baguette/compare/v0.1.91...v0.1.92
 [0.1.91]: https://github.com/tddworks/baguette/compare/v0.1.90...v0.1.91
 [0.1.90]: https://github.com/tddworks/baguette/compare/v0.1.89...v0.1.90
 [0.1.89]: https://github.com/tddworks/baguette/compare/v0.1.88...v0.1.89
