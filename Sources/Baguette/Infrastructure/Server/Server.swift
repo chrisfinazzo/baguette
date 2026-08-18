@@ -345,6 +345,64 @@ struct Server: Sendable {
             }
         }
 
+        // Network conditioning — `POST` arms the injected dylib and states
+        // how degraded the network is; `GET` reports what this simulator is
+        // actually subject to; `DELETE` stops conditioning, including for
+        // apps that are already running.
+        //
+        // Like motion there is no simctl verb behind this, and for a
+        // sharper reason: the host's own tooling (Network Link Conditioner,
+        // and the dnctl/pfctl rules under it) is system-wide, so scoping to
+        // one simulator means injecting into the app under test. Only apps
+        // launched *after* the POST are conditioned — dyld inserts at exec
+        // time — though changing the condition afterwards reaches a running
+        // app fine. See `docs/features/network.md`.
+        router.post("/simulators/:udid/network") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let buffer = try? await r.body.collect(upTo: 64 * 1024)
+            let body = buffer.map { String(buffer: $0) } ?? ""
+            switch await Self.applyNetwork(
+                udid: Self.udidParam(r), body: body, simulators: simulators
+            ) {
+            case .ok:
+                return Self.jsonResponse(
+                    await Self.networkStateJSON(
+                        udid: Self.udidParam(r), simulators: simulators))
+            case .invalidBody:
+                return errorJSON(
+                    "network body must name exactly one of: a profile "
+                    + "(\"profile\":\"3g\"), explicit numbers (\"latencyMs\", "
+                    + "\"bandwidthKbps\", \"lossPercent\"), or \"offline\":true",
+                    status: .badRequest)
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON(
+                    "network conditioning failed — is VirtualNetwork.dylib bundled "
+                    + "in this build?",
+                    status: .internalServerError)
+            }
+        }
+        // Read-back for the card's readout and, more to the point, its armed
+        // badge. A throttle nobody remembers arming presents as "the app is
+        // slow", so the UI has to be able to say plainly that one is on.
+        router.get("/simulators/:udid/network") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            return Self.jsonResponse(
+                await Self.networkStateJSON(udid: Self.udidParam(r), simulators: simulators))
+        }
+        router.delete("/simulators/:udid/network") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            switch await Self.clearNetwork(udid: Self.udidParam(r), simulators: simulators) {
+            case .ok:
+                return jsonOK
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .invalidBody, .dispatchFailed:
+                return errorJSON("network clear failed", status: .internalServerError)
+            }
+        }
+
         // File upload — drag-and-drop a file onto the device view. One
         // dumb entry point: the browser POSTs raw bytes with `?name=`,
         // and `Server.addFile` routes by extension to the right device
@@ -1178,6 +1236,112 @@ struct Server: Sendable {
         return #"{"ok":true,"active":true,"activity":"\#(kind)","steps":\#(steps),"#
             + #""metres":\#(String(format: "%.1f", metres)),"#
             + #""speed":\#(String(format: "%.2f", speed))}"#
+    }
+
+    // MARK: - network
+
+    /// Parse a `NetworkCondition` from one of three spellings:
+    ///
+    /// - `{"profile":"3g"}` — a named preset, resolved here so Network Link
+    ///   Conditioner's figures live in Swift alone and never get copied into
+    ///   JavaScript where the two would drift.
+    /// - `{"latencyMs":300,"bandwidthKbps":400,"lossPercent":5}` — explicit.
+    /// - `{"offline":true}`.
+    ///
+    /// **Exactly one** of those, matching the CLI: "3G but lossier" reads
+    /// like it ought to work, and once it does, whether the preset or the
+    /// field wins becomes something a caller has to remember. A body that
+    /// conditions nothing is a `400` rather than a no-op, because arming
+    /// costs an app relaunch and achieving nothing visible would look like
+    /// the feature being broken.
+    ///
+    /// `"offline":false` is *not* a source: the browser card posts its whole
+    /// form, so that key arrives alongside real numbers on every ordinary
+    /// request, and counting it would make each of those a conflict.
+    static func parseNetworkRequest(json: String) -> NetworkCondition? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dict = object as? [String: Any] else {
+            return nil
+        }
+        let latency = doubleField(dict["latencyMs"])
+        let bandwidth = doubleField(dict["bandwidthKbps"])
+        let loss = doubleField(dict["lossPercent"])
+        let profile = dict["profile"] as? String
+        let offline = (dict["offline"] as? Bool) == true
+        let namesNumbers = latency != nil || bandwidth != nil || loss != nil
+
+        let sources = [profile != nil, offline, namesNumbers].filter { $0 }.count
+        guard sources == 1 else { return nil }
+
+        if let profile { return NetworkProfile(rawValue: profile)?.condition }
+        if offline { return .offline }
+        return NetworkCondition(
+            latencyMs: latency ?? 0, bandwidthKbps: bandwidth, lossPercent: loss ?? 0)
+    }
+
+    /// Pure parse + dispatch for `POST /simulators/:udid/network` — arms the
+    /// dylib and states how degraded the network is.
+    static func applyNetwork(
+        udid: String,
+        body: String,
+        simulators: any Simulators
+    ) async -> LocationOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        guard let condition = parseNetworkRequest(json: body) else {
+            return .invalidBody
+        }
+        do {
+            try await sim.network().apply(condition, on: sim)
+        } catch {
+            log("network: failed to condition \(sim.name) — \(error)")
+            return .dispatchFailed
+        }
+        // Say what was armed. Injection only takes effect on the next app
+        // launch, so when someone reports "my app isn't slow" this line is
+        // the first thing worth checking — and when they report the
+        // opposite, months later, it's the record that explains why.
+        log("network: \(sim.name) is conditioned — \(condition.summary)")
+        return .ok
+    }
+
+    /// Pure dispatch for `DELETE /simulators/:udid/network`.
+    static func clearNetwork(
+        udid: String,
+        simulators: any Simulators
+    ) async -> LocationOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        do {
+            try await sim.network().clear(on: sim)
+        } catch {
+            log("network: failed to clear \(sim.name) — \(error)")
+            return .dispatchFailed
+        }
+        return .ok
+    }
+
+    /// What the browser card's readout and its armed badge are drawn from.
+    ///
+    /// Carries the preset names as well as the current condition, so adding
+    /// a preset shows up in the UI without a second edit and the figures
+    /// behind each name stay in Swift.
+    static func networkStateJSON(udid: String, simulators: any Simulators) async -> String {
+        let profiles = NetworkProfile.allCases
+            .map { "\"\($0.rawValue)\"" }
+            .joined(separator: ",")
+        guard let sim = simulators.find(udid: udid),
+              let condition = await sim.network().current(on: sim) else {
+            return #"{"ok":true,"active":false,"profiles":[\#(profiles)]}"#
+        }
+        let bandwidth = condition.bandwidthKbps.map { "\($0)" } ?? "null"
+        return #"{"ok":true,"active":true,"latencyMs":\#(condition.latencyMs),"#
+            + #""bandwidthKbps":\#(bandwidth),"lossPercent":\#(condition.lossPercent),"#
+            + #""offline":\#(condition.isOffline),"summary":"\#(condition.summary)","#
+            + #""profiles":[\#(profiles)]}"#
     }
 
     /// Upper bound on a single drag-and-drop upload, collected into
