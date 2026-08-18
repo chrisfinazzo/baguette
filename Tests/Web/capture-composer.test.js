@@ -265,3 +265,66 @@ test('sizes the composite from the bezel even with an undecoded source', () => {
     { width: 1400, height: 2900 }
   );
 });
+
+// ── supersampling the composite ──────────────────────────────
+
+// DeviceKit authors its bezels in points — an iPhone 17 Pro Max frame is
+// a 474 × 990 viewport with a 438 × 954 cutout — while the live canvas
+// carries the device's full 1320 × 2868 framebuffer. Compositing at the
+// bezel's own size resamples the screen down by ~3x and throws the
+// detail away before the picked size ever gets a look at it. Soft chrome
+// around a sharp screen beats a sharp frame around a thumbnail.
+const POINT_SCREEN = {
+  viewport: { width: 474, height: 990 },
+  rect: { x: 18, y: 18, width: 438, height: 954 },
+  clipRadius: 62,
+};
+
+test('grows the composite until the screen cutout is 1:1 with the frames', () => {
+  const { CaptureComposer } = modules();
+  const c = CaptureComposer.composite(
+    { naturalWidth: 474 }, POINT_SCREEN, { width: 1320, height: 2868 }
+  );
+  assert.equal(c.scale, 1320 / 438);
+  assert.deepEqual({ width: c.width, height: c.height }, { width: 1428, height: 2984 });
+});
+
+test('leaves a bezel-less composite at 1:1 — the canvas is already capture scale', () => {
+  const { CaptureComposer } = modules();
+  assert.deepEqual(
+    CaptureComposer.composite(null, POINT_SCREEN, { width: 1320, height: 2868 }),
+    { width: 1320, height: 2868, scale: 1 }
+  );
+});
+
+test('never shrinks a bezel authored larger than the framebuffer', () => {
+  const { CaptureComposer } = modules();
+  const c = CaptureComposer.composite(
+    { naturalWidth: 1400 }, SCREEN, { width: 640, height: 1388 }
+  );
+  assert.equal(c.scale, 1);
+  assert.deepEqual({ width: c.width, height: c.height }, { width: 1400, height: 2900 });
+});
+
+// A canvas the browser refuses to allocate paints nothing at all, so the
+// growth is bounded even if a source turns up absurdly larger than its
+// cutout.
+test('caps the growth so an outsized source cannot ask for an unallocatable canvas', () => {
+  const { CaptureComposer } = modules();
+  assert.equal(
+    CaptureComposer.composite(
+      { naturalWidth: 200 },
+      { viewport: { width: 200, height: 400 }, rect: { x: 0, y: 0, width: 100, height: 200 } },
+      { width: 1000, height: 2000 }
+    ).scale,
+    4
+  );
+});
+
+test('reports nothing to paint when there is neither a bezel nor a decoded frame', () => {
+  const { CaptureComposer } = modules();
+  assert.deepEqual(
+    CaptureComposer.composite({ naturalWidth: 0 }, POINT_SCREEN, { width: 0, height: 0 }),
+    { width: 0, height: 0, scale: 1 }
+  );
+});

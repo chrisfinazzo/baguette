@@ -1704,47 +1704,23 @@
   }
 
   /**
-   * How far to supersample the bezel composite.
-   *
-   * The bezel art is authored at layout scale — 474 × 990 points for an
-   * iPhone 17 Pro Max — while the live canvas carries the device's full
-   * 1290 × 2796 framebuffer. Compositing at the bezel's own size would
-   * resample the screen down by ~3x and throw the detail away before
-   * the picked size ever gets a look at it, so the composite is grown
-   * until the screen cutout is 1:1 with the frames arriving and the
-   * bezel is scaled up to meet it: soft chrome around a sharp screen
-   * beats a sharp frame around a thumbnail. Capped so an unusually
-   * large source can't ask for a canvas the browser refuses to
-   * allocate.
-   *
-   * 1 whenever the composite ISN'T the bezel viewport. `compositeSize`
-   * reports the viewport only once the bezel <img> has decoded, and
-   * falls back to the framebuffer otherwise — before the image lands,
-   * or after a 404, where `bezel.js` hides the element and leaves
-   * `naturalWidth` at 0. That fallback is already at capture scale, so
-   * scaling it again would allocate ~9x the pixels for an upscaled
-   * blur. Comparing the reported size against the viewport is how we
-   * tell the two apart.
+   * The composite at capture scale — `CaptureComposer.composite` grows
+   * the bezel until the screen cutout is 1:1 with the arriving frames,
+   * so an App Store size resamples from the full framebuffer rather than
+   * from a ~3x-downsampled thumbnail. Returns `{width, height, scale}`.
    */
-  function compositeScale(source, natural) {
-    const screen = source && source.screen;
-    if (!screen || !screen.rect || !screen.viewport || !natural) return 1;
-    if (natural.width !== screen.viewport.width) return 1;
-    if (!(screen.rect.width > 0)) return 1;
-    return Math.min(4, Math.max(1, source.canvas.width / screen.rect.width));
+  function activeComposite() {
+    const source = activeCaptureSource();
+    const Composer = window.Baguette && window.Baguette._CaptureComposer;
+    if (!source || !Composer) return null;
+    return Composer.composite(source.frameImg, source.screen, source.canvas);
   }
 
   /** The composite's size at capture scale, before the picked size. */
   function compositeSourceSize() {
-    const source = activeCaptureSource();
-    const Composer = window.Baguette && window.Baguette._CaptureComposer;
-    if (!source || !Composer) return null;
-    const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
-    const scale = compositeScale(source, natural);
-    return {
-      width: Math.round(natural.width * scale),
-      height: Math.round(natural.height * scale),
-    };
+    const composite = activeComposite();
+    if (!composite) return null;
+    return { width: composite.width, height: composite.height };
   }
 
   // Take a snapshot and trigger a download, composed at whatever the
@@ -1764,10 +1740,9 @@
       return;
     }
 
-    const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
-    if (!natural.width || !natural.height) return;
-    const scale = compositeScale(source, natural);
-    const plan = settings.plan(natural.width * scale, natural.height * scale);
+    const composite = Composer.composite(source.frameImg, source.screen, source.canvas);
+    if (!composite.width || !composite.height) return;
+    const plan = settings.plan(composite.width, composite.height);
     if (!plan.width || !plan.height) return;
 
     const out = document.createElement('canvas');
@@ -1780,10 +1755,10 @@
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     Composer.compose(ctx, plan, settings.effectiveBackground, (c) => {
-      // `compose` has already set the transform for a source of
-      // `natural * scale`; `paintComposite` paints at `natural`, so the
-      // supersample factor goes on here.
-      if (scale !== 1) c.scale(scale, scale);
+      // `compose` has already set the transform for a source the size of
+      // the grown composite; `paintComposite` paints at the bezel's own
+      // size, so the supersample factor goes on here.
+      if (composite.scale !== 1) c.scale(composite.scale, composite.scale);
       Composer.paintComposite(c, {
         frameImg: source.frameImg,
         screen: source.screen,

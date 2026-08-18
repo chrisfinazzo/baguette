@@ -45,6 +45,40 @@ struct Render3DRoutesTests {
         _ = simulator
     }
 
+    // A ratio has no pixel size of its own — it only means something once
+    // there is a captured screen to grow against. The route has to ask the
+    // options to resolve it, not read the `fixed`-only `size` and silently
+    // fall back to the source.
+    @Test func `render3D grows a ratio size against the captured screen`() throws {
+        let (simulators, simulator, models, _) = Self.fixture()
+        let renderer = MockDeviceRenderer()
+        given(renderer).render(plan: .any, screenImage: .any)
+            .willReturn(Data("PNG".utf8))
+
+        _ = Server.render3D(
+            udid: "U",
+            options: DeviceRenderOptions(
+                rotation: DeviceRotation(x: 0, y: 0, z: 0),
+                variants: [:],
+                captureSize: try CaptureSize.parse("square"),
+                fit: .cover,
+                background: .transparent,
+                screenGlass: false
+            ),
+            screenImage: Data("SCREEN".utf8),
+            sourceSize: RenderDimensions(width: 100, height: 200),
+            simulators: simulators,
+            models: models,
+            renderer: renderer
+        )
+
+        verify(renderer).render(
+            plan: .matching { $0.outputSize == RenderDimensions(width: 200, height: 200) },
+            screenImage: .any
+        ).called(1)
+        _ = simulator
+    }
+
     @Test func `render3D reports unknown simulator without consulting models`() {
         let simulators = MockSimulators()
         let models = MockDeviceModels()

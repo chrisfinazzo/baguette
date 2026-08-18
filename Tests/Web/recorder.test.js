@@ -274,6 +274,39 @@ test('a bezel-less 16:9 recording letterboxes the source into the target', () =>
   assert.equal(op[4], 800);
 });
 
+// DeviceKit authors its bezels in points — a 474 x 990 frame around a
+// 438 x 954 cutout — while the live canvas carries the device's full
+// 1320 x 2868 framebuffer. Recording at the bezel's own size resamples
+// the screen down by ~3x before the picked size ever sees it.
+const POINT_BEZEL = { tag: 'bezel', naturalWidth: 474, naturalHeight: 990 };
+const POINT_SCREEN = {
+  viewport: { width: 474, height: 990 },
+  rect: { x: 18, y: 18, width: 438, height: 954 },
+  clipRadius: 62,
+};
+
+test('a point-authored bezel records at the framebuffer resolution', () => {
+  const win = load();
+  const rec = new win.BrowserRecorder({
+    canvas: sourceCanvas(1320, 2868), frameImg: POINT_BEZEL, screen: POINT_SCREEN,
+  });
+  rec.start();
+  assert.equal(rec.compose.width, 1428);
+  assert.equal(rec.compose.height, 2984);
+});
+
+test('the screen layer of a grown composite lands 1:1 with the frames', () => {
+  const win = load();
+  const rec = new win.BrowserRecorder({
+    canvas: sourceCanvas(1320, 2868), frameImg: POINT_BEZEL, screen: POINT_SCREEN,
+  });
+  rec.start();
+  flushFrame(win);
+  const live = drawOps(rec.composeCtx).find((op) => op[1] === 'live');
+  assert.equal(Math.round(live[4]), 1320);
+  assert.equal(Math.round(live[5]), 2875);
+});
+
 // ── per-frame composition ────────────────────────────────────
 
 test('a bezel frame paints the device frame under the clipped screen', () => {
