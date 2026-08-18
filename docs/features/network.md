@@ -251,7 +251,8 @@ xcrun simctl spawn <udid> log stream --predicate 'subsystem == "com.baguette.net
 Nothing conditions an SDK that opens its own socket, and no amount of work at
 this layer would — that would need a hook further down, at `CFStream` or the
 BSD socket calls, which conditions the simulator's own daemons along with the
-app.
+app. That is out of scope on purpose; see
+[Known limits](#known-limits) for why the boundary sits where it does.
 
 ### The load-time check
 
@@ -316,6 +317,30 @@ read checks arming as well as content. A badge that cries wolf stops being
 read, and this one has to be believed.
 
 ## Known limits
+
+Most of what follows is one boundary seen from different angles, so it is
+worth naming once: **baguette conditions by injecting a dylib and swizzling
+the URL Loading System.** Everything that goes through `URLSession` is
+reached; everything that opens its own socket is not.
+
+That is a deliberate trade, not a backlog. There are two ways to do this at
+all:
+
+| | Reaches | Costs |
+| --- | --- | --- |
+| **Inject + swizzle** (this) | `URLSession`, including WebSockets | blind to anything that isn't `URLSession` |
+| **System proxy + trusted CA** (Charles, Proxyman; `dnctl`/NLC for conditioning) | everything, TLS included | system-wide, needs a certificate installed and trusted |
+
+The second is what Network Link Conditioner does, and being system-wide is
+precisely the problem this feature exists to avoid — it degrades your whole
+Mac and every other simulator to test one app. So when you need to cross the
+boundary below, reach for a proxy deliberately rather than expecting this to
+grow into one.
+
+RocketSim's network monitor takes the same inject-and-swizzle approach and
+lands on the same boundary, which is some evidence it is the right one for a
+per-simulator tool.
+
 
 - **URLSession-shaped traffic only.** `NWConnection` / Network.framework,
   raw sockets, and most gRPC stacks bypass the URL Loading System entirely
