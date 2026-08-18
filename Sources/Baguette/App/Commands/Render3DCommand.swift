@@ -26,9 +26,19 @@ struct Render3DCommand: AsyncParsableCommand {
     @Option(help: "Device rotation as X,Y,Z degrees")
     var rotation: String = "0,0,0"
 
-    @Option(help: "Output dimensions as WIDTHxHEIGHT (defaults to screen size)")
+    // The shared capture vocabulary: a preset, literal pixels, or a bare
+    // ratio. Omitted is `native` — the captured screen's own dimensions,
+    // which is what --size has always defaulted to.
+    @Option(help: """
+    Output size: WIDTHxHEIGHT, W:H, or one of: \(CaptureSize.presetList) \
+    (defaults to the captured screen size)
+    """)
     var size: String?
 
+    // `--fit` is NOT the canvas fit `CaptureFit` describes, despite the
+    // shared case names: this is how the screenshot is laid onto the device's
+    // screen mesh (a UV placement), while `--size` above governs the canvas
+    // the whole render lands on. The two never meet.
     @Option(help: "Screen placement: cover, contain, or stretch")
     var fit: String = "cover"
 
@@ -50,7 +60,7 @@ struct Render3DCommand: AsyncParsableCommand {
             throw ValidationError("--device is required with --screen")
         }
         _ = try DeviceRenderArguments.rotation(rotation)
-        if let size { _ = try DeviceRenderArguments.size(size) }
+        if let size { _ = try DeviceRenderArguments.captureSize(size) }
         _ = try DeviceRenderArguments.variants(variants)
         guard DeviceScreenFit(rawValue: fit) != nil else {
             throw ValidationError("--fit must be cover, contain, or stretch")
@@ -100,8 +110,12 @@ struct Render3DCommand: AsyncParsableCommand {
             throw ValidationError("exactly one of --udid and --screen is required")
         }
 
-        let outputSize = try size.map(DeviceRenderArguments.size)
-            ?? Self.pixelSize(of: screenImage)
+        // A ratio (`square`, `3:2`) has no meaning until there is a source
+        // to grow against, and that source is the screenshot we just took —
+        // the same image `native` would render at 1:1.
+        let sourceSize = try Self.pixelSize(of: screenImage)
+        let captureSize = try size.map(DeviceRenderArguments.captureSize) ?? .native
+        let outputSize = captureSize.resolve(source: sourceSize)
         let plan = try DeviceRenderPlan.build(
             model: installed,
             variants: DeviceRenderArguments.variants(variants),
