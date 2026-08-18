@@ -126,6 +126,7 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     /// throws `MotionError.dylibMissing` rather than silently doing nothing.
     func motion() -> any Motion {
         SharedFileMotion(
+            fileURL: URL(fileURLWithPath: SharedFileMotion.path(forUDID: udid)),
             dylibPath: InjectedDylibInstaller.installIfNeeded(.motion),
             injection: SimctlSimulatorInjection()
         )

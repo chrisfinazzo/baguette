@@ -86,7 +86,15 @@
     #simStreamSidebar .adv .kv .v{display:flex;gap:4px;flex:1}
     #simStreamSidebar .adv .kv .v .btn{flex:1;min-width:0;font-size:11px;padding:0 6px}
     #simStreamSidebar .captures-head{display:flex;align-items:center;gap:6px}
-    #simStreamSidebar .captures-head .with-frame{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+    /* The size picker's popover is absolutely positioned inside the card
+       header, and `.card` clips with overflow:hidden to round its corners.
+       Let this one card overflow and round the header itself instead, so
+       the popover can drop down over the body. */
+    #simStreamSidebar #simCapturesCard{overflow:visible}
+    /* `inherit` rather than a literal radius: `.card` is styled by the
+       host page, so the header follows whatever corner it actually has. */
+    #simStreamSidebar #simCapturesCard > .card-header{border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
+    #simStreamSidebar #simCaptureSizeOut{font-size:10px;color:var(--text-muted);font-variant-numeric:tabular-nums;text-align:center;min-height:12px}
     #simStreamSidebar details.events > summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-bottom:1px solid var(--border);user-select:none}
     #simStreamSidebar details.events > summary::-webkit-details-marker{display:none}
     #simStreamSidebar details.events > summary::after{content:'▸';font-size:10px;color:var(--text-muted);transition:transform 0.15s ease}
@@ -241,13 +249,18 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="simCapturesCard">
         <div class="card-header">
           <div class="captures-head">
             <span class="card-title" style="font-size:12px;flex:1">Captures <span id="simCaptureCount" style="font-weight:500;color:var(--text-muted)"></span></span>
-            <label class="with-frame">
-              <input type="checkbox" id="simFrameToggle" onchange="window._simToggleFrame(this.checked)" style="cursor:pointer"> with frame
-            </label>
+            <!-- CaptureSizeMenu mounts here (sim-stream.js). It owns the
+                 output size, fit, background AND the "Include bezel"
+                 switch, which is why the old standalone `#simFrameToggle`
+                 checkbox is gone: `CaptureSettings.withFrame` is the same
+                 state, and two controls for one flag drift apart the
+                 moment one of them is used. `window._simToggleFrame`
+                 still exists and now routes into this menu. -->
+            <span id="simCaptureSizeHost"></span>
           </div>
         </div>
         <div class="card-body padded" style="display:flex;flex-direction:column;gap:8px">
@@ -260,6 +273,9 @@
             <span id="simRecordLabel">Record</span>
             <span id="simRecordTimer" style="font-variant-numeric:tabular-nums;color:var(--text-muted);font-size:11px;margin-left:4px"></span>
           </button>
+          <!-- What the current selection actually produces, so the user
+               sees the pixels before spending a capture on them. -->
+          <div id="simCaptureSizeOut"></div>
           <div id="simRecordList" style="display:flex;flex-direction:column;gap:4px"></div>
           <div id="simCaptureGallery" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px">
             <div style="color:var(--text-muted);font-size:11px;padding:4px 2px">No captures yet</div>

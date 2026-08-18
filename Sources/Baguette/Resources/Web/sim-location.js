@@ -227,6 +227,9 @@
       // rAF loop running. Dropping the DOM without unbinding them would
       // leave the device walking with no way to stop it.
       this._teardownWalk();
+      // The motion readout polls on a timer; a closed panel that kept it
+      // running would GET every two seconds forever.
+      this._stopMotionPoll();
       if (this.map) { this.map.remove(); this.map = null; }
       this.marker = null;
       this.routePins = [];
@@ -504,20 +507,43 @@
       row.hidden = this.mode === 'point' && !(box && box.checked);
     }
 
+    // Every arm and disarm goes through one chain, because the two are not
+    // interchangeable in flight: flipping the toggle on then straight off
+    // could otherwise land the POST *after* the DELETE and leave motion armed
+    // while the UI said it had stopped — the exact state that gets forgotten
+    // about and injects into every app launched afterwards.
     _toggleMotion(on) {
+      this.motionChain = (this.motionChain || Promise.resolve())
+        .then(() => this._applyMotionToggle(on))
+        .catch(() => {});
+      return this.motionChain;
+    }
+
+    _applyMotionToggle(on) {
       const url = `/simulators/${encodeURIComponent(this.udid)}/motion`;
       if (!on) {
         this._stopMotionPoll();
-        fetch(url, { method: 'DELETE' })
-          .then(() => { this._motionState(''); this._syncMotionVisibility(); })
-          .catch(() => this._motionState('stop failed'));
-        return;
+        // A failed DELETE must not read as stopped: the dylib is still armed,
+        // so put the toggle back rather than hiding it.
+        return fetch(url, { method: 'DELETE' })
+          .then((res) => {
+            if (!res.ok) return Promise.reject(res);
+            this._motionState('');
+            this._syncMotionVisibility();
+          })
+          .catch(() => {
+            this._motionState('still armed');
+            this._readout('Motion stop failed — it is still injecting.');
+            const box = this.host && this.host.querySelector('#nativeLocationMotion');
+            if (box) box.checked = true;
+            this._syncMotionVisibility();
+          });
       }
       // Send the speed the card is set to move at and let the server
       // classify it — the same division of labour as every other control
       // here. Duplicating the activity thresholds in JS would put domain
       // logic in the frontend, and the two copies would drift.
-      fetch(url, {
+      return fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ speed: this._presetSpeed() }),
@@ -560,7 +586,10 @@
           this._paintMotion(state);
           // An armed session keeps the row on screen even in Point mode.
           this._syncMotionVisibility();
+          // Only an armed session is worth polling for; anything else leaves
+          // a timer running with nothing to report.
           if (state.active) this._startMotionPoll();
+          else this._stopMotionPoll();
         })
         .catch(() => {});
     }

@@ -70,4 +70,26 @@ struct Device3DStreamOptionsTests {
             _ = try Device3DStreamOptions.parse(["fit": ["squash"]])
         }
     }
+
+    @Test func `parses a size preset for the live stream`() throws {
+        let options = try Device3DStreamOptions.parse(["size": ["appstore-6.9"]])
+
+        #expect(options.outputSize == RenderDimensions(width: 1290, height: 2796))
+    }
+
+    @Test func `resolves a live stream ratio against the requested frame`() throws {
+        let options = try Device3DStreamOptions.parse([
+            "width": ["1280"],
+            "height": ["720"],
+            "size": ["square"],
+        ])
+
+        #expect(options.outputSize == RenderDimensions(width: 1280, height: 1280))
+    }
+
+    @Test func `rejects an unknown live stream size preset`() {
+        #expect(throws: DeviceModelError.invalidRenderOptions) {
+            _ = try Device3DStreamOptions.parse(["size": ["gigantic"]])
+        }
+    }
 }

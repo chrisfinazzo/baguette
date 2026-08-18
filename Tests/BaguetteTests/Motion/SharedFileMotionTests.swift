@@ -44,6 +44,28 @@ struct SharedFileMotionTests {
                      startedAt: startedAt, stepsBefore: 0, distanceBefore: 0)
     }
 
+    @Test func `scopes the intent file to one simulator`() async throws {
+        // One shared path meant publishing for simulator B replaced the
+        // intent an injected app on simulator A was still reading. The dylib
+        // builds the same path from its own SIMULATOR_UDID.
+        let a = SharedFileMotion.path(forUDID: "AAAA-1111")
+        let b = SharedFileMotion.path(forUDID: "BBBB-2222")
+        #expect(a != b)
+        #expect(a.hasSuffix("BaguetteMotion-AAAA-1111.json"))
+    }
+
+    @Test func `reads back the intent it published`() async throws {
+        // The published file *is* the state for callers that keep none —
+        // the CLI recovers the pedometer's running totals from it.
+        let (motion, _, sim, _) = makeMotion()
+        #expect(motion.published() == nil)
+
+        let intent = walking()
+        try await motion.publish(intent, on: sim)
+
+        #expect(motion.published() == intent)
+    }
+
     @Test func `publish writes the intent where the dylib reads it`() async throws {
         let (motion, _, sim, url) = makeMotion()
         let intent = walking()

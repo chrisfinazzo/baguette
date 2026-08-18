@@ -155,3 +155,97 @@ test('the focus-mode stylesheet reads no token from outside the --nv-* set', () 
     'change for dark mode — use the --nv-* equivalent'
   );
 });
+
+// ── Capture surface ──────────────────────────────────────────────
+// Focus mode is the screen people actually capture from, so the
+// output-size picker and the Record button have to be reachable there.
+// Both are wired the way every other control in this toolbar is —
+// markup in sim-native.html, a `window.__nativeXxx` indirection in
+// sim-native.js — and both are easy to half-land (a button with no
+// handler, a handler with no button). These pin the pairing.
+
+const SCRIPT = path.join(path.dirname(TEMPLATE), 'sim-native.js');
+
+/** The `#simNativeView` markup, with the `<style>` blocks taken out. */
+function markup(html) {
+  return html.replace(/<style[^>]*>[\s\S]*?<\/style>/g, '');
+}
+
+test('the toolbar mounts the capture-size picker', () => {
+  const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
+  assert.match(
+    html, /id="nativeCaptureSize"/,
+    'CaptureSizeMenu needs a host element in the toolbar to mount into'
+  );
+});
+
+test('the capture-size host sits outside the scrolling icon strip', () => {
+  const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
+  const strip =
+    /<div class="tb-scroll" id="nativeToolScroll">([\s\S]*?)<!-- \/\.tb-scroll -->/
+      .exec(html);
+  assert.ok(strip, 'the icon strip is no longer delimited as expected');
+  assert.ok(
+    !/id="nativeCaptureSize"/.test(strip[1]),
+    'the strip is an `overflow-x: auto` container, so a popover mounted ' +
+    'inside it is clipped at the strip\'s edge'
+  );
+});
+
+test('the toolbar carries a Record button wired to __nativeRecord', () => {
+  const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
+  const button = /<button[^>]*id="nativeRecordBtn"[\s\S]*?<\/button>/.exec(html);
+  assert.ok(button, 'no #nativeRecordBtn in the toolbar');
+  assert.match(button[0], /window\.__nativeRecord/);
+  assert.match(button[0], /aria-label=/);
+  assert.match(button[0], /class="ico-btn/);
+});
+
+test('the Record button lives in the action group beside Screenshot', () => {
+  const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
+  const actions =
+    /<div class="tb-actions">([\s\S]*?)<!-- \/\.tb-scroll -->/.exec(html);
+  assert.ok(actions, 'the .tb-actions group is no longer delimited as expected');
+  assert.match(actions[1], /id="nativeRecordBtn"/);
+  assert.match(actions[1], /__nativeScreenshot/);
+});
+
+test('the recording state is styled from the focus-mode palette', () => {
+  const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
+  assert.match(
+    css, /#nativeRecordBtn\.recording/,
+    'a recording with no visible affordance is a recording the user ' +
+    'forgets is running'
+  );
+});
+
+test('sim-native.js loads the capture vocabulary and the recorder', () => {
+  const src = fs.readFileSync(SCRIPT, 'utf8');
+  for (const module of [
+    '/capture/capture-size.js',
+    '/capture/capture-settings.js',
+    '/capture/capture-composer.js',
+    '/capture/capture-size-menu.js',
+    '/recorder.js',
+  ]) {
+    assert.ok(
+      src.includes(module),
+      `${module} is never loaded — focus mode can't reach it, because ` +
+      'the template\'s own <script> tags are dropped by fetchTemplate'
+    );
+  }
+});
+
+test('sim-native.js answers every toolbar indirection the template calls', () => {
+  const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
+  const src = fs.readFileSync(SCRIPT, 'utf8');
+  const called = new Set(
+    [...html.matchAll(/window\.(__native[A-Za-z0-9]+)/g)].map((m) => m[1])
+  );
+  const missing = [...called].filter((name) => !src.includes(`window.${name} =`));
+  assert.deepEqual(
+    missing, [],
+    'the template calls these but sim-native.js never assigns them, so ' +
+    'the button is inert'
+  );
+});

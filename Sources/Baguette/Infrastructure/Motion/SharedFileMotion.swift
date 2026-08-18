@@ -14,9 +14,15 @@ import Foundation
 /// therefore see no motion at all.
 final class SharedFileMotion: Motion, @unchecked Sendable {
 
-    /// Where the intent is published. Same shared-`/tmp` convention as the
-    /// camera's frame buffer.
-    static let defaultPath = "/tmp/BaguetteMotion.json"
+    /// Where the intent is published for `udid`. Same shared-`/tmp`
+    /// convention as the camera's frame buffer, but **scoped per simulator**:
+    /// every simulator sees the host's `/tmp`, so a single shared file meant
+    /// publishing for one device replaced the intent an injected app on
+    /// another was still reading. The dylib builds this same path from its
+    /// own `SIMULATOR_UDID`.
+    static func path(forUDID udid: String) -> String {
+        "/tmp/BaguetteMotion-\(udid).json"
+    }
 
     private let fileURL: URL
     /// `nil` when this build didn't ship the dylib — publishing then fails
@@ -25,7 +31,7 @@ final class SharedFileMotion: Motion, @unchecked Sendable {
     private let injection: any SimulatorInjection
 
     init(
-        fileURL: URL = URL(fileURLWithPath: SharedFileMotion.defaultPath),
+        fileURL: URL,
         dylibPath: String?,
         injection: any SimulatorInjection = SimctlSimulatorInjection()
     ) {
@@ -48,6 +54,11 @@ final class SharedFileMotion: Motion, @unchecked Sendable {
         // intent — it either parses the old one or the new one.
         try intent.encoded().write(to: fileURL, options: .atomic)
         try await injection.arm(dylibPath: dylibPath, on: simulator)
+    }
+
+    func published() -> MotionIntent? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return try? MotionIntent(decoding: data)
     }
 
     func clear(on simulator: any Simulator) async throws {

@@ -39,13 +39,52 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
     }
 
     func arm(dylibPath: String, on simulator: any Simulator) async throws {
-        let armed = await currentDylibs(on: simulator)
-        try await write(armed.adding(dylibPath), on: simulator)
+        try await locked(simulator) {
+            let armed = await self.currentDylibs(on: simulator)
+            try await self.write(armed.adding(dylibPath), on: simulator)
+        }
     }
 
     func disarm(dylibPath: String, on simulator: any Simulator) async throws {
-        let armed = await currentDylibs(on: simulator)
-        try await write(armed.removing(dylibPath), on: simulator)
+        try await locked(simulator) {
+            let armed = await self.currentDylibs(on: simulator)
+            try await self.write(armed.removing(dylibPath), on: simulator)
+        }
+    }
+
+    /// Runs `body` holding an exclusive lock on this simulator's environment.
+    ///
+    /// The read-modify-write is not atomic on its own: if the camera and
+    /// motion arm at the same moment, both can read the same old value and
+    /// the second `setenv` drops the first one's dylib. The lock is a **file**
+    /// lock rather than something on this instance, because `CoreSimulator`
+    /// hands out a fresh `SimctlSimulatorInjection` per call and the CLI is a
+    /// different process from the server entirely — an in-process lock would
+    /// protect nothing.
+    private func locked<T>(_ simulator: any Simulator,
+                           _ body: () async throws -> T) async throws -> T {
+        let fm = FileManager.default
+        let directory = URL(fileURLWithPath: InjectedDylibInstaller.defaultSupportDir)
+            .appendingPathComponent("locks")
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let lockPath = directory.appendingPathComponent("\(simulator.udid).inject.lock").path
+        let descriptor = open(lockPath, O_CREAT | O_RDWR, 0o644)
+        // Running unlocked would silently reintroduce exactly the race this
+        // guards, so a lock we cannot take fails the operation instead. That
+        // costs nothing in practice: the same support directory holds the
+        // installed dylibs, so if it isn't writable there was nothing to arm.
+        guard descriptor >= 0 else {
+            throw SimulatorInjectionError.lockUnavailable(path: lockPath)
+        }
+        defer { close(descriptor) }
+        // Retry a signal-interrupted wait; anything else is a real failure.
+        while flock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else {
+                throw SimulatorInjectionError.lockUnavailable(path: lockPath)
+            }
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        return try await body()
     }
 
     /// Matches by **file name**, not by whole path. Every release installs
@@ -115,11 +154,17 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
 
 enum SimulatorInjectionError: Error, Equatable, CustomStringConvertible {
     case simctlFailed(status: Int32)
+    /// The per-simulator lock guarding `DYLD_INSERT_LIBRARIES` couldn't be
+    /// taken. Reported rather than skipped: proceeding unlocked would let a
+    /// concurrent arm drop another feature's dylib, invisibly.
+    case lockUnavailable(path: String)
 
     var description: String {
         switch self {
         case .simctlFailed(let status):
             return "xcrun simctl exited \(status) while arming/disarming an injected dylib"
+        case .lockUnavailable(let path):
+            return "could not lock \(path) to update DYLD_INSERT_LIBRARIES"
         }
     }
 }

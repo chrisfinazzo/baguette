@@ -13,16 +13,22 @@ enum DeviceRenderArguments {
         return DeviceRotation(x: x, y: y, z: z)
     }
 
-    static func size(_ value: String) throws -> RenderDimensions {
-        let parts = value.lowercased()
-            .split(separator: "x", omittingEmptySubsequences: false)
-        guard parts.count == 2,
-              let width = Int(parts[0]),
-              let height = Int(parts[1]),
-              width > 0, height > 0 else {
+    /// `--size` in the shared capture vocabulary: a preset name
+    /// (`appstore-6.9`, `square`), literal `WIDTHxHEIGHT`, or a bare ratio
+    /// (`3:2`). A ratio means nothing on its own — the caller resolves the
+    /// returned value against the captured screen, the same source the
+    /// default (`native`) renders at.
+    ///
+    /// `CaptureSize.parse` speaks `CaptureSizeError`, but this is the CLI's
+    /// `--size` argument, so it keeps reporting the argument error
+    /// `render-3d` has always reported for a size it can't read. Nothing is
+    /// substituted for an unreadable size — same bar as an unknown model.
+    static func captureSize(_ value: String) throws -> CaptureSize {
+        do {
+            return try CaptureSize.parse(value)
+        } catch {
             throw DeviceModelError.invalidSizeArgument(value)
         }
-        return RenderDimensions(width: width, height: height)
     }
 
     static func variants(_ values: [String]) throws -> [String: String] {

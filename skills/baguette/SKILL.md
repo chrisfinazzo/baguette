@@ -289,7 +289,9 @@ Wired (use freely):
   `baguette motion stop --udid <X>` parks it stationary and disarms.
   `serve`: `POST /simulators/<X>/motion` with `{"activity":"running"}` or
   just `{"speed":6}` (classified server-side), `GET` to read back
-  `{activity,steps,metres,speed}`, `DELETE` to stop. Browser: a **Drive
+  `{ok,active,activity,steps,metres,speed}` — an inactive device answers
+  `{"ok":true,"active":false}` and nothing more — `DELETE` to stop. An
+  unknown udid is `404` on every one of them. Browser: a **Drive
   motion sensors** toggle on the Location card — once on, the walk
   joystick and route speeds already being posted drive the activity.
   **The one thing that surprises people: only apps launched _after_

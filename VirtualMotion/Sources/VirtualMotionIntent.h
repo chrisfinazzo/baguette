@@ -11,9 +11,11 @@
 
 #import <Foundation/Foundation.h>
 
-/// Where the host publishes. Same shared-`/tmp` convention the camera uses
-/// for `/tmp/SimCam.bgra`.
-extern NSString *const VMIntentPath;
+/// Where the host publishes for *this* simulator, derived from
+/// `SIMULATOR_UDID` — every simulator sees the host's `/tmp`, so the path is
+/// per-device. `nil` when the UDID is unavailable, in which case every
+/// surface reports no motion rather than reading another device's file.
+NSString *VMIntentPath(void);
 
 typedef struct {
     /// NO when nothing has been published yet (or the file is unreadable),

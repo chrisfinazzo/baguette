@@ -274,6 +274,12 @@
           frameImg: focusScreen ? focusScreen.querySelector('img') : null,
           screen: def && def.screen ? def.screen : null,
           overlayHost: tile?.overlayContainer() || null,
+          // The chosen output size rides along with the DOM handles for
+          // exactly the same reason they're read late: the picker is
+          // rebuilt by every `focus.show`, so resolving it at Record-press
+          // time is what keeps a re-focus mid-session from stranding the
+          // recorder on a stale CaptureSettings.
+          settings: this.focus ? this.focus.captureSettings() : null,
         };
       },
     });

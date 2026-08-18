@@ -113,7 +113,7 @@ active position — motion **can** be read back: the state is baguette's own.
 │ MotionLedger.banking()   │                  │ CMMotionManager        │
 │ MotionIntent.encoded()   │                  └───────────▲────────────┘
 └───────────┬──────────────┘                              │ swizzled
-            │  /tmp/BaguetteMotion.json                   │
+            │  /tmp/BaguetteMotion-<udid>.json            │
             ▼  (shared /tmp, as the camera uses)          │
       ┌───────────┐        launchctl setenv        ┌──────┴───────────┐
       │  Motion   │  ───── DYLD_INSERT_LIBRARIES ─▶│ VirtualMotion    │
@@ -122,6 +122,13 @@ active position — motion **can** be read back: the state is baguette's own.
             ▲                                      │  intent locally) │
   location walk/route ── drives when armed ──┘     └──────────────────┘
 ```
+
+The intent file is **scoped per simulator** (`/tmp/BaguetteMotion-<udid>.json`).
+Every simulator sees the host's `/tmp`, so one shared file would mean a
+publish for one device replacing what an injected app on another is still
+reading. The dylib derives the same path from its own `SIMULATOR_UDID`, which
+the simulator sets in every process it launches; with no UDID it reports no
+motion rather than guessing at another device's file.
 
 ### Why an intent, not a sample stream
 
@@ -279,9 +286,6 @@ noise with the real value appended.
 - **Injected, not simulated.** This lies to the app's own process. Nothing
   outside it (SpringBoard's own step tracking, Health) sees any of it, and
   a device that isn't running an injected app has no motion at all.
-- **One intent per host.** All simulators read `/tmp/BaguetteMotion.json`,
-  like the camera's single `/tmp/SimCam.bgra`. Driving two simulators to
-  different activities at once isn't supported yet; the last publish wins.
 - **No floors, no magnetometer** — see above.
 - **Gait is plausible, not physical.** A sine at the profile's cadence with
   a level attitude: enough for "is the device moving, how fast, in what

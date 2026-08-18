@@ -64,6 +64,12 @@ struct MotionCommand: ParsableCommand {
                 throw ValidationError(
                     "Unknown confidence '\(confidence)'. Use one of: low, medium, high.")
             }
+            // A negative speed classifies as `unknown`, which would arm a
+            // session reporting no motion at all — a confusing way to spell
+            // "invalid input".
+            if let speed, speed < 0 {
+                throw ValidationError("--speed must not be negative (got \(speed)).")
+            }
         }
 
         var kind: MotionKind { MotionKind(rawValue: activity) ?? .walking }
@@ -137,10 +143,14 @@ struct MotionCommand: ParsableCommand {
             do {
                 // Park before disarming: an app already running still has the
                 // dylib loaded, so the last thing it reads must say "not
-                // moving" rather than a stale walk.
+                // moving" rather than a stale walk. The totals already walked
+                // ride along — a pedometer that zeroed on stop would make an
+                // app's chart jump backwards.
+                let now = Date().timeIntervalSince1970
+                let ledger = MotionLedger.resuming(from: motion.published(), at: now)
                 try await motion.publish(
-                    .stationary(startedAt: Date().timeIntervalSince1970,
-                                stepsBefore: 0, distanceBefore: 0),
+                    .stationary(startedAt: now, stepsBefore: ledger.steps,
+                                distanceBefore: ledger.metres),
                     on: simulator)
                 try await motion.clear(on: simulator)
             } catch {
@@ -160,13 +170,21 @@ struct MotionCommand: ParsableCommand {
         return simulator
     }
 
+    /// Publishes a new leg, carrying the pedometer's running totals forward.
+    ///
+    /// Each CLI invocation is a fresh process with no session state, so the
+    /// totals are recovered from the intent already published — otherwise
+    /// every `motion set` would republish zeroes and an app's step count
+    /// would restart on each command.
     private static func publish(kind: MotionKind, confidence: MotionConfidence,
                                 speed: Double, on simulator: any Simulator) async throws {
-        let intent = MotionIntent(kind: kind, confidence: confidence, speed: speed,
-                                  startedAt: Date().timeIntervalSince1970,
-                                  stepsBefore: 0, distanceBefore: 0)
+        let motion = simulator.motion()
+        let now = Date().timeIntervalSince1970
+        let ledger = MotionLedger.resuming(from: motion.published(), at: now)
+        let intent = ledger.intent(kind: kind, confidence: confidence, speed: speed,
+                                   startedAt: now)
         do {
-            try await simulator.motion().publish(intent, on: simulator)
+            try await motion.publish(intent, on: simulator)
         } catch {
             log("motion failed: \(error)")
             throw ExitCode.failure

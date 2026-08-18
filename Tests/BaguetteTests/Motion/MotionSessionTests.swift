@@ -161,6 +161,74 @@ struct MotionSessionTests {
         verify(w.motion).publish(.any, on: .any).called(0)
     }
 
+    @Test func `a failed republish does not bank the same leg twice`() async {
+        // The leg in flight is banked *before* the new intent is published.
+        // If that publish fails, the banked seconds must not be banked again
+        // — leaving `startedAt` untouched counted them on every subsequent
+        // bank and inflated the step total for the rest of the session (this
+        // case produced 60 steps instead of 40).
+        //
+        // 40 is the honest answer, not 20: a failed publish leaves the device
+        // still reporting the previous walk, so it really did keep walking
+        // through the second interval and those steps are real.
+        let motion = MockMotion()
+        let captures = Captures()
+        var failNext = false
+        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+            if failNext { throw SimulatorInjectionError.simctlFailed(status: 2) }
+            captures.intents.append(intent)
+        }
+        given(motion).clear(on: .any).willReturn(())
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("U")
+        let clock = Clock()
+        let session = MotionSession(motion: motion, now: { clock.now })
+
+        // 10 s of walking at 1.5 m/s = 20 steps, banked by the failed drive.
+        await session.set(kind: .walking, confidence: .high, speed: 1.5, on: sim)
+        clock.now = 1010
+        failNext = true
+        await session.drive(speed: 3.6, on: sim)
+        failNext = false
+
+        // Another 10 s of that same walk, then a successful publish: 20 steps
+        // from before the failure and 20 from after it.
+        clock.now = 1020
+        await session.set(kind: .running, confidence: .high, speed: 3.6, on: sim)
+
+        #expect(session.steps == 40)
+        #expect(captures.last?.stepsBefore == 40)
+    }
+
+    @Test func `a failed disarm leaves the device parked, not still walking`() async {
+        // `stop` parks the device and then disarms. If the park succeeds and
+        // the disarm fails, the published intent is stationary — so a retry
+        // must bank *that*, not the walk it replaced. Holding on to the old
+        // moving intent added phantom steps for time the device spent parked.
+        let motion = MockMotion()
+        let captures = Captures()
+        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+            captures.intents.append(intent)
+        }
+        given(motion).clear(on: .any).willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("U")
+        let clock = Clock()
+        let session = MotionSession(motion: motion, now: { clock.now })
+
+        await session.set(kind: .walking, confidence: .high, speed: 1.5, on: sim)
+        clock.now = 1010
+        #expect(await session.stop() == false)   // parked, but still armed
+
+        // Ten seconds parked, then a retry. The 20 steps from the walk stand;
+        // the parked interval adds none.
+        clock.now = 1020
+        _ = await session.stop()
+
+        #expect(captures.last?.kind == .stationary)
+        #expect(captures.last?.stepsBefore == 20)
+    }
+
     @Test func `a failed publish reports the error and stays off`() async {
         let motion = MockMotion()
         given(motion).publish(.any, on: .any)

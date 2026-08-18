@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import HTTPTypes
 import Hummingbird
@@ -25,7 +26,10 @@ import NIOCore
 ///   GET  /simulators/:udid/chrome.json      → chrome layout JSON
 ///   GET  /simulators/:udid/bezel.png        → composite PNG
 ///   POST /simulators/:udid/input            → gesture     (TODO)
-///   GET  /simulators/:udid/screenshot.jpg   → JPEG (?quality=&scale=)
+///   GET  /simulators/:udid/screenshot.jpg   → JPEG (?quality=&scale=&size=&fit=&background=)
+///   GET  /simulators/:udid/screenshot.png   → PNG  (same query knobs)
+///   GET  /simulators/:udid/screenshot-bezel.png → PNG composited into the
+///                                             device chrome (+ ?buttons=)
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
 ///   WS   /simulators/:udid/stream.3d.:format → live 3D AVCC/MJPEG frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
@@ -327,10 +331,14 @@ struct Server: Sendable {
         // Read-back for the card's readout — the one place motion differs
         // from location, which has no GET because simctl cannot report the
         // active position. Here the state is ours, so we can answer.
-        router.get("/simulators/:udid/motion") { [motionSessions] r, _ in
+        router.get("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return Self.jsonResponse(
-                await Self.motionStateJSON(udid: Self.udidParam(r), sessions: motionSessions))
+            guard let json = await Self.motionState(
+                udid: Self.udidParam(r), simulators: simulators, sessions: motionSessions
+            ) else {
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            }
+            return Self.jsonResponse(json)
         }
         router.delete("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -532,16 +540,66 @@ struct Server: Sendable {
             )
         }
 
-        // One-shot JPEG of the current framebuffer. Spins up Screen,
+        // One-shot still of the current framebuffer. Spins up Screen,
         // awaits one IOSurface, encodes, and tears down — `?quality=`
-        // and `?scale=` mirror the WS stream knobs for parity.
-        router.get("/simulators/:udid/screenshot.jpg") { [simulators] r, _ in
+        // and `?scale=` mirror the WS stream knobs for parity, while
+        // `?size=` / `?fit=` / `?background=` speak the shared capture
+        // vocabulary (`CaptureSize`) so "App Store 6.9" means the same
+        // pixels here, in the toolbar picker, and on the CLI.
+        //
+        // Two extensions, one handler. A browser picks its decoder off
+        // the URL extension and nothing else, so `.png` has to be its
+        // own route rather than a `?format=` knob hung off `.jpg` —
+        // that's the entire reason the second registration exists.
+        for format in Self.CaptureImageFormat.allCases {
+            router.get("/simulators/:udid/screenshot.\(format.pathExtension)") {
+                [simulators] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                let options: Self.CaptureOptions
+                do {
+                    options = try Self.captureOptions(query: r)
+                } catch let error as Self.CaptureQueryError {
+                    return errorJSON(error.message, status: .badRequest)
+                }
+                return await Self.screenshot(
+                    udid: Self.udidParam(r),
+                    quality: r.uri.queryParameters.get("quality").flatMap(Double.init)
+                        ?? format.defaultQuality,
+                    scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
+                    format: format,
+                    options: options,
+                    simulators: simulators
+                )
+            }
+        }
+
+        // The same still, composited into the device's DeviceKit
+        // chrome server-side. `bezel.png` + the framebuffer layered in
+        // CSS is what the browser does; this route exists for everyone
+        // who isn't a browser — `curl` in a marketing script, a CI job
+        // producing App Store shots, the device-farm wall's own
+        // thumbnails. `?buttons=` matches `bezel.png`'s bare/rest
+        // variants; `?size=` / `?fit=` / `?background=` are the same
+        // knobs as the bare screenshot, applied to the composite.
+        router.get("/simulators/:udid/screenshot-bezel.png") {
+            [simulators, chromes] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return await Self.screenshotJPEG(
+            let options: Self.CaptureOptions
+            do {
+                options = try Self.captureOptions(query: r)
+            } catch let error as Self.CaptureQueryError {
+                return errorJSON(error.message, status: .badRequest)
+            }
+            return await Self.screenshotBezelPNG(
                 udid: Self.udidParam(r),
-                quality: r.uri.queryParameters.get("quality").flatMap(Double.init) ?? 0.85,
+                quality: r.uri.queryParameters.get("quality").flatMap(Double.init)
+                    ?? Self.CaptureImageFormat.png.defaultQuality,
                 scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
-                simulators: simulators
+                withButtons: r.uri.queryParameters.get("buttons")
+                    .map { $0.lowercased() != "false" } ?? true,
+                options: options,
+                simulators: simulators,
+                chromes: chromes
             )
         }
 
@@ -752,6 +810,7 @@ struct Server: Sendable {
         "baguette/carplay",
         "baguette/gestures",
         "baguette/parts",
+        "capture",
         "carplay-frames",
         "carplay-frames/cupra",
         "carplay-frames/plain",
@@ -1161,9 +1220,22 @@ struct Server: Sendable {
               let dict = object as? [String: Any] else {
             return nil
         }
-        let confidence = (dict["confidence"] as? String)
-            .flatMap(MotionConfidence.init(rawValue:)) ?? .high
+        // A supplied-but-unknown confidence is rejected rather than quietly
+        // downgraded to `high` — reporting a confidence nobody asked for is
+        // worse than refusing the request.
+        let confidence: MotionConfidence
+        if let word = dict["confidence"] as? String {
+            guard let parsed = MotionConfidence(rawValue: word) else { return nil }
+            confidence = parsed
+        } else {
+            confidence = .high
+        }
+        // A negative speed classifies as `unknown`, which would arm a session
+        // that reports no motion at all — indistinguishable from a broken
+        // feature. CoreLocation's "-1 means I don't know" has no meaning as
+        // an *instruction*.
         let speed = doubleField(dict["speed"])
+        if let speed, speed < 0 { return nil }
         if let activity = dict["activity"] as? String {
             guard let kind = MotionKind(rawValue: activity), kind != .unknown else { return nil }
             return MotionRequest(
@@ -1215,13 +1287,25 @@ struct Server: Sendable {
             return .unknownDevice
         }
         if let session = await sessions.active(udid: udid) {
-            await session.stop()
+            // Keep the session when the stop failed, so a retry still has
+            // something to disarm — dropping it would strand an armed dylib
+            // with nothing tracking it.
+            guard await session.stop() else { return .dispatchFailed }
         }
         await sessions.end(udid: udid)
         return .ok
     }
 
-    /// The `{"activity":…,"steps":…}` payload the browser's readout shows.
+    /// The `{"activity":…,"steps":…}` payload the browser's readout shows, or
+    /// `nil` when no such simulator exists — the caller turns that into the
+    /// same `404` the POST and DELETE routes give, rather than reporting an
+    /// unknown device as one with motion switched off.
+    static func motionState(udid: String, simulators: any Simulators,
+                            sessions: MotionSessions) async -> String? {
+        guard !udid.isEmpty, simulators.find(udid: udid) != nil else { return nil }
+        return await motionStateJSON(udid: udid, sessions: sessions)
+    }
+
     static func motionStateJSON(udid: String, sessions: MotionSessions) async -> String {
         guard let session = await sessions.active(udid: udid) else {
             return #"{"ok":true,"active":false}"#
@@ -1753,29 +1837,509 @@ struct Server: Sendable {
         return RenderDimensions(width: width, height: height)
     }
 
-    private static func screenshotJPEG(
+    // MARK: - sized captures
+
+    /// The encodings the screenshot routes serve. `jpeg` is what
+    /// `ScreenSnapshot` already hands back, so it stays the source
+    /// format everything else is measured against.
+    enum CaptureImageFormat: String, Sendable, Equatable, CaseIterable {
+        case jpeg
+        case png
+
+        /// What the URL ends in. `.jpg`, not `.jpeg` — that's the
+        /// extension the route has always published and the one every
+        /// `<img src>` in the tree already points at.
+        var pathExtension: String {
+            switch self {
+            case .jpeg: return "jpg"
+            case .png:  return "png"
+            }
+        }
+
+        var contentType: String {
+            switch self {
+            case .jpeg: return "image/jpeg"
+            case .png:  return "image/png"
+            }
+        }
+
+        /// Uniform type identifier for `CGImageDestination`.
+        var utType: String {
+            switch self {
+            case .jpeg: return "public.jpeg"
+            case .png:  return "public.png"
+            }
+        }
+
+        /// What `?quality=` defaults to on a route serving this format.
+        ///
+        /// `0.85` for JPEG is the historical default, shared with the
+        /// CLI. PNG asks for `1.0` instead because `ScreenSnapshot`
+        /// only ever hands back JPEG: a PNG still is a JPEG round-trip
+        /// whether the caller wanted one or not, and capturing at
+        /// full quality is what keeps that intermediate from showing
+        /// up as ringing in something the extension promises is
+        /// lossless. It is still not bit-exact — see
+        /// `docs/features/screenshot.md`.
+        var defaultQuality: Double {
+            switch self {
+            case .jpeg: return 0.85
+            case .png:  return 1.0
+            }
+        }
+    }
+
+    /// The `?size=&fit=&background=` trio every capture route accepts —
+    /// the HTTP spelling of the vocabulary `CaptureSize` defines, the
+    /// toolbar picker speaks, and `baguette screenshot --size` parses.
+    /// One value so the routes can't drift apart on defaults.
+    ///
+    /// **`fit` here is `CaptureFit`, NOT `DeviceScreenFit`.** The two
+    /// enums sit a few hundred lines apart in this file, spell the
+    /// same three cases (`contain` / `cover` / `stretch`), and mean
+    /// entirely different things: `CaptureFit` places the source
+    /// image inside the output *canvas*; `DeviceScreenFit` (the
+    /// `render-3d.png` body) places the app screenshot onto the 3D
+    /// device's screen *mesh*. They are not interchangeable and must
+    /// not be merged.
+    struct CaptureOptions: Equatable, Sendable {
+        let size: CaptureSize
+        let fit: CaptureFit
+        let background: DeviceRenderBackground
+
+        /// Today's behaviour, exactly: whatever the framebuffer
+        /// already is. `contain` and the white mat only ever show up
+        /// once a non-native size is asked for, so the default plan is
+        /// an identity by construction and the original bytes survive.
+        static let `default` = CaptureOptions(
+            size: .native, fit: .contain, background: .color("#ffffff")
+        )
+    }
+
+    /// A query value baguette refuses to guess at. Rejecting beats
+    /// substituting: a marketing shot silently served at the wrong
+    /// size is worse than a 400 the caller can read.
+    enum CaptureQueryError: Error, Equatable {
+        case unknownSize(String)
+        case unknownFit(String)
+        case unknownBackground(String)
+
+        var message: String {
+            switch self {
+            case .unknownSize(let spec):
+                // Reuse the domain's wording so the CLI, the browser,
+                // and the route all name the same catalogue.
+                return CaptureSizeError.unknownSize(spec).message
+            case .unknownFit(let spec):
+                return "Unknown fit '\(spec)'. Expected one of: "
+                    + CaptureFit.allCases.map(\.rawValue).joined(separator: " | ")
+            case .unknownBackground(let spec):
+                return "Unknown background '\(spec)'. Expected 'transparent' or #RRGGBB"
+            }
+        }
+    }
+
+    /// Lift `?size=` / `?fit=` / `?background=` off a request. Kept
+    /// separate from the string-taking overload below so the route
+    /// closures stay one-liners and the parsing stays unit-testable
+    /// without a `Request`.
+    ///
+    /// No `removingPercentEncoding` here — Hummingbird's `URI` already
+    /// percent-decodes query values, and decoding twice turns a value
+    /// containing a literal `%` into `nil`, which would silently fall
+    /// back to the default instead of the 400 this surface promises.
+    static func captureOptions(query request: Request) throws -> CaptureOptions {
+        func value(_ key: String) -> String? {
+            request.uri.queryParameters.get(key)
+        }
+        return try captureOptions(
+            size: value("size"), fit: value("fit"), background: value("background")
+        )
+    }
+
+    static func captureOptions(
+        size: String?,
+        fit: String?,
+        background: String?
+    ) throws -> CaptureOptions {
+        let resolvedSize: CaptureSize
+        if let size, !size.isEmpty {
+            guard let parsed = try? CaptureSize.parse(size) else {
+                throw CaptureQueryError.unknownSize(size)
+            }
+            resolvedSize = parsed
+        } else {
+            resolvedSize = .native
+        }
+
+        let resolvedFit: CaptureFit
+        if let fit, !fit.isEmpty {
+            guard let parsed = CaptureFit(rawValue: fit.lowercased()) else {
+                throw CaptureQueryError.unknownFit(fit)
+            }
+            resolvedFit = parsed
+        } else {
+            resolvedFit = .contain
+        }
+
+        return CaptureOptions(
+            size: resolvedSize,
+            fit: resolvedFit,
+            background: try captureBackground(background)
+        )
+    }
+
+    private static func captureBackground(
+        _ raw: String?
+    ) throws -> DeviceRenderBackground {
+        guard let raw, !raw.isEmpty else { return .color("#ffffff") }
+        let text = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        if text == "transparent" { return .transparent }
+        // A literal `#` opens the fragment in a URL, so a hand-written
+        // `curl '…?background=#ffffff'` never delivers the hash to us.
+        // Accept both spellings and normalise to the `#RRGGBB` the
+        // render layer already speaks.
+        let digits = text.hasPrefix("#") ? String(text.dropFirst()) : text
+        guard digits.count == 6,
+              digits.allSatisfy({ $0.isASCII && $0.isHexDigit }) else {
+            throw CaptureQueryError.unknownBackground(raw)
+        }
+        return .color("#\(digits)")
+    }
+
+    /// What happened to the captured bytes on the way out.
+    enum CaptureOutcome: Equatable {
+        /// The capture already is what was asked for. The route hands
+        /// the bytes straight through, so the default `screenshot.jpg`
+        /// stays byte-for-byte what it has always been.
+        case unchanged
+        case encoded(Data)
+        case failed
+    }
+
+    /// Re-encode a captured framebuffer onto the canvas `options` asks
+    /// for.
+    ///
+    /// NOTE: the resize lives here rather than inside
+    /// `ScreenSnapshot.capture` deliberately — `--size` is landing on
+    /// that helper in parallel, and this route surface has to be
+    /// mergeable on its own. Once the capture helper carries the same
+    /// knobs, this collapses into it and the duplication goes away.
+    static func recapture(
+        _ image: Data,
+        sourceFormat: CaptureImageFormat,
+        format: CaptureImageFormat,
+        options: CaptureOptions,
+        quality: Double
+    ) -> CaptureOutcome {
+        if sourceFormat == format, options.size.isNative {
+            return .unchanged
+        }
+        guard let source = decodeImage(image),
+              let bytes = encodeCapture(
+                  source, options: options, format: format, quality: quality
+              ) else {
+            return .failed
+        }
+        return .encoded(bytes)
+    }
+
+    /// Where the framebuffer lands inside a rasterized bezel.
+    ///
+    /// The geometry is `DeviceChrome`'s, read through the same
+    /// `buttonMargins` shift `DeviceChromeAssets.layoutJSON` publishes
+    /// to the browser — server-side and browser-side composites have
+    /// to agree on the cutout, or the two renderings of one device
+    /// stop matching.
+    struct BezelPlacement: Equatable, Sendable {
+        let bezel: ChromeImage
+        let screen: Rect
+        let cornerRadius: Double
+    }
+
+    static func bezelPlacement(
+        assets: DeviceChromeAssets,
+        withButtons: Bool
+    ) -> BezelPlacement {
+        // `chrome.screenInsets` are measured against the *bare* device
+        // body; the merged canvas grew by `buttonMargins` around it,
+        // so only the merged variant shifts.
+        let base = assets.chrome.screenRect(in: assets.bareComposite.size)
+        let offset = withButtons
+            ? Point(x: assets.buttonMargins.left, y: assets.buttonMargins.top)
+            : Point(x: 0, y: 0)
+        return BezelPlacement(
+            bezel: withButtons ? assets.composite : assets.bareComposite,
+            screen: Rect(
+                origin: Point(
+                    x: base.origin.x + offset.x,
+                    y: base.origin.y + offset.y
+                ),
+                size: base.size
+            ),
+            cornerRadius: assets.chrome.innerCornerRadius
+        )
+    }
+
+    /// Composite the framebuffer into the device's chrome: bezel
+    /// underneath, screen on top, clipped to the screen's inner corner
+    /// radius.
+    ///
+    /// The Z-order is not a preference. Apple's DeviceKit composite
+    /// paints an opaque dark "off glass" into the screen cutout,
+    /// authored to sit UNDER live content — draw the screen first and
+    /// the off-glass buries it.
+    ///
+    /// Always PNG: the device body has transparent corners and the
+    /// mat around it may be transparent too.
+    static func bezelCapture(
+        screenImage: Data,
+        assets: DeviceChromeAssets,
+        withButtons: Bool,
+        options: CaptureOptions
+    ) -> Data? {
+        let placement = bezelPlacement(assets: assets, withButtons: withButtons)
+        guard placement.screen.size.width > 0, placement.screen.size.height > 0,
+              let bezel = decodeImage(placement.bezel.data),
+              let screen = decodeImage(screenImage) else {
+            return nil
+        }
+        // DeviceKit chrome geometry is in 1× points; the framebuffer
+        // arrives in device pixels (a 6.9" phone captures ~1290 px
+        // into a ~430 pt cutout). Compositing at the chrome's own
+        // scale would throw that 3× away before `?size=` upscales the
+        // remains back — exactly the App Store case this route exists
+        // for. So the canvas is sized off the *framebuffer*, and the
+        // chrome is what gets resampled. Never below 1×: a heavily
+        // `?scale=`d capture must not shrink the bezel with it.
+        let scale = max(1, Double(screen.width) / placement.screen.size.width)
+        let width = Int((placement.bezel.size.width * scale).rounded())
+        let height = Int((placement.bezel.size.height * scale).rounded())
+        guard width > 0, height > 0,
+              let context = bitmapContext(width: width, height: height) else {
+            return nil
+        }
+        context.interpolationQuality = .high
+        context.draw(bezel, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // CoreGraphics is bottom-up; chrome geometry is top-left.
+        let cutout = CGRect(
+            x: placement.screen.origin.x * scale,
+            y: Double(height)
+                - (placement.screen.origin.y + placement.screen.size.height) * scale,
+            width: placement.screen.size.width * scale,
+            height: placement.screen.size.height * scale
+        )
+        context.saveGState()
+        // The corner radius is chrome geometry too, so it rides the
+        // same scale as the cutout it rounds.
+        let radius = placement.cornerRadius * scale
+        context.addPath(CGPath(
+            roundedRect: cutout,
+            cornerWidth: min(radius, cutout.width / 2),
+            cornerHeight: min(radius, cutout.height / 2),
+            transform: nil
+        ))
+        context.clip()
+        // Cover-fit inside the cutout via the same placement maths the
+        // rest of the vocabulary uses, so a framebuffer whose aspect
+        // doesn't match the chrome (rotated device, odd `?scale=`)
+        // crops instead of distorting.
+        let inner = CaptureSize(
+            spec: "cutout",
+            label: "cutout",
+            kind: .fixed(RenderDimensions(
+                width: Int(cutout.width.rounded()),
+                height: Int(cutout.height.rounded())
+            ))
+        ).plan(
+            source: RenderDimensions(width: screen.width, height: screen.height),
+            fit: .cover
+        )
+        context.draw(screen, in: CGRect(
+            x: cutout.minX + Double(inner.drawX),
+            y: cutout.maxY - Double(inner.drawY) - Double(inner.drawHeight),
+            width: Double(inner.drawWidth),
+            height: Double(inner.drawHeight)
+        ))
+        context.restoreGState()
+
+        guard let composed = context.makeImage() else { return nil }
+        return encodeCapture(composed, options: options, format: .png, quality: 1)
+    }
+
+    private static func decodeImage(_ data: Data) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return nil
+        }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    /// Redraw `source` onto the canvas `options` asks for, then encode.
+    /// The placement maths belongs to `CapturePlacement` — shared with
+    /// the browser composer and the CLI so one size means one thing.
+    private static func encodeCapture(
+        _ source: CGImage,
+        options: CaptureOptions,
+        format: CaptureImageFormat,
+        quality: Double
+    ) -> Data? {
+        let sourceSize = RenderDimensions(width: source.width, height: source.height)
+        let placement = options.size.plan(source: sourceSize, fit: options.fit)
+        guard placement.width > 0, placement.height > 0 else { return nil }
+        let image: CGImage
+        if placement.isIdentity(for: sourceSize) {
+            image = source
+        } else {
+            // JPEG carries no alpha, so an un-matted transparent
+            // canvas flattens to *black* on encode — a mat nobody
+            // asked for. Fall back to the white default rather than
+            // shipping a black-bordered marketing shot.
+            let background: DeviceRenderBackground =
+                (format == .jpeg && options.background == .transparent)
+                    ? .color("#ffffff")
+                    : options.background
+            guard let drawn = draw(
+                source, into: placement, background: background
+            ) else { return nil }
+            image = drawn
+        }
+        return encode(image, format: format, quality: quality)
+    }
+
+    private static func draw(
+        _ source: CGImage,
+        into placement: CapturePlacement,
+        background: DeviceRenderBackground
+    ) -> CGImage? {
+        guard let context = bitmapContext(
+            width: placement.width, height: placement.height
+        ) else { return nil }
+        if case .color(let hex) = background {
+            let color = HexColor(hex)
+            context.setFillColor(
+                red: color.red, green: color.green, blue: color.blue, alpha: 1
+            )
+            context.fill(CGRect(
+                x: 0, y: 0, width: placement.width, height: placement.height
+            ))
+        }
+        context.interpolationQuality = .high
+        // `CapturePlacement` is top-left origin; CoreGraphics is not.
+        context.draw(source, in: CGRect(
+            x: placement.drawX,
+            y: placement.height - placement.drawY - placement.drawHeight,
+            width: placement.drawWidth,
+            height: placement.drawHeight
+        ))
+        return context.makeImage()
+    }
+
+    private static func bitmapContext(width: Int, height: Int) -> CGContext? {
+        CGContext(
+            data: nil, width: width, height: height,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                | CGBitmapInfo.byteOrder32Little.rawValue
+        )
+    }
+
+    private static func encode(
+        _ image: CGImage,
+        format: CaptureImageFormat,
+        quality: Double
+    ) -> Data? {
+        let out = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            out, format.utType as CFString, 1, nil
+        ) else { return nil }
+        let properties: CFDictionary? = format == .jpeg
+            ? [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary
+            : nil
+        CGImageDestinationAddImage(destination, image, properties)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return out as Data
+    }
+
+    private static func screenshot(
         udid: String,
         quality: Double,
         scale: Int,
+        format: CaptureImageFormat,
+        options: CaptureOptions,
         simulators: any Simulators
     ) async -> Response {
         guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
             return errorJSON("unknown udid: \(udid)", status: .notFound)
         }
+        let captured: Data
         do {
-            let bytes = try await ScreenSnapshot.capture(
+            captured = try await ScreenSnapshot.capture(
                 screen: sim.screen(),
                 quality: quality,
                 scale: max(1, scale)
             )
-            return Response(
-                status: .ok,
-                headers: [.contentType: "image/jpeg", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(data: bytes))
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+        let bytes: Data
+        switch recapture(
+            captured, sourceFormat: .jpeg, format: format,
+            options: options, quality: quality
+        ) {
+        case .unchanged:
+            bytes = captured
+        case .encoded(let encoded):
+            bytes = encoded
+        case .failed:
+            return errorJSON("capture encoding failed", status: .internalServerError)
+        }
+        return Response(
+            status: .ok,
+            headers: [.contentType: format.contentType, .cacheControl: "no-cache"],
+            body: .init(byteBuffer: ByteBuffer(data: bytes))
+        )
+    }
+
+    private static func screenshotBezelPNG(
+        udid: String,
+        quality: Double,
+        scale: Int,
+        withButtons: Bool,
+        options: CaptureOptions,
+        simulators: any Simulators,
+        chromes: any Chromes
+    ) async -> Response {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return errorJSON("unknown udid: \(udid)", status: .notFound)
+        }
+        guard let assets = sim.chrome(in: chromes) else {
+            return errorJSON("no bezel for udid \(udid)", status: .notFound)
+        }
+        let captured: Data
+        do {
+            captured = try await ScreenSnapshot.capture(
+                screen: sim.screen(),
+                quality: quality,
+                scale: max(1, scale)
             )
         } catch {
             return errorJSON(String(describing: error), status: .internalServerError)
         }
+        guard let bytes = bezelCapture(
+            screenImage: captured,
+            assets: assets,
+            withButtons: withButtons,
+            options: options
+        ) else {
+            return errorJSON("bezel composite failed", status: .internalServerError)
+        }
+        return Response(
+            status: .ok,
+            headers: [.contentType: "image/png", .cacheControl: "no-cache"],
+            body: .init(byteBuffer: ByteBuffer(data: bytes))
+        )
     }
 
     private static func bezelPNG(

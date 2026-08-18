@@ -77,6 +77,66 @@ For releases prior to this changelog, see the
   "unavailable" rather than fabricated garbage. Floor counting and the
   magnetometer are refused on purpose. See
   [`docs/features/motion.md`](docs/features/motion.md).
+- **One output size for every capture — `--size appstore-6.9`, and the
+  same words in the UI.** Screenshots and recordings, 2D and 3D, browser
+  and CLI, now share one vocabulary: the App Store submission sizes
+  (`appstore-6.9`, `appstore-6.5`, `appstore-ipad-13`), the common ratios
+  (`square`, `16:9`, `9:16`, `4:3`, `4:5`), plus `1920x1080` and any bare
+  `W:H`. Pick "App Store 6.9″" from the toolbar chip once and reproduce
+  exactly those pixels in CI with `--size appstore-6.9`.
+
+  A ratio **grows** rather than crops: `square` on a 1290 × 2796 phone
+  gives a 2796 × 2796 canvas with the whole phone centred, not a
+  1290 × 1290 cut through the middle of the screen. Cropping the device
+  out of a marketing shot is the one thing nobody asking for a square
+  wanted. `--fit` (`contain` / `cover` / `stretch`) and `--background`
+  say what fills the rest. Unknown sizes are rejected — baguette never
+  substitutes a nearby one.
+
+  See [`docs/features/capture-size.md`](docs/features/capture-size.md).
+
+- **`baguette record` — video straight from the CLI.** A booted simulator,
+  an `--output`, and either `--duration` or `Ctrl-C`; the file is flushed
+  and playable either way. Takes `--size` / `--fit` / `--fps` /
+  `--bitrate`, writes `.mp4` or `.mov` (the extension picks the
+  container).
+
+  `docs/features/recording.md` has argued for a while that server-side
+  recording was tried and rejected, and that argument still stands *for
+  the live stream* — a recorder attaching mid-stream never sees the
+  SPS/PPS the encoder emitted on its first IDR, and an N+1th
+  VideoToolbox session stutters every farm tile. Neither applies to a
+  standalone CLI run: it owns the encode from frame one and has no
+  competing viewer. So the design that was wrong as a passenger is the
+  right one on its own, and it is wired into nothing — no route, no WS
+  verb.
+
+- **PNG screenshots, and a bezelled one.** `baguette screenshot
+  --format png` (inferred from a `.png --output`, so `-o shot.png` can
+  never quietly hold JPEG bytes), plus `GET …/screenshot.png` and
+  `GET …/screenshot-bezel.png` — the frame composited inside its
+  DeviceKit chrome, which previously meant opening a browser and
+  cropping. All three routes take `?size=&fit=&background=`;
+  `screenshot.jpg` with no new parameters returns byte-identical output
+  to before.
+
+- **A size chip on every capture surface**, and a Record button where
+  there wasn't one. The focus-mode view had only ever had Screenshot; it
+  now records too, in both 2D and 3D — dropping the bezel in 3D, since
+  the rendered frame already contains a device. The legacy stream
+  sidebar and the device-farm focus pane get the same chip, each
+  remembering its own selection, and it drives Capture and Record alike:
+  a screenshot and a clip taken a second apart come out at the same
+  dimensions. Saved files are named for what they are —
+  `…-appstore-6.9-1290x2796.png`.
+
+- **The browser's 3D export is now lossless.** It used to save
+  `toDataURL()` of the decoded video canvas — a ~960 px H.264 or MJPEG
+  frame. It now asks the server to re-render the same pose at the picked
+  size, so `appstore-6.9` really is 1290 × 2796 instead of an upscale of
+  a video still. `render-3d --size` and the route's `"size"` field take
+  preset names as well as literal pixels, and the live 3D stream accepts
+  `size=`.
 
 - **Deep links — `baguette openurl <url>` and `baguette schemes`.** Opens a link
   on a booted simulator, and lists the URL schemes its apps registered (ranked:

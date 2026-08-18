@@ -350,6 +350,14 @@ struct CommandParsingTests {
         #expect(cmd.resolvedSpeed == 2.2)
     }
 
+    @Test func `motion rejects a negative speed`() {
+        // A negative speed classifies as `unknown`, so it would arm a session
+        // reporting no motion — a confusing way to spell "invalid input".
+        #expect(throws: (any Error).self) {
+            try MotionCommand.Start.parse(["--udid", "U", "--speed", "-1"])
+        }
+    }
+
     @Test func `motion rejects an unknown activity`() {
         // Failing loudly beats silently reporting `unknown` motion.
         #expect(throws: (any Error).self) {
