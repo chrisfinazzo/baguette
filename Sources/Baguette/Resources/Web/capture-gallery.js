@@ -266,10 +266,13 @@
       return parts.join(' · ');
     }
 
+    /** `capture-3-appstore-6.9-1290x2796.png` — the slug arrives from
+     *  CaptureSettings already filename-safe, so screenshots and
+     *  recordings can't drift apart on how they name a `16:9` file. */
     _download(entry, index) {
       const a = root.document.createElement('a');
       a.href = entry.dataUrl;
-      a.download = `capture-${index + 1}-${filenameSafe(entry.slug)}.png`;
+      a.download = `capture-${index + 1}-${entry.slug}.png`;
       a.click();
     }
   }
@@ -312,15 +315,6 @@
     return plan.drawX === 0 && plan.drawY === 0
       && plan.drawW === plan.width && plan.drawH === plan.height
       && plan.width === plan.sourceWidth && plan.height === plan.sourceHeight;
-  }
-
-  /**
-   * `16:9` is a legal size spec but an illegal Windows filename, and
-   * Finder renders a `:` in a filename as `/` — so the colon never
-   * reaches the download.
-   */
-  function filenameSafe(slug) {
-    return String(slug).replace(/[^\w.-]+/g, '-');
   }
 
   function blobToDataUrl(win, blob) {

@@ -203,6 +203,18 @@ test('grows a ratio size around the raw screenshot when unframed', async () => {
   assert.deepEqual({ w: entry.w, h: entry.h }, { w: 2796, h: 2796 });
 });
 
+test('captures the bare bezel when the screenshot decodes to nothing', async () => {
+  const { gallery, CaptureSettings } = galleryFor({ shot: { width: 0, height: 0 } });
+  const entry = await gallery.capture({
+    settings: new CaptureSettings({ withFrame: true }),
+  });
+
+  // Nothing to paste into the cutout, but the device frame is loaded and
+  // worth having — an empty PNG would be the worse answer.
+  assert.deepEqual({ w: entry.w, h: entry.h }, { w: 1400, h: 2900 });
+  assert.equal(entry.dataUrl, 'data:image/png;base64,W1400H2900');
+});
+
 test('falls back to the screenshot size when there is no bezel image', async () => {
   const { gallery, CaptureSettings } = galleryFor({ frameImg: null });
   const entry = await gallery.capture({
@@ -334,8 +346,9 @@ test('keeps a ratio preset filename-safe', async () => {
   gallery.renderInto(strip, null);
   strip.children[0].children[0].fire('click');
 
-  // `16:9` is a legal spec but an illegal filename on Windows, and
-  // Finder shows a `:` as `/` — the colon can't reach the download.
+  // CaptureSettings.slug() sanitises the `:` out of a ratio spec; this
+  // guards that the strip's download name inherits that, rather than
+  // the gallery re-deriving a name of its own.
   const a = state.anchors[state.anchors.length - 1];
   assert.equal(a.download, 'capture-1-16-9-4971x2796.png');
 });
