@@ -467,6 +467,64 @@ bezel and the screen clip entirely, and the size vocabulary applies
 unchanged: `square` on a 1200 × 1200 3D canvas is still a square, it
 is just a square with a rendered iPhone in it.
 
+### …but `contain` is the wrong fit there
+
+The 3D canvas is not a picture of a device the way the 2D canvas is —
+it is a **viewport onto a scene**, a device standing in the middle of
+empty margins. Letterboxing that whole viewport into a tall App Store
+canvas therefore shrinks the *device* into the emptiness instead of
+cropping the emptiness away, and a 6.9″ recording comes out as a small
+phone adrift in bands.
+
+A screenshot doesn't have this problem: it re-renders server-side at
+the exact size and the RealityKit camera frames to whatever it renders
+into. A recording has no such escape — `BrowserRecorder` composites
+the stage canvas frame by frame as it arrives — so the fit has to
+carry it:
+
+```js
+Sim3DPanel.recordingFit(settings, stageCanvas)  // → 'cover' | 'contain'
+```
+
+`cover` when the target is **narrower** than the stage: it eats the
+side margins and keeps full height. `contain` when the target is
+wider, because past that point there is no more device to show, only
+bars — and cropping into the device is worse than a bar beside it.
+From a 1600 × 1250 stage:
+
+| size | fit | kept from the stage |
+| --- | --- | --- |
+| `appstore-6.9` | cover | 577 × 1250 — full height, sides cropped |
+| `square` | cover | 1250 × 1250 |
+| `9:16` | cover | 703 × 1250 |
+| `16:9` | contain | letterboxed, the phone intact |
+
+Only recordings, and only in 3D. In 2D the source canvas already *is*
+the device, so the user's own fit choice stands.
+
+**What this costs, and what pays it back.** Cropping means the file
+keeps only a fraction of the stream's pixels — a 6.9″ crop of a
+1600 × 1129 stage is 521 px wide and has to be upscaled 2.5× to reach
+1290. So picking a size also raises the stream's **density**:
+`Sim3DPanel.streamBox` spends the whole 2560 px budget on the long
+side, supersampling the stage instead of merely matching it. The same
+924 × 652 stage then streams at 2560 × 1806, the crop keeps 833 px,
+and the upscale falls to 1.55×. See
+[Stream density](3d-rendering.md#stream-density).
+
+That is nearly free — measured on an M-series Mac the RealityKit
+render takes 0.67s at 924 × 652 and 0.72s at 3200 × 2258, twelve times
+the area for 7% more wall clock — and the live view only improves,
+since `object-fit: contain` shows the same shape at the same size and
+a downsampled render is an antialiased one.
+
+What was tried and *rejected* is reshaping the stream to the target
+**aspect**. An App Store 6.9″ stream is 738 × 1600, which `contain`
+then upscales across a much larger stage: the live view went soft and
+its framing moved. Density is invisible; shape is not. Trading a
+visible regression in the thing the user is looking at for a sharper
+file is the wrong way round.
+
 ## Lifecycle on the page
 
 ### `sim-stream.js`
