@@ -332,6 +332,15 @@
        strip already scrolls when it doesn't fit, which is exactly the
        behaviour this hands it. */
     max-width: min(100%, var(--nv-device-max-w));
+    /* `backdrop-filter` makes the bar its own stacking context, so a
+       popover opened inside it (the capture-size chip's) composites at
+       the bar's level no matter how high its own z-index goes. Without
+       a level of its own the bar sits at 0, which puts the popover
+       under the floating cards (z-index 40) and under the device
+       wrapper once `applyOrientation` gives it a transform. 50 clears
+       both; the bar and the cards never overlap geometrically. */
+    position: relative;
+    z-index: 50;
   }
 
   /* `!important` overrides the SDK Bezel's inline `max-height: 70vh`
@@ -2152,7 +2161,23 @@
     font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     letter-spacing: 0.09em; text-transform: uppercase;
   }
-  #simNativeView .rec-dock-head .rec-dock-close { margin-left: auto; width: 22px; height: 22px; }
+  #simNativeView .rec-dock-head .rec-dock-clear {
+    margin-left: auto; padding: 3px 7px;
+    border: 0; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--nv-danger);
+    /* Reset the header's uppercase tracking: this is a control, and
+       shouting it competes with the title beside it. */
+    font: 600 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0; text-transform: none;
+  }
+  #simNativeView .rec-dock-head .rec-dock-clear:hover { background: var(--nv-btn-hover); }
+  #simNativeView .rec-dock-head .rec-dock-close { width: 22px; height: 22px; }
+  /* Why a take ended without producing a file. Sits above the list so
+     "nothing appeared" has an explanation next to where it didn't. */
+  #simNativeView .rec-dock-list .rec-note {
+    margin: 2px 6px 6px; color: var(--nv-text-muted);
+    font: 500 11px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
   #simNativeView .rec-dock-list {
     display: flex; flex-direction: column; gap: 2px;
     padding: 6px; max-height: 40vh; overflow-y: auto;
@@ -2646,9 +2671,17 @@
   <aside class="rec-dock" id="nativeRecordDock" aria-label="Recordings">
     <header class="rec-dock-head">
       <span>Recordings</span>
-      <button class="ico-btn rec-dock-close" title="Clear recordings"
-              aria-label="Clear recordings"
-              onclick="window.__nativeClearRecordings && window.__nativeClearRecordings()">
+      <!-- Two separate verbs, because they are not the same act. The ✕
+           puts the card away and keeps every file; "Clear" revokes the
+           Blob URLs, which destroys anything not yet downloaded with no
+           undo — so it is spelled out rather than hidden behind the
+           dismiss glyph people click without reading. -->
+      <button class="rec-dock-clear" title="Discard these recordings and free the memory they hold"
+              aria-label="Discard recordings"
+              onclick="window.__nativeClearRecordings && window.__nativeClearRecordings()">Clear</button>
+      <button class="ico-btn rec-dock-close" title="Hide recordings"
+              aria-label="Hide recordings"
+              onclick="window.__nativeHideRecordings && window.__nativeHideRecordings()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>

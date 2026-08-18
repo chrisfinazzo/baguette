@@ -1214,6 +1214,7 @@
     // picked size, one toggle instead of a one-shot.
     window.__nativeRecord = () => { void toggleRecording(); };
     window.__nativeClearRecordings = () => clearRecordings();
+    window.__nativeHideRecordings = () => hideRecordings();
     window.__nativeClose = () => {
       // Shutting the window from inside a popup-style URL: try
       // window.close (only works for script-opened tabs) then fall
@@ -1448,10 +1449,8 @@
     // The canvas being recorded is about to be swapped for the other
     // mode's, and the two are different surfaces at different sizes.
     cancelRecording('switched between 2D and 3D');
-    // The bezel switch only makes sense in 2D: the 3D render already
-    // carries the device body, so compositing a second one would draw
-    // the phone twice. `open` is the state we're leaving.
-    if (captureMenu) captureMenu.showFrameToggle = open;
+    // `open` is the state we're LEAVING, so it doubles as "will be 2D".
+    reflect3DCaptureControls(open);
     if (open) {
       view.removeAttribute('data-render3d');
       view.removeAttribute('data-render3d-inspector');
@@ -1487,6 +1486,12 @@
       } else if (render3DPanel) {
         render3DPanel.background = live3DBackground();
         render3DPanel.start();
+      }
+      // The 3D render is produced server-side, so its Save Frame needs
+      // to be told the picked size rather than reading it off a canvas
+      // we hold. Guarded: the panel gained this hook after the chip did.
+      if (render3DPanel && typeof render3DPanel.setCaptureSettings === 'function') {
+        render3DPanel.setCaptureSettings(captureSettings());
       }
     }
   }
@@ -1533,10 +1538,16 @@
   // --- Capture: one picked size, two verbs, two modes ---------------
   //
   // "App Store 6.9″" / "Square" / "16:9" is chosen once, on the chip in
-  // the toolbar, and both Screenshot and Record come out at it — in 2D
-  // and in 3D alike. The vocabulary is shared with the HTTP routes and
-  // the CLI and lives in Resources/Web/capture/; see
+  // the toolbar, and every capture on this page reads it — in 2D and in
+  // 3D alike. The vocabulary is shared with the HTTP routes and the CLI
+  // and lives in Resources/Web/capture/; see
   // docs/features/capture-size.md. Nothing here reimplements any of it.
+  //
+  // Who applies it differs by verb, because who owns the output canvas
+  // differs: a screenshot is composed here, a 3D Save Frame is rendered
+  // server-side from settings handed to Sim3DPanel, and a recording is
+  // sized by BrowserRecorder's own compose canvas — which is why the
+  // recording's filename carries no size slug.
   //
   // Those modules are pulled in at runtime rather than with a <script>
   // tag, because this page has no <head> of its own: sim.html carries
@@ -1563,6 +1574,7 @@
   //   entries   : finished artifacts — Blob URLs we own and must revoke
   const recordingState = {
     recorder: null, active: false, startedAt: 0, timer: null, entries: [],
+    notice: '',   // why the last take ended without producing a file
   };
 
   let _captureModulesPromise = null;
@@ -1592,14 +1604,24 @@
     if (host && window.CaptureSizeMenu && !captureMenu) {
       captureMenu = new window.CaptureSizeMenu({
         storageKey: 'asc.capture.native',
-        // The bezel switch is meaningless in 3D — the rendered frame
-        // already carries the device body. `toggle3D` flips this.
+        // Three controls that only make sense in 2D — see
+        // `reflect3DCaptureControls` for why. `toggle3D` flips them.
         showFrameToggle: !is3DOpen(),
+        showFitToggle: !is3DOpen(),
+        showBackgroundToggle: !is3DOpen(),
         // The popover shows each preset's resolved pixels, so it has to
         // be told what the *composite* is — the bezel viewport when the
         // frame is on, the bare canvas when it isn't.
         sourceSize: () => compositeSourceSize(),
-        onChange: () => refreshToolbarScroll(),
+        onChange: (settings) => {
+          refreshToolbarScroll();
+          // The 3D render is produced server-side, so the size has to
+          // travel with the request rather than being applied to a
+          // canvas we hold.
+          if (render3DPanel && typeof render3DPanel.setCaptureSettings === 'function') {
+            render3DPanel.setCaptureSettings(settings);
+          }
+        },
       });
       captureMenu.mount(host);
     }
@@ -1611,6 +1633,28 @@
     refreshToolbarScroll();
   }
 
+  /**
+   * Show only the picker controls that mean something in the current
+   * mode. All three are read by `_renderPopover` at open time, so
+   * flipping them on the live instance is enough.
+   *
+   * In 3D:
+   *   • bezel — the rendered frame already carries the device body, so
+   *     compositing a second one would draw the phone twice;
+   *   • fit — on the `render-3d.png` route `fit` is the UV placement of
+   *     the app screenshot on the device's screen mesh, not canvas
+   *     placement, so `contain` would letterbox the app *inside* the
+   *     phone's display. Canvas placement there is the camera's job;
+   *   • background — the render fills its own canvas with the scene
+   *     background already.
+   */
+  function reflect3DCaptureControls(twoD) {
+    if (!captureMenu) return;
+    captureMenu.showFrameToggle = twoD;
+    captureMenu.showFitToggle = twoD;
+    captureMenu.showBackgroundToggle = twoD;
+  }
+
   function is3DOpen() {
     const view = document.getElementById('simNativeView');
     return !!(view && view.getAttribute('data-render3d') === 'open');
@@ -1618,8 +1662,13 @@
 
   function captureSettings() {
     if (captureMenu) return captureMenu.settings;
-    const CaptureSettings = window.Baguette && window.Baguette._CaptureSettings;
-    return CaptureSettings ? new CaptureSettings() : null;
+    const B = window.Baguette;
+    // `new CaptureSettings()` dereferences `_CaptureSize` in its own
+    // constructor, and `loadScript` resolves rather than rejects on a
+    // 404 — so a half-loaded vocabulary is reachable, and checking only
+    // the one global would throw right past the fallback below.
+    if (!B || !B._CaptureSettings || !B._CaptureSize) return null;
+    return new B._CaptureSettings();
   }
 
   /**
@@ -1666,13 +1715,23 @@
    * bezel is scaled up to meet it: soft chrome around a sharp screen
    * beats a sharp frame around a thumbnail. Capped so an unusually
    * large source can't ask for a canvas the browser refuses to
-   * allocate. 1 with no bezel — the canvas is already the composite.
+   * allocate.
+   *
+   * 1 whenever the composite ISN'T the bezel viewport. `compositeSize`
+   * reports the viewport only once the bezel <img> has decoded, and
+   * falls back to the framebuffer otherwise — before the image lands,
+   * or after a 404, where `bezel.js` hides the element and leaves
+   * `naturalWidth` at 0. That fallback is already at capture scale, so
+   * scaling it again would allocate ~9x the pixels for an upscaled
+   * blur. Comparing the reported size against the viewport is how we
+   * tell the two apart.
    */
-  function compositeScale(source) {
-    if (!source || !source.screen || !source.screen.rect) return 1;
-    const width = source.screen.rect.width;
-    if (!(width > 0)) return 1;
-    return Math.min(4, Math.max(1, source.canvas.width / width));
+  function compositeScale(source, natural) {
+    const screen = source && source.screen;
+    if (!screen || !screen.rect || !screen.viewport || !natural) return 1;
+    if (natural.width !== screen.viewport.width) return 1;
+    if (!(screen.rect.width > 0)) return 1;
+    return Math.min(4, Math.max(1, source.canvas.width / screen.rect.width));
   }
 
   /** The composite's size at capture scale, before the picked size. */
@@ -1681,7 +1740,7 @@
     const Composer = window.Baguette && window.Baguette._CaptureComposer;
     if (!source || !Composer) return null;
     const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
-    const scale = compositeScale(source);
+    const scale = compositeScale(source, natural);
     return {
       width: Math.round(natural.width * scale),
       height: Math.round(natural.height * scale),
@@ -1707,7 +1766,7 @@
 
     const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
     if (!natural.width || !natural.height) return;
-    const scale = compositeScale(source);
+    const scale = compositeScale(source, natural);
     const plan = settings.plan(natural.width * scale, natural.height * scale);
     if (!plan.width || !plan.height) return;
 
@@ -1768,6 +1827,9 @@
       rec.start();
       recordingState.recorder = rec;
       recordingState.active = true;
+      // Last take's "discarded" line is stale the moment a new one runs.
+      recordingState.notice = '';
+      renderRecordings();
       recordingState.startedAt = Date.now();
       if (recordingState.timer) clearInterval(recordingState.timer);
       recordingState.timer = setInterval(updateRecordButton, 250);
@@ -1791,13 +1853,15 @@
     try {
       const artifact = await rec.stop();
       if (!artifact || typeof artifact.url !== 'string') return;
-      // Name it after the device and the picked size, the way the
-      // screenshot is — BrowserRecorder only knows a timestamp.
-      const settings = captureSettings();
+      // Name it after the device, the way the screenshot is —
+      // BrowserRecorder only knows a timestamp. Deliberately WITHOUT a
+      // size slug: the recorder sizes its own compose canvas, so
+      // stamping the picked size into the name would be a claim about
+      // bytes we didn't produce.
       const ext = (artifact.filename || '').split('.').pop() || 'webm';
-      const slug = settings ? `-${settings.size.spec}` : '';
-      artifact.filename = `${deviceSlug()}-${captureStamp()}${slug}.${ext}`;
+      artifact.filename = `${deviceSlug()}-${captureStamp()}.${ext}`;
       recordingState.entries.unshift(artifact);
+      recordingState.notice = '';
       renderRecordings();
     } catch (err) {
       console.warn('[native] recording failed to stop:', err);
@@ -1818,6 +1882,12 @@
     resetRecordingState();
     updateRecordButton();
     console.log('[native] recording cancelled:', reason);
+    // Say so where the file would have appeared. A format-pill click is
+    // one pixel from the record button and throws the take away; a
+    // button that just stops looking pressed reads as "the click didn't
+    // register", not "your recording is gone".
+    recordingState.notice = `Recording discarded — ${reason}.`;
+    renderRecordings();
   }
 
   function resetRecordingState() {
@@ -1854,12 +1924,15 @@
     const dock = document.getElementById('nativeRecordDock');
     const list = document.getElementById('nativeRecordList');
     if (!dock || !list) return;
-    if (!recordingState.entries.length) {
+    if (!recordingState.entries.length && !recordingState.notice) {
       dock.removeAttribute('data-open');
       list.innerHTML = '';
       return;
     }
-    list.innerHTML = recordingState.entries.map((e) => `
+    const notice = recordingState.notice
+      ? `<p class="rec-note">${escapeAttribute(recordingState.notice)}</p>`
+      : '';
+    list.innerHTML = notice + recordingState.entries.map((e) => `
       <a href="${e.url}" download="${escapeAttribute(e.filename)}"
          title="Download ${escapeAttribute(e.filename)}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1876,12 +1949,23 @@
   /// Empty the dock and hand every Blob back to the browser. A recorded
   /// minute is tens of megabytes held live by its URL; a session that
   /// records all afternoon and never revokes keeps every one of them.
+  /// Destructive and unrecoverable, which is why its control is a
+  /// labelled "Clear" and not the ✕ beside it.
   function clearRecordings() {
     recordingState.entries.forEach((e) => {
       if (e.url && e.url.startsWith('blob:')) URL.revokeObjectURL(e.url);
     });
     recordingState.entries = [];
+    recordingState.notice = '';
     renderRecordings();
+  }
+
+  /// Put the dock away without touching what's in it. Reopens itself
+  /// the next time a recording lands.
+  function hideRecordings() {
+    recordingState.notice = '';
+    const dock = document.getElementById('nativeRecordDock');
+    if (dock) dock.removeAttribute('data-open');
   }
 
   function formatElapsed(seconds) {
