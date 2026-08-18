@@ -97,6 +97,12 @@ final class MotionSession {
                                             distanceBefore: ledger.metres)
         do {
             try await motion.publish(parked, on: simulator)
+            // Adopt the parked intent the moment it lands, before the disarm
+            // is attempted. If the disarm then fails, the device really is
+            // stationary — a retry must bank *that*, and banking the walk it
+            // replaced would add steps for time spent standing still.
+            current = parked
+            phase = .publishing(.stationary)
             try await motion.clear(on: simulator)
         } catch {
             lastError = error.localizedDescription

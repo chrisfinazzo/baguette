@@ -200,6 +200,35 @@ struct MotionSessionTests {
         #expect(captures.last?.stepsBefore == 40)
     }
 
+    @Test func `a failed disarm leaves the device parked, not still walking`() async {
+        // `stop` parks the device and then disarms. If the park succeeds and
+        // the disarm fails, the published intent is stationary — so a retry
+        // must bank *that*, not the walk it replaced. Holding on to the old
+        // moving intent added phantom steps for time the device spent parked.
+        let motion = MockMotion()
+        let captures = Captures()
+        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+            captures.intents.append(intent)
+        }
+        given(motion).clear(on: .any).willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("U")
+        let clock = Clock()
+        let session = MotionSession(motion: motion, now: { clock.now })
+
+        await session.set(kind: .walking, confidence: .high, speed: 1.5, on: sim)
+        clock.now = 1010
+        #expect(await session.stop() == false)   // parked, but still armed
+
+        // Ten seconds parked, then a retry. The 20 steps from the walk stand;
+        // the parked interval adds none.
+        clock.now = 1020
+        _ = await session.stop()
+
+        #expect(captures.last?.kind == .stationary)
+        #expect(captures.last?.stepsBefore == 20)
+    }
+
     @Test func `a failed publish reports the error and stays off`() async {
         let motion = MockMotion()
         given(motion).publish(.any, on: .any)

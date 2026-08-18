@@ -69,11 +69,20 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
         try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let lockPath = directory.appendingPathComponent("\(simulator.udid).inject.lock").path
         let descriptor = open(lockPath, O_CREAT | O_RDWR, 0o644)
-        // A lock we cannot take is not worth failing the arm over — the race
-        // it guards is narrow, and refusing to arm is the worse outcome.
-        guard descriptor >= 0 else { return try await body() }
+        // Running unlocked would silently reintroduce exactly the race this
+        // guards, so a lock we cannot take fails the operation instead. That
+        // costs nothing in practice: the same support directory holds the
+        // installed dylibs, so if it isn't writable there was nothing to arm.
+        guard descriptor >= 0 else {
+            throw SimulatorInjectionError.lockUnavailable(path: lockPath)
+        }
         defer { close(descriptor) }
-        flock(descriptor, LOCK_EX)
+        // Retry a signal-interrupted wait; anything else is a real failure.
+        while flock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else {
+                throw SimulatorInjectionError.lockUnavailable(path: lockPath)
+            }
+        }
         defer { flock(descriptor, LOCK_UN) }
         return try await body()
     }
@@ -134,11 +143,17 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
 
 enum SimulatorInjectionError: Error, Equatable, CustomStringConvertible {
     case simctlFailed(status: Int32)
+    /// The per-simulator lock guarding `DYLD_INSERT_LIBRARIES` couldn't be
+    /// taken. Reported rather than skipped: proceeding unlocked would let a
+    /// concurrent arm drop another feature's dylib, invisibly.
+    case lockUnavailable(path: String)
 
     var description: String {
         switch self {
         case .simctlFailed(let status):
             return "xcrun simctl exited \(status) while arming/disarming an injected dylib"
+        case .lockUnavailable(let path):
+            return "could not lock \(path) to update DYLD_INSERT_LIBRARIES"
         }
     }
 }
