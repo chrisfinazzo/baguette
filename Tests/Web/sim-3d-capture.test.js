@@ -277,3 +277,78 @@ test('a second click while a render is in flight is ignored', async (t) => {
   await Promise.all([panel.download(), panel.download()]);
   assert.equal(requests.length, 1);
 });
+
+// ── the live stream's shape ──────────────────────────────────
+
+// The RealityKit camera frames the device to whatever it renders into,
+// and a recording composites the stage canvas as it arrives — there is
+// no one-shot re-render to fall back on for video. So a stage-shaped
+// stream recorded at App Store 6.9" letterboxes a wide, mostly-empty
+// frame with a small phone adrift in it. Streaming at the target aspect
+// is what makes the live view an honest preview of the recording.
+
+test('a stage with no size picked streams at its own shape', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 900, height: 1200 }, null),
+    { width: 900, height: 1200 }
+  );
+});
+
+test('an App Store size streams at that size’s aspect', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  const box = Sim3DPanel.streamBox({ width: 900, height: 1200 }, 1290 / 2796);
+  assert.deepEqual(box, { width: 554, height: 1200 });
+});
+
+test('a landscape ratio streams landscape even on a tall stage', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 900, height: 1200 }, 16 / 9),
+    { width: 1200, height: 675 }
+  );
+});
+
+test('square is square', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 900, height: 1200 }, 1),
+    { width: 1200, height: 1200 }
+  );
+});
+
+// The 480–1600 bound is about what the live encoder costs, not about
+// what the user asked for — the one-shot render ignores it entirely.
+test('the stream stays inside the live encoder’s pixel budget', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 4000, height: 5000 }, 1290 / 2796),
+    { width: 738, height: 1600 }
+  );
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 200, height: 150 }, 1),
+    { width: 480, height: 480 }
+  );
+});
+
+// ── the aspect a picked size implies ─────────────────────────
+
+test('native implies no aspect — the stage keeps its own shape', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'native' });
+  assert.equal(Sim3DPanel.captureAspect(settings), null);
+});
+
+test('a fixed size implies its own pixel aspect', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'appstore-6.9' });
+  assert.equal(Sim3DPanel.captureAspect(settings), 1290 / 2796);
+});
+
+test('a ratio implies the ratio itself, whatever the stage looks like', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: '16:9' });
+  assert.equal(Sim3DPanel.captureAspect(settings), 16 / 9);
+});
+
+test('no settings at all implies no aspect', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  assert.equal(Sim3DPanel.captureAspect(null), null);
+});

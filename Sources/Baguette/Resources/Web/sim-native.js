@@ -1472,8 +1472,15 @@
       if (btn) btn.classList.add('active');
       const status = document.getElementById('nativeStatus');
       if (status) status.textContent = '3D live';
+      // Told BEFORE the stream starts: the picked size shapes the live
+      // stream itself (Sim3DPanel.streamBox), so setting it afterwards
+      // would open stage-shaped and immediately restart.
+      if (render3DPanel && typeof render3DPanel.setCaptureSettings === 'function') {
+        render3DPanel.setCaptureSettings(captureSettings());
+      }
       if (!render3DPanel && window.Sim3DPanel && udid) {
         render3DPanel = new window.Sim3DPanel();
+        render3DPanel.setCaptureSettings(captureSettings());
         render3DPanel.attach(host, stage, udid, {
           deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
           format: localStorage.getItem('asc.simFormat') || pickFormat(),
@@ -1486,12 +1493,6 @@
       } else if (render3DPanel) {
         render3DPanel.background = live3DBackground();
         render3DPanel.start();
-      }
-      // The 3D render is produced server-side, so its Save Frame needs
-      // to be told the picked size rather than reading it off a canvas
-      // we hold. Guarded: the panel gained this hook after the chip did.
-      if (render3DPanel && typeof render3DPanel.setCaptureSettings === 'function') {
-        render3DPanel.setCaptureSettings(captureSettings());
       }
     }
   }
