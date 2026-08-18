@@ -631,6 +631,7 @@ struct Server: Sendable {
         "baguette/carplay",
         "baguette/gestures",
         "baguette/parts",
+        "capture",
         "carplay-frames",
         "carplay-frames/cupra",
         "carplay-frames/plain",
