@@ -215,23 +215,25 @@ running app nothing.
 
 ## Seeing it work
 
-[`examples/NetworkProbe`](../../examples/NetworkProbe) is a one-screen iOS
-app that fetches the same URL two ways and prints how long each took:
+Arm something impossible to miss, relaunch the app under test, and watch the
+dylib's own log:
 
 ```bash
-./examples/NetworkProbe/build.sh <UDID>          # build + install
 baguette network set --udid <UDID> --latency 3000
-xcrun simctl launch --terminate-running-process <UDID> com.baguette.networkprobe
+xcrun simctl launch --terminate-running-process <UDID> <bundle-id>
+xcrun simctl spawn <UDID> log stream --predicate 'subsystem == "com.baguette.network"'
 ```
 
-Tap **Fetch — URLSession** and it reports something like
-`URLSession 200 in 3564 ms`. Tap **Load — WKWebView** and it returns
-promptly, because WebKit's page loads are not conditioned — the two numbers
-next to each other are the clearest statement of what this feature does and
-does not reach.
+```
+[VirtualNetwork] installed (registerClass=1 configSwizzle=1) — a condition is armed
+[VirtualNetwork] conditioning: 3000 ms latency, 0 bytes/0 ms, 0% loss
+[VirtualNetwork] conditioning GET https://api.example.com/v2/orders
+```
 
-No Xcode project: one ObjC file compiled against the iphonesimulator SDK and
-packaged into a `.app` by hand, the same way the injected dylibs are built.
+A request that normally returns in ~500 ms taking ~3.5 s is the whole
+confirmation. If the banner says `configSwizzle=0`, nothing an app does on
+its own sessions is being conditioned — see
+[how the interception works](#how-the-interception-works-and-what-it-took-to-find-out).
 
 ## Forgetting this is on is the real hazard
 
@@ -277,9 +279,7 @@ read, and this one has to be believed.
 
   This matters well beyond Safari — a hybrid app's native `fetch` calls are
   conditioned while the web content inside its `WKWebView` is not, so the
-  same screen can be half-throttled. [`examples/NetworkProbe`](../../examples/NetworkProbe)
-  puts the two side by side if you want to see it rather than take it on
-  trust.
+  same screen can be half-throttled.
 
   It bites harder than it sounds. Testing against a driver app whose realtime
   layer is a WebSocket, `--offline` failed every REST call with

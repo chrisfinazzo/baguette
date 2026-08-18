@@ -321,8 +321,7 @@ Wired (use freely):
   will not feel offline); **`WKWebView` / Safari page loads are not
   conditioned**, since WebKit loads them in its own networking process, so
   a hybrid app is throttled natively but not in its web content; and loss
-  is request-level rather than packet-level. `examples/NetworkProbe` is a
-  one-screen app that shows the URLSession/WKWebView split. See
+  is request-level rather than packet-level. See
   [`docs/features/network.md`](../../docs/features/network.md).
 
 NOT wired (skill should NOT propose these):

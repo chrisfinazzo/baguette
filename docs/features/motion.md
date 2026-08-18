@@ -179,7 +179,7 @@ CoreMotion's data classes have no public initialisers, so each is built
 through its private designated initialiser. **Every detail below was
 measured against booted iOS 26.5 / 27.0 runtimes, not read from a header**
 — the failure mode for guessing is a crash or silent zeros. They live in
-`VirtualMotion/Sources/VirtualMotionFactory.m`.
+`Injected/VirtualMotion/Sources/VirtualMotionFactory.m`.
 
 - **`CMAccelerometerData` / `CMGyroData` / `CMMagnetometerData` take their
   `{fff}` struct BY VALUE.** It's 12 bytes, so arm64 passes it in

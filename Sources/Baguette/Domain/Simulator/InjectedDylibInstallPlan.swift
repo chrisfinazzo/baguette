@@ -15,6 +15,15 @@ struct InjectedDylib: Equatable, Sendable {
 
     var fileName: String { "\(name).dylib" }
 
+    /// Where this dylib's built copy sits relative to the repo root, for the
+    /// dev-build fallback that walks up from the executable.
+    ///
+    /// All three live under one `Injected/` folder, so the path has to name
+    /// it: a bare `<Name>/<Name>.dylib` silently stopped resolving the
+    /// moment they moved, and a build with no bundled dylib fails at arm
+    /// time rather than at build time.
+    var sourceTreePath: String { "Injected/\(name)/\(fileName)" }
+
     static let camera = InjectedDylib(
         name: "VirtualCamera", environmentOverride: "BAGUETTE_VIRTUALCAMERA_DYLIB")
     static let motion = InjectedDylib(

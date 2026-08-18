@@ -51,7 +51,7 @@ enum InjectedDylibInstaller {
     private static func sourceTreeDylib(_ dylib: InjectedDylib) -> URL? {
         guard var url = executableDirectory() else { return nil }
         for _ in 0..<6 {
-            let candidate = url.appendingPathComponent("\(dylib.name)/\(dylib.fileName)")
+            let candidate = url.appendingPathComponent(dylib.sourceTreePath)
             if FileManager.default.fileExists(atPath: candidate.path) {
                 return candidate
             }

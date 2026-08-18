@@ -52,6 +52,17 @@ struct InjectedDylibInstallPlanTests {
         #expect(InjectedDylib.network.environmentOverride == "BAGUETTE_VIRTUALNETWORK_DYLIB")
     }
 
+    @Test func `each dylib knows where it sits in the source tree`() {
+        // The dev-build fallback walks up from the executable looking for
+        // this path. All three live under one `Injected/` folder, so the
+        // lookup has to name it — a bare `<Name>/<Name>.dylib` stopped
+        // resolving the moment they moved.
+        #expect(InjectedDylib.camera.sourceTreePath == "Injected/VirtualCamera/VirtualCamera.dylib")
+        #expect(InjectedDylib.motion.sourceTreePath == "Injected/VirtualMotion/VirtualMotion.dylib")
+        #expect(InjectedDylib.network.sourceTreePath
+                    == "Injected/VirtualNetwork/VirtualNetwork.dylib")
+    }
+
     @Test func `the network dylib installs under its own file name`() {
         let plan = InjectedDylibInstallPlan.compute(
             bytes: Data("hello".utf8), supportDir: "/s", dylib: .network)

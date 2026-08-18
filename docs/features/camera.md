@@ -20,7 +20,7 @@ Two halves cooperate:
   writes their BGRA frames into a fixed-size mmap'd file
   (`/tmp/SimCam.bgra`). File sources are downscaled to fit the canvas
   via the pure `ScaleToFit`.
-- **iOS-Simulator side** (`VirtualCamera/`, vendored from
+- **iOS-Simulator side** (`Injected/VirtualCamera/`, vendored from
   `asc-pro/SimCam`): a small ObjC dylib that hooks AVFoundation /
   UIImagePickerController inside every simulator-launched app and
   substitutes the shared-buffer frame for the (non-existent)
@@ -180,11 +180,11 @@ an unchecked one could carry `..` out of the staging root.
     `VirtualCamera.dylib` from `Bundle.module`, sha256-keys it, and
     copies into `~/Library/Application Support/Baguette/builds/<sha12>/`.
 
-### iOS-Simulator side (`VirtualCamera/`)
+### iOS-Simulator side (`Injected/VirtualCamera/`)
 
-Vendored under `VirtualCamera/`. Internal symbols retain the SimCam
+Vendored under `Injected/VirtualCamera/`. Internal symbols retain the SimCam
 prefix to keep upstream re-syncs diff-friendly; see
-`VirtualCamera/VENDORED_FROM.md`. The dylib:
+`Injected/VirtualCamera/VENDORED_FROM.md`. The dylib:
 
 - Hooks `-[AVCaptureVideoPreviewLayer setSession:]` and attaches a
   `CADisplayLink` driver that pushes the latest BGRA frame from
@@ -199,8 +199,8 @@ prefix to keep upstream re-syncs diff-friendly; see
 
 ## Dylib installation flow
 
-1. `build.sh` runs `VirtualCamera/build.sh` first → produces
-   `VirtualCamera/VirtualCamera.dylib` (fat: arm64 + x86_64,
+1. `build.sh` runs `Injected/VirtualCamera/build.sh` first → produces
+   `Injected/VirtualCamera/VirtualCamera.dylib` (fat: arm64 + x86_64,
    linker-signed adhoc, install-name `@rpath/VirtualCamera.dylib`).
 2. The artifact is copied into
    `Sources/Baguette/Resources/VirtualCamera/VirtualCamera.dylib` so
@@ -226,7 +226,7 @@ prefix to keep upstream re-syncs diff-friendly; see
   `code:codesigning(3) invalid-page(2)`. Every release ships a
   different sha and lands at a different path, dodging the cache.
 - **Linker adhoc sign only.** The `clang -Wl,-adhoc_codesign`
-  flag in `VirtualCamera/build.sh` sets the `linker-signed` flag the
+  flag in `Injected/VirtualCamera/build.sh` sets the `linker-signed` flag the
   simulator's dyld accepts. A post-build `codesign --force --sign -`
   strips that flag and the dylib stops loading.
 - **`setSourceType: .camera` throws without the hook.** Without
