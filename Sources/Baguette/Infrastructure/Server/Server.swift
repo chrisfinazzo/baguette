@@ -757,6 +757,7 @@ struct Server: Sendable {
         "carplay-frames/plain",
         "devices",
         "farm",
+        "network",
         "screens",
         "vendor/leaflet",
     ]

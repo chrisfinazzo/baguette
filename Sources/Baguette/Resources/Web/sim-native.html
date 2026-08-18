@@ -994,6 +994,132 @@
   #simNativeView .status-bar-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
   #simNativeView #nativeStatusBarHost { overflow-y: auto; padding: 2px 14px 12px; }
 
+  /* Network-conditioning card — same floating-glass chrome as the
+     status-bar card. Inner control styles are scoped under
+     `.network-host` so the short class names (.nw-field, .nw-pill …)
+     can't leak into the rest of the focus chrome. */
+  #simNativeView .network-host {
+    position: absolute;
+    top: 84px;
+    right: 24px;
+    z-index: 40;
+    width: 332px;
+    max-height: calc(100dvh - 120px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-network="open"] .network-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .network-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .network-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .network-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .network-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeNetworkHost { overflow-y: auto; padding: 2px 14px 12px; }
+
+  #simNativeView .network-host .nw-section { padding: 10px 0 8px; }
+  #simNativeView .network-host .nw-section + .nw-section {
+    border-top: 1px solid var(--nv-divider);
+  }
+  #simNativeView .network-host .nw-section-title {
+    margin: 0 0 7px; font: 600 10.5px/1 -apple-system, sans-serif;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+  #simNativeView .network-host .nw-pill {
+    padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-text); font: 500 11.5px/1 -apple-system, sans-serif;
+    cursor: pointer;
+  }
+  #simNativeView .network-host .nw-pill:hover:not(:disabled) { background: rgba(127,127,127,0.14); }
+  #simNativeView .network-host .nw-pill.active {
+    background: #2563eb; border-color: #2563eb; color: #fff;
+  }
+  #simNativeView .network-host .nw-pill:disabled { opacity: 0.4; cursor: default; }
+  #simNativeView .network-host .nw-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 3px 0;
+  }
+  #simNativeView .network-host .nw-row-label {
+    font: 400 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-row-control {
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  #simNativeView .network-host .nw-field {
+    width: 84px; padding: 4px 7px; text-align: right;
+    border-radius: 7px; border: 1px solid var(--nv-bar-border);
+    background: rgba(127,127,127,0.10); color: var(--nv-text);
+    font: 400 12px/1.2 -apple-system, sans-serif;
+  }
+  #simNativeView .network-host .nw-field:disabled { opacity: 0.4; }
+  #simNativeView .network-host .nw-unit {
+    width: 34px; font: 400 11px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-hint,
+  #simNativeView .network-host .nw-note {
+    margin: 6px 0 0; font: 400 10.5px/1.45 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-note { padding-bottom: 4px; }
+  #simNativeView .network-host .nw-toggle {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    font: 400 12px/1.3 -apple-system, sans-serif;
+  }
+  #simNativeView .network-host .nw-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  /* The armed readout. Amber rather than the usual muted grey, because
+     this is the one state in the card someone needs to notice they left
+     on — a forgotten throttle reads as "the app is slow", not as a
+     mistake. */
+  #simNativeView .network-host .nw-state {
+    font: 500 11.5px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-state.on {
+    color: #f59e0b; font-weight: 600;
+  }
+  #simNativeView .network-host .nw-clear {
+    padding: 5px 10px; border-radius: 8px;
+    border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-text); font: 500 11.5px/1 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .network-host .nw-clear:hover { background: rgba(127,127,127,0.14); }
+
+  /* Toolbar indicator. Mirrors the camera's `.streaming` dot but amber
+     and, crucially, kept in sync while the card is CLOSED — that is the
+     whole point of it. */
+  #simNativeView #nativeNetworkToggle { position: relative; }
+  #simNativeView #nativeNetworkToggle.conditioning::after {
+    content: '';
+    position: absolute; top: 3px; right: 3px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.75);
+  }
+
   /* Location card — same floating-glass chrome as the status-bar card,
      wider to fit the Leaflet map. The toolbar's `nativeLocationToggle`
      flips `[data-location="open"]`. */
@@ -2211,6 +2337,25 @@
         </svg>
       </button>
 
+<!-- Network-conditioning toggle. Opens a card that throttles what
+           the simulator's apps see of the network. Unlike the other
+           toggles, `.conditioning` is kept in sync even while the card is
+           shut: a forgotten throttle presents as "the app is slow", so the
+           toolbar has to keep saying one is on. -->
+      <button class="ico-btn" id="nativeNetworkToggle"
+              title="Network conditioning"
+              aria-label="Toggle network conditioning"
+              onclick="window.__nativeToggleNetwork && window.__nativeToggleNetwork()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
+          <!-- Globe with a meridian — "the network", not "the signal". -->
+          <circle cx="12" cy="12" r="8.5"/>
+          <path d="M3.5 12h17"/>
+          <path d="M12 3.5c2.2 2.4 3.4 5.4 3.4 8.5s-1.2 6.1-3.4 8.5"/>
+          <path d="M12 3.5C9.8 5.9 8.6 8.9 8.6 12s1.2 6.1 3.4 8.5"/>
+        </svg>
+      </button>
+
       <button class="ico-btn" id="nativeLocationToggle"
               title="Simulated location"
               aria-label="Toggle simulated location"
@@ -2498,6 +2643,33 @@
       </button>
     </header>
     <div id="nativeStatusBarHost"></div>
+  </aside>
+
+  <!-- Network-conditioning card — floating glass panel. The toolbar's
+       `nativeNetworkToggle` flips `[data-network="open"]` on the root; CSS
+       fades the card in/out. NetworkPanel (sim-network.js) is lazy-mounted
+       into #nativeNetworkHost on first open. -->
+  <aside id="nativeNetworkSheet" class="network-host" aria-hidden="true">
+    <header class="network-host-head">
+      <span class="network-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/>
+          <path d="M12 3.5c2.2 2.4 3.4 5.4 3.4 8.5s-1.2 6.1-3.4 8.5"/>
+          <path d="M12 3.5C9.8 5.9 8.6 8.9 8.6 12s1.2 6.1 3.4 8.5"/>
+        </svg>
+        Network
+      </span>
+      <button class="ico-btn network-host-close" title="Close network conditioning"
+              aria-label="Close network conditioning"
+              onclick="window.__nativeToggleNetwork && window.__nativeToggleNetwork()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeNetworkHost"></div>
   </aside>
 
   <!-- Simulated-location card — floating glass panel with a Leaflet map.

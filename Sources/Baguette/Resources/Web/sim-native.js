@@ -46,6 +46,8 @@
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let locationPanel = null;  // LocationPanel — simctl location map picker
+  let networkPanel = null;   // NetworkPanel — latency / bandwidth / loss / offline
+  let networkArmedTimer = null; // keeps the toolbar's armed dot honest while the card is shut
   let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
@@ -377,6 +379,12 @@
     // PurpleWorkspacePort to send the GSEvent to. `resetToPortrait`
     // runs again after a boot completes.
     if (isBooted(meta.state)) resetToPortrait();
+
+    // Start watching for network conditioning immediately, before the card
+    // has ever been opened. A throttle armed from the CLI in another
+    // terminal is exactly the one someone forgets about, and this page is
+    // where they will be looking when the app feels slow.
+    watchNetworkArmed();
   }
 
   function resetToPortrait() {
@@ -1228,6 +1236,7 @@
     window.__nativeToggleCamera = () => toggleCamera();
     window.__nativeToggleStatusBar = () => toggleStatusBar();
     window.__nativeToggleLocation = () => toggleLocation();
+    window.__nativeToggleNetwork = () => toggleNetwork();
     window.__nativeToggle3D = () => toggle3D();
     window.__nativeToggle3DInspector = () => toggle3DInspector();
     // The watch's hardware buttons. Same `button` envelope the phone's
@@ -1395,6 +1404,63 @@
     }
   }
 
+  // Network-conditioning card — same lazy-mount pattern as the status-bar
+  // card, with one difference that matters: the toolbar's armed dot is kept
+  // in sync whether or not the card has ever been opened. A forgotten
+  // throttle does not announce itself — it presents as "the app is slow",
+  // possibly days later — so the indicator cannot depend on the user
+  // happening to open the panel.
+  function toggleNetwork() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('nativeNetworkHost');
+    const btn  = document.getElementById('nativeNetworkToggle');
+    const sheet = document.getElementById('nativeNetworkSheet');
+    const open = view && view.getAttribute('data-network') === 'open';
+    if (!view || !host) return;
+    // `aria-hidden` tracks the card, rather than being pinned true in the
+    // markup: a card that is on screen but hidden from the a11y tree is
+    // unreachable to a screen reader and invisible to anything driving the
+    // page through it.
+    if (open) {
+      view.removeAttribute('data-network');
+      if (btn) btn.classList.remove('active');
+      if (sheet) sheet.setAttribute('aria-hidden', 'true');
+    } else {
+      view.setAttribute('data-network', 'open');
+      if (btn) btn.classList.add('active');
+      if (sheet) sheet.setAttribute('aria-hidden', 'false');
+      if (!networkPanel && window.NetworkPanel && udid) {
+        host.innerHTML = '';
+        networkPanel = new window.NetworkPanel();
+        networkPanel.onArmedChange = (form) => markNetworkArmed(form.isConditioning);
+        networkPanel.attach(host, udid);
+      } else if (networkPanel) {
+        networkPanel.refresh();
+      }
+    }
+  }
+
+  function markNetworkArmed(armed) {
+    const btn = document.getElementById('nativeNetworkToggle');
+    if (btn) btn.classList.toggle('conditioning', !!armed);
+  }
+
+  // Poll the device's conditioning state independently of the card. This is
+  // the safety net: the CLI and the HTTP route can arm a throttle this page
+  // never saw, and the browser is where someone is most likely to be looking
+  // when they wonder why everything is slow.
+  function watchNetworkArmed() {
+    if (!udid || networkArmedTimer) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/simulators/${encodeURIComponent(udid)}/network`);
+        if (res.ok) markNetworkArmed((await res.json()).active);
+      } catch (e) { /* leave the indicator as it was */ }
+    };
+    poll();
+    networkArmedTimer = setInterval(poll, 5000);
+  }
+
   // Location card — same lazy-mount pattern as the status-bar card.
   // LocationPanel hangs a Leaflet map that POSTs `simctl location`
   // set/start/clear. Reopening re-measures the map (it may have been
@@ -1503,6 +1569,8 @@
       try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
       try { if (statusBarPanel) statusBarPanel.detach(); } catch (_) { /* ignore */ }
       try { if (locationPanel) locationPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (networkPanel) networkPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (networkArmedTimer) clearInterval(networkArmedTimer); } catch (_) { /* ignore */ }
       try { if (render3DPanel) render3DPanel.detach(); } catch (_) { /* ignore */ }
     });
   }
