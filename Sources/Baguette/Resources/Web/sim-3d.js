@@ -224,22 +224,13 @@
   };
 
   /**
-   * Adopt the toolbar's CaptureSettings.
-   *
-   * Restarts the live stream when the pick changes its SHAPE — see
-   * `streamBox` for why a 3D recording needs the stream itself framed to
-   * the target aspect. A restart costs a fresh model load and a second
-   * or so of black, so it happens only when the box actually moves:
-   * flipping between two sizes of the same aspect, or changing the fit
-   * or background, leaves the stream alone.
+   * Adopt the toolbar's CaptureSettings. Deliberately does NOT restart the
+   * stream: the live view keeps its own screen-sized framing (see
+   * `outputSize`), and the chosen size only applies to what gets saved —
+   * a one-shot re-render at full resolution.
    */
   Sim3DPanel.prototype.setCaptureSettings = function (settings) {
-    const before = this.canvas ? this.outputSize() : null;
     this.captureSettings = settings || null;
-    if (!before || !this.session) return;
-    const after = this.outputSize();
-    if (after.width === before.width && after.height === before.height) return;
-    this.start();
   };
 
   Sim3DPanel.prototype.detach = function () {
@@ -402,68 +393,13 @@
     });
   };
 
-  /**
-   * The aspect a picked capture size implies, or `null` for `native`.
-   *
-   * A ratio preset carries its ratio, a fixed preset its pixels, and
-   * `native` means "keep whatever shape you already had". The ratio is
-   * read straight off the value rather than recovered from a `resolve`
-   * call: `resolve` rounds to whole pixels, and 1778/1000 is not 16/9.
-   *
-   * @param {object|null} settings  a CaptureSettings
-   * @returns {number|null} width / height
-   */
-  Sim3DPanel.captureAspect = function (settings) {
-    const size = settings && settings.size;
-    if (!size || size.isNative) return null;
-    if (size.kind === 'ratio') return size.ratio > 0 ? size.ratio : null;
-    return size.width > 0 && size.height > 0 ? size.width / size.height : null;
-  };
-
-  /**
-   * The live stream's pixel box: the stage's own shape, or — once the
-   * toolbar has picked a size — a box of that size's aspect.
-   *
-   * Adopting the aspect is what makes a 3D recording come out framed.
-   * The RealityKit camera frames the device to whatever it renders into,
-   * and BrowserRecorder composites the stage canvas exactly as it
-   * arrives; unlike a screenshot there is no one-shot re-render to fall
-   * back on. So a stage-shaped stream recorded at App Store 6.9" letter-
-   * boxes a wide, mostly-empty frame with a small phone adrift in it.
-   * Streaming at the target aspect also makes the live view an honest
-   * preview of what Record will produce.
-   *
-   * Pure and static so the arithmetic is testable without a canvas.
-   *
-   * The 480–1600 bound is about what the live encoder costs, not about
-   * what the user asked for — `renderBody` deliberately ignores it, so a
-   * saved frame is still a true 1290 x 2796.
-   *
-   * @param {{width:number,height:number}} stage  the stage box in device px
-   * @param {number|null} aspect
-   */
-  Sim3DPanel.streamBox = function (stage, aspect) {
-    const clamp = (value) => Math.max(480, Math.min(1600, Math.round(value)));
-    const width = (stage && stage.width) || 960;
-    const height = (stage && stage.height) || 960;
-    if (!aspect || !(aspect > 0)) {
-      return { width: clamp(width), height: clamp(height) };
-    }
-    // The long side takes the budget; the short side follows the aspect.
-    // Bounding the long side is what keeps BOTH sides inside 1600.
-    const long = clamp(Math.max(width, height));
-    return aspect >= 1
-      ? { width: long, height: Math.round(long / aspect) }
-      : { width: Math.round(long * aspect), height: long };
-  };
-
   Sim3DPanel.prototype.outputSize = function () {
     const rect = this.stage ? this.stage.getBoundingClientRect() : null;
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    return Sim3DPanel.streamBox({
-      width: Math.round((rect && rect.width || 960) * ratio),
-      height: Math.round((rect && rect.height || 960) * ratio),
-    }, Sim3DPanel.captureAspect(this.captureSettings));
+    return {
+      width: Math.max(480, Math.min(1600, Math.round((rect && rect.width || 960) * ratio))),
+      height: Math.max(480, Math.min(1600, Math.round((rect && rect.height || 960) * ratio))),
+    };
   };
 
   Sim3DPanel.prototype.setState = function (message, busy, error) {
