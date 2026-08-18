@@ -131,6 +131,18 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         )
     }
 
+    /// Resolves the bundled `VirtualNetwork.dylib` on the way through, since
+    /// publishing a condition is useless without the dylib that applies it.
+    /// A build that doesn't ship the dylib yields a handle whose `apply`
+    /// throws `NetworkError.dylibMissing` rather than silently doing nothing
+    /// — which for a throttle would be indistinguishable from working.
+    func network() -> any Network {
+        SharedFileNetwork(
+            dylibPath: InjectedDylibInstaller.installIfNeeded(.network),
+            injection: SimctlSimulatorInjection()
+        )
+    }
+
     func pasteboard() -> any Pasteboard {
         SimctlPasteboard(udid: udid)
     }

@@ -87,6 +87,15 @@ protocol Simulator: Sendable {
     /// file, not the handle.
     func motion() -> any Motion
 
+    /// Condition what this simulator's apps see of the network — latency,
+    /// downlink bandwidth, request loss, and hard offline. Like `motion()`
+    /// there is no `simctl` verb behind it, and for a sharper reason: the
+    /// host's own tooling for this is system-wide, so scoping it to one
+    /// simulator means injecting into the app under test. Each call returns
+    /// a fresh handle; the state lives in the published condition file, not
+    /// the handle.
+    func network() -> any Network
+
     /// This simulator's shared pasteboard — set plain text, read it
     /// back, or sync the host Mac's full pasteboard across (images
     /// included). Each call returns a fresh handle; the underlying

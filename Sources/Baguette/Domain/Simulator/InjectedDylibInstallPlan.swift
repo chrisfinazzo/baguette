@@ -3,9 +3,9 @@ import CryptoKit
 
 /// A dylib baguette ships for injection into simulator apps.
 ///
-/// Two today — the virtual camera and virtual motion — sharing one install
-/// layout, one arming mechanism (`InjectedDylibs`) and one
-/// `DYLD_INSERT_LIBRARIES`.
+/// Three today — the virtual camera, virtual motion and network
+/// conditioning — sharing one install layout, one arming mechanism
+/// (`InjectedDylibs`) and one `DYLD_INSERT_LIBRARIES`.
 struct InjectedDylib: Equatable, Sendable {
     /// Base name; the file on disk is `<name>.dylib`.
     let name: String
@@ -19,6 +19,8 @@ struct InjectedDylib: Equatable, Sendable {
         name: "VirtualCamera", environmentOverride: "BAGUETTE_VIRTUALCAMERA_DYLIB")
     static let motion = InjectedDylib(
         name: "VirtualMotion", environmentOverride: "BAGUETTE_VIRTUALMOTION_DYLIB")
+    static let network = InjectedDylib(
+        name: "VirtualNetwork", environmentOverride: "BAGUETTE_VIRTUALNETWORK_DYLIB")
 }
 
 /// Pure factory: turns a (dylib-bytes, support-dir, dylib) triple into the
