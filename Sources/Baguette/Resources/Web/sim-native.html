@@ -1074,6 +1074,11 @@
   #simNativeView .location-host .loc-row {
     display: flex; align-items: center; gap: 8px; margin-top: 10px;
   }
+  /* `display: flex` above outranks the UA stylesheet's `[hidden] { display:
+     none }`, so mode-specific rows (the route's Speed field) stayed on
+     screen in every tab even though `_setMode` sets `hidden`. Same trick as
+     `.companion-column[hidden]` and `.tb-arrow[hidden]` further up. */
+  #simNativeView .location-host .loc-row[hidden] { display: none; }
   #simNativeView .location-host .loc-row-label {
     font: 500 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
   }
@@ -1120,6 +1125,9 @@
   #simNativeView .location-host .loc-walk {
     display: flex; align-items: center; gap: 16px; margin-top: 12px;
   }
+  /* Keeps the joystick, compass and speed preset out of Point and Route —
+     see the note on `.loc-row[hidden]`. */
+  #simNativeView .location-host .loc-walk[hidden] { display: none; }
   /* The pad. `touch-action: none` is load-bearing — without it a drag on
      a trackpad/touchscreen scrolls the panel instead of steering. */
   #simNativeView .location-host .loc-stick {
