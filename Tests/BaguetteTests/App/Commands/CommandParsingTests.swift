@@ -19,7 +19,7 @@ struct CommandParsingTests {
             "list", "boot", "shutdown", "input", "stream",
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type", "paste", "clipboard",
-            "chrome", "screenshot", "render-3d", "describe-ui", "logs", "serve",
+            "chrome", "screenshot", "record", "render-3d", "describe-ui", "logs", "serve",
             "orientation", "shake", "status-bar", "location", "motion", "install", "add-media",
             "openurl", "schemes",
             "plugin", "bakery", "diag-digitizer-trackpad", "lifetime", "interface",
