@@ -359,6 +359,8 @@ rejected.
 | `POST` | `/simulators/:udid/input`                  | one gesture envelope — same JSON `baguette input` takes |
 | `POST` | `/simulators/:udid/openurl?url=…`          | open a deep link; answers where it went (`app` / `browser` + warning) |
 | `GET`  | `/simulators/:udid/schemes.json?q=`        | URL schemes the device's apps registered, ranked |
+| `POST` `GET` `DELETE` | `/simulators/:udid/motion`      | injected CoreMotion — activity, pedometer, device motion ([docs](docs/features/motion.md)) |
+| `POST` `GET` `DELETE` | `/simulators/:udid/network`     | injected network conditioning — latency, downlink bandwidth, request loss, offline ([docs](docs/features/network.md)) |
 | `GET`  | `/plugins.json`                            | installed plugin manifests   |
 | `POST` | `/plugins/:id/commands/:cmd?udid=`         | run one plugin contribution, answer its rows |
 | `GET`  | `/bakeries.json`                           | trusted bakeries + pinned commits |
@@ -632,7 +634,7 @@ feature lives in one place across both layers.
 ```
 .
 ├── Makefile                          wraps build.sh
-├── build.sh                          builds VirtualCamera.dylib first,
+├── build.sh                          builds the injected dylibs first,
 │                                     then swift build -c release
 ├── Package.swift                     SPM manifest
 │
@@ -642,6 +644,15 @@ feature lives in one place across both layers.
 │   ├── VirtualCamera.dylib           linker-signed adhoc, fat arm64 +
 │   └── VENDORED_FROM.md              x86_64. Loaded into sim apps via
 │                                     DYLD_INSERT_LIBRARIES.
+│
+├── VirtualMotion/                    answers CoreMotion from a published
+│   ├── Sources/*.{h,m}               intent. Same build shape as above;
+│   └── build.sh                      all three dylibs share one
+│                                     DYLD_INSERT_LIBRARIES.
+│
+├── VirtualNetwork/                   conditions an app's own URLSession
+│   ├── Sources/*.{h,m}               traffic — latency, downlink pacing,
+│   └── build.sh                      request loss, offline.
 │
 ├── Sources/Baguette/
 │   ├── App/                          CLI dispatch + use-case orchestration
