@@ -103,6 +103,9 @@ static void VMDeliverActivity(BOOL force) {
     CMMotionActivity *activity = VMMakeActivity(intent.activityType, intent.confidence,
                                                 NSDate.date);
     if (!activity) return;
+    // Transitions only, so this stays quiet — and a transition is exactly
+    // what an app waiting to leave "stationary" is listening for.
+    VMLog(@"[VirtualMotion] delivering activity type %d to the app", intent.activityType);
     [gActivityQueue addOperationWithBlock:^{ handler(activity); }];
 }
 
@@ -111,6 +114,10 @@ static NSInteger VMMotionAuthorized(id self, SEL _cmd) { return 3; /* authorized
 
 static void VMStartActivityUpdates(id self, SEL _cmd, NSOperationQueue *queue,
                                    CMMotionActivityHandler handler) {
+    // Logged because "my app sees nothing" has two very different causes:
+    // the dylib not being loaded, and the app never subscribing. Without
+    // this line they look identical from outside.
+    VMLog(@"[VirtualMotion] app subscribed to activity updates");
     gActivityQueue = queue;
     gActivityHandler = handler;
     gLastActivityType = INT32_MIN;
@@ -167,6 +174,7 @@ static BOOL VMPedometerNo(id self, SEL _cmd) { return NO; }
 
 static void VMStartPedometerUpdates(id self, SEL _cmd, NSDate *from,
                                     CMPedometerHandler handler) {
+    VMLog(@"[VirtualMotion] app subscribed to pedometer updates");
     VMPedometerState *state = [VMPedometerState new];
     state.from = from ?: NSDate.date;
     objc_setAssociatedObject(self, kPedometerStateKey, state, OBJC_ASSOCIATION_RETAIN);
@@ -299,6 +307,7 @@ static void VMStartDeviceMotionPull(id self, SEL _cmd) { VMState(self).deviceMot
 // Push model — deliver on the caller's queue at its requested interval.
 static void VMStartAccelerometerUpdates(id self, SEL _cmd, NSOperationQueue *queue,
                                         CMAccelerometerHandler handler) {
+    VMLog(@"[VirtualMotion] app subscribed to accelerometer updates");
     VMManagerState *state = VMState(self);
     state.accelerometerActive = YES;
     double interval = VMClampInterval(((CMMotionManager *)self).accelerometerUpdateInterval);
@@ -321,6 +330,7 @@ static void VMStartGyroUpdates(id self, SEL _cmd, NSOperationQueue *queue,
 
 static void VMStartDeviceMotionUpdates(id self, SEL _cmd, NSOperationQueue *queue,
                                        CMDeviceMotionHandler handler) {
+    VMLog(@"[VirtualMotion] app subscribed to device-motion updates");
     VMManagerState *state = VMState(self);
     state.deviceMotionActive = YES;
     double interval = VMClampInterval(((CMMotionManager *)self).deviceMotionUpdateInterval);

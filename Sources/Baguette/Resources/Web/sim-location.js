@@ -264,7 +264,10 @@
         // Motion rides on whatever the card is already doing: once armed,
         // the walk vector / route speed this panel posts classifies the
         // activity server-side. No second control surface, no new wire.
-        '<div class="loc-row loc-motion">' +
+        // Hidden in Point mode — a pinned device isn't going anywhere — but
+        // it reappears whenever motion is armed, so an armed toggle is never
+        // invisible. Starts hidden because Point is the opening mode.
+        '<div class="loc-row loc-motion" hidden>' +
           '<label class="loc-motion-toggle">' +
             '<input type="checkbox" id="nativeLocationMotion"> ' +
             '<span>Drive motion sensors</span>' +
@@ -371,6 +374,7 @@
       this.host.querySelectorAll('.loc-walk-only').forEach((el) => {
         el.hidden = (mode !== 'walk');
       });
+      this._syncMotionVisibility();
       this.host.querySelector('#nativeLocationApply').textContent =
         (mode === 'route') ? 'Start route' : 'Set location';
       this._reset();
@@ -484,7 +488,20 @@
       const box = this.host.querySelector('#nativeLocationMotion');
       if (!box) return;
       box.addEventListener('change', () => this._toggleMotion(box.checked));
+      this._syncMotionVisibility();
       this._refreshMotion();
+    }
+
+    // Point mode pins the device, so there is no movement for motion to
+    // follow and the toggle has nothing to do — it belongs to Walk and
+    // Route. The exception is an armed session: hiding a control that is
+    // still on is exactly how someone forgets it is on, and this one keeps
+    // injecting into every app they launch.
+    _syncMotionVisibility() {
+      const row = this.host.querySelector('.loc-motion');
+      if (!row) return;
+      const box = this.host.querySelector('#nativeLocationMotion');
+      row.hidden = this.mode === 'point' && !(box && box.checked);
     }
 
     _toggleMotion(on) {
@@ -492,7 +509,7 @@
       if (!on) {
         this._stopMotionPoll();
         fetch(url, { method: 'DELETE' })
-          .then(() => this._motionState(''))
+          .then(() => { this._motionState(''); this._syncMotionVisibility(); })
           .catch(() => this._motionState('stop failed'));
         return;
       }
@@ -509,6 +526,7 @@
         .then((state) => {
           this._paintMotion(state);
           this._motionHint();
+          this._syncMotionVisibility();
           this._startMotionPoll();
         })
         .catch((err) => {
@@ -540,6 +558,8 @@
           const box = this.host.querySelector('#nativeLocationMotion');
           if (box) box.checked = !!state.active;
           this._paintMotion(state);
+          // An armed session keeps the row on screen even in Point mode.
+          this._syncMotionVisibility();
           if (state.active) this._startMotionPoll();
         })
         .catch(() => {});
