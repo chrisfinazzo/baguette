@@ -53,6 +53,15 @@
      happily answers with sim.html — leaving the browser to parse HTML
      as JS and throw `Unexpected token '<'`. -->
 <script src="/frame-decoder.js"></script>
+<!-- Shared capture-size vocabulary (Resources/Web/capture/). These must
+     load BEFORE capture-gallery.js / recorder.js / sim-stream.js: the
+     picker and both capture surfaces read `window.Baguette._CaptureSize`
+     and `_CaptureSettings` at construction time. Order inside the group
+     matters too — settings parses a size, the menu renders settings. -->
+<script src="/capture/capture-size.js"></script>
+<script src="/capture/capture-settings.js"></script>
+<script src="/capture/capture-composer.js"></script>
+<script src="/capture/capture-size-menu.js"></script>
 <script src="/capture-gallery.js"></script>
 <script src="/recorder.js"></script>
 <script src="/stream-session.js"></script>
