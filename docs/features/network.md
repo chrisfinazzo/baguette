@@ -23,7 +23,7 @@ worth putting first:
 > `xcrun simctl launch --terminate-running-process <udid> <bundle-id>`.
 > **Changing the condition afterwards needs no relaunch** — a running app
 > picks it up within about 100 ms.
-
+>
 > **This only sees URLSession-shaped traffic.** REST, GraphQL, image loading
 > and `URLSessionWebSocketTask` are conditioned. `WKWebView` page loads and
 > raw sockets are not. Read [Known limits](#known-limits) before trusting a
@@ -44,7 +44,7 @@ trade-offs below are worth accepting rather than designed around.
 
 ## Surface
 
-```
+```bash
 baguette network set    --udid <UDID> --profile <name>
 baguette network set    --udid <UDID> [--latency <ms>] [--bandwidth <kbps>] [--loss <percent>]
 baguette network set    --udid <UDID> --offline
@@ -121,7 +121,7 @@ that are already running.
 
 ## Dispatch path
 
-```
+```text
    Host (Swift, tested)                        iOS Simulator app
 ┌────────────────────────────┐              ┌────────────────────────┐
 │ NetworkProfile.condition   │              │  app's own URLSession  │
@@ -293,7 +293,7 @@ xcrun simctl launch --terminate-running-process <UDID> <bundle-id>
 xcrun simctl spawn <UDID> log stream --predicate 'subsystem == "com.baguette.network"'
 ```
 
-```
+```text
 [VirtualNetwork] installed (registerClass=1 configSwizzle=1) — a condition is armed
 [VirtualNetwork] conditioning: 3000 ms latency, 0 bytes/0 ms, 0% loss
 [VirtualNetwork] conditioning GET https://api.example.com/v2/orders

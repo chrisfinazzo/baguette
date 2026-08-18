@@ -35,8 +35,13 @@ static long gLastSize;
 static uint64_t gGeneration;
 static os_unfair_lock gLock = OS_UNFAIR_LOCK_INIT;
 
+/// Monotonic, because every use of it here measures an *interval* — how long
+/// since the last stat, how long since a log line. Wall-clock time can step
+/// backwards (NTP, or the tester changing the simulator's date), and a step
+/// backwards would stall the poll and the log throttle until real time caught
+/// up again.
 static double VNNow(void) {
-    return [NSDate date].timeIntervalSince1970;
+    return NSProcessInfo.processInfo.systemUptime;
 }
 
 void VNLog(NSString *format, ...) {

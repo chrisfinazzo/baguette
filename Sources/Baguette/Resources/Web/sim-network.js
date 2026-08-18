@@ -263,9 +263,15 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        if (res.ok) this._absorb(await res.json());
+        if (res.ok) { this._absorb(await res.json()); return; }
+        throw new Error(`HTTP ${res.status}`);
       } catch (e) {
+        // The card is showing what was *asked for*; the device refused it.
+        // Leaving that on screen would claim a condition that is not
+        // applied — the one thing this card must never do. Re-read instead
+        // of guessing which way it went.
         console.warn('[network] conditioning failed', e);
+        await this._hydrate();
       }
     }
 

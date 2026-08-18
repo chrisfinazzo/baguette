@@ -25,6 +25,7 @@
 
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#import <os/lock.h>
 #import "VirtualNetworkCondition.h"
 
 typedef void (^VNSendCompletion)(NSError *error);
@@ -45,18 +46,29 @@ typedef struct {
 } VNHookedClass;
 
 /// Generous: in practice this is one or two classes.
+///
+/// Guarded because task creation happens on whatever thread the app is on,
+/// and two threads racing here is not merely a torn table: the loser can
+/// read our *replacement* IMP as the "original" it chains to, and the hook
+/// then calls itself forever.
 static VNHookedClass gHooked[8];
 static NSUInteger gHookedCount;
+static os_unfair_lock gHookLock = OS_UNFAIR_LOCK_INIT;
 
 /// The original implementations for `self`, found by walking its class chain
 /// — the instance may be a subclass of whichever class we replaced.
-static const VNHookedClass *VNOriginalsFor(id object) {
-    for (Class cls = object_getClass(object); cls; cls = class_getSuperclass(cls)) {
+/// Copies the entry out under the lock rather than returning a pointer into
+/// the table, so a concurrent append can't move the ground under a caller.
+static BOOL VNOriginalsFor(id object, VNHookedClass *out) {
+    BOOL found = NO;
+    os_unfair_lock_lock(&gHookLock);
+    for (Class cls = object_getClass(object); cls && !found; cls = class_getSuperclass(cls)) {
         for (NSUInteger i = 0; i < gHookedCount; i++) {
-            if (gHooked[i].cls == cls) return &gHooked[i];
+            if (gHooked[i].cls == cls) { *out = gHooked[i]; found = YES; break; }
         }
     }
-    return NULL;
+    os_unfair_lock_unlock(&gHookLock);
+    return found;
 }
 
 /// How long an offline failure is held before being reported.
@@ -86,11 +98,11 @@ static void VNAfter(double seconds, dispatch_block_t block) {
 
 static void VNSendMessage(id self, SEL _cmd, NSURLSessionWebSocketMessage *message,
                           VNSendCompletion completion) {
-    const VNHookedClass *originals = VNOriginalsFor(self);
-    if (!originals) return;   // can't happen: we only replace what we record.
+    VNHookedClass originals;
+    if (!VNOriginalsFor(self, &originals)) return;
     VNCondition condition = VNConditionCurrent();
     if (!condition.conditioning) {
-        originals->send(self, _cmd, message, completion);
+        originals.send(self, _cmd, message, completion);
         return;
     }
     if (condition.offline) {
@@ -106,7 +118,7 @@ static void VNSendMessage(id self, SEL _cmd, NSURLSessionWebSocketMessage *messa
     VNLogThrottled("ws-send", @"[VirtualNetwork] conditioning websocket send (%.0f ms)",
                    condition.latencyMs);
     VNAfter(condition.latencyMs / 1000.0, ^{
-        originals->send(self, _cmd, message, completion);
+        originals.send(self, _cmd, message, completion);
     });
 }
 
@@ -150,14 +162,14 @@ static void VNDeliver(id self, SEL _cmd, NSURLSessionWebSocketMessage *message,
 }
 
 static void VNReceiveMessage(id self, SEL _cmd, VNReceiveCompletion completion) {
-    const VNHookedClass *originals = VNOriginalsFor(self);
-    if (!originals) return;
+    VNHookedClass originals;
+    if (!VNOriginalsFor(self, &originals)) return;
     VNCondition condition = VNConditionCurrent();
     if (!condition.conditioning) {
-        originals->receive(self, _cmd, completion);
+        originals.receive(self, _cmd, completion);
         return;
     }
-    originals->receive(self, _cmd, ^(NSURLSessionWebSocketMessage *message, NSError *error) {
+    originals.receive(self, _cmd, ^(NSURLSessionWebSocketMessage *message, NSError *error) {
         VNDeliver(self, _cmd, message, error, completion);
     });
 }
@@ -193,7 +205,20 @@ static BOOL VNHookClass(Class cls) {
     }
     free(methods);
     if (!ownsSend || !ownsReceive) return NO;
-    if (gHookedCount >= sizeof(gHooked) / sizeof(gHooked[0])) return NO;
+
+    os_unfair_lock_lock(&gHookLock);
+    // Re-check under the lock: another thread may have hooked this class
+    // between our caller looking and us arriving.
+    for (NSUInteger i = 0; i < gHookedCount; i++) {
+        if (gHooked[i].cls == cls) {
+            os_unfair_lock_unlock(&gHookLock);
+            return NO;
+        }
+    }
+    if (gHookedCount >= sizeof(gHooked) / sizeof(gHooked[0])) {
+        os_unfair_lock_unlock(&gHookLock);
+        return NO;
+    }
 
     Method send = class_getInstanceMethod(cls, sendSel);
     Method receive = class_getInstanceMethod(cls, receiveSel);
@@ -205,6 +230,7 @@ static BOOL VNHookClass(Class cls) {
     gHookedCount++;
     method_setImplementation(send, (IMP)VNSendMessage);
     method_setImplementation(receive, (IMP)VNReceiveMessage);
+    os_unfair_lock_unlock(&gHookLock);
     return YES;
 }
 
@@ -217,10 +243,12 @@ static BOOL VNHookClass(Class cls) {
 /// success, and never fires. Measured, twice.
 static void VNAdoptTaskClass(id task) {
     if (!task) return;
+    // `VNHookClass` takes the lock and re-checks, so the whole
+    // already-hooked?/hook sequence is atomic. Doing the check out here
+    // instead would let two threads both decide to hook, and the loser would
+    // record our replacement IMP as the original it chains to — a hook that
+    // calls itself forever.
     Class cls = object_getClass(task);
-    for (NSUInteger i = 0; i < gHookedCount; i++) {
-        if (gHooked[i].cls == cls) return;
-    }
     if (VNHookClass(cls)) {
         VNLog(@"[VirtualNetwork] websocket hooks on %@", NSStringFromClass(cls));
     }

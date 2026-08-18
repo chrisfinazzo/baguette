@@ -38,9 +38,22 @@ struct NetworkSchedule: Equatable, Sendable {
     init?(bandwidthKbps: Double) {
         guard bandwidthKbps.isFinite, bandwidthKbps > 0 else { return nil }
         let bytesPerSecond = bandwidthKbps * 1000 / 8
-        let bytes = max(1, Int((bytesPerSecond * Self.targetTickSeconds).rounded()))
+        guard bytesPerSecond.isFinite else { return nil }
+
+        // `Int(Double)` **traps** rather than saturating, so a
+        // finite-but-absurd bandwidth would take the process down instead of
+        // producing a bad schedule — and the condition file is on shared
+        // `/tmp` where anyone can type a number that size. Checked against
+        // `Int.max` as a `Double` before converting.
+        let perTick = (bytesPerSecond * Self.targetTickSeconds).rounded()
+        guard perTick.isFinite, perTick < Double(Int.max) else { return nil }
+
+        let bytes = max(1, Int(perTick))
+        let interval = Double(bytes) / bytesPerSecond * 1000
+        guard interval.isFinite, interval > 0 else { return nil }
+
         bytesPerTick = bytes
-        tickIntervalMs = Double(bytes) / bytesPerSecond * 1000
+        tickIntervalMs = interval
     }
 }
 

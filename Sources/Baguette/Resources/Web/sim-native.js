@@ -1439,15 +1439,19 @@
     if (open) {
       view.removeAttribute('data-network');
       if (btn) btn.classList.remove('active');
-      if (sheet) sheet.setAttribute('aria-hidden', 'true');
+      // `inert` as well as `aria-hidden`: the closed card is only faded out
+      // by CSS, so without it the controls stay focusable and tabbing walks
+      // into a panel nobody can see.
+      if (sheet) { sheet.setAttribute('aria-hidden', 'true'); sheet.inert = true; }
     } else {
       view.setAttribute('data-network', 'open');
       if (btn) btn.classList.add('active');
-      if (sheet) sheet.setAttribute('aria-hidden', 'false');
+      if (sheet) { sheet.setAttribute('aria-hidden', 'false'); sheet.inert = false; }
       if (!networkPanel && window.NetworkPanel && udid) {
         host.innerHTML = '';
         networkPanel = new window.NetworkPanel();
-        networkPanel.onArmedChange = (form) => markNetworkArmed(form.isConditioning);
+        networkPanel.onArmedChange = (form) =>
+          markNetworkArmed(form.isConditioning, form.describe());
         networkPanel.attach(host, udid);
       } else if (networkPanel) {
         networkPanel.refresh();
@@ -1455,9 +1459,18 @@
     }
   }
 
-  function markNetworkArmed(armed) {
+  function markNetworkArmed(armed, summary) {
     const btn = document.getElementById('nativeNetworkToggle');
-    if (btn) btn.classList.toggle('conditioning', !!armed);
+    if (!btn) return;
+    btn.classList.toggle('conditioning', !!armed);
+    // The amber dot is the whole warning, and a dot says nothing to a screen
+    // reader. Put the state in the accessible name too, so "a throttle is
+    // on" is available without seeing it.
+    const label = armed
+      ? `Network conditioning on${summary ? ` — ${summary}` : ''}`
+      : 'Network conditioning off';
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
   }
 
   // Poll the device's conditioning state independently of the card. This is
@@ -1469,7 +1482,10 @@
     const poll = async () => {
       try {
         const res = await fetch(`/simulators/${encodeURIComponent(udid)}/network`);
-        if (res.ok) markNetworkArmed((await res.json()).active);
+        if (res.ok) {
+          const state = await res.json();
+          markNetworkArmed(state.active, state.summary);
+        }
       } catch (e) { /* leave the indicator as it was */ }
     };
     poll();

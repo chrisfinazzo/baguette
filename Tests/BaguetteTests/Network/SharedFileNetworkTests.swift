@@ -188,6 +188,17 @@ struct SharedFileNetworkTests {
         #expect(await network.current(on: sim) == nil)
     }
 
+    @Test func `clearing a build with no dylib does nothing rather than failing`() async throws {
+        // Nothing was ever armed, so there is nothing to disarm — and a
+        // `network clear` that reported failure on such a build would send
+        // someone hunting for a problem that isn't there.
+        let (network, injection, sim, _) = makeNetwork(dylibPath: nil)
+
+        try await network.clear(on: sim)
+
+        verify(injection).disarm(dylibPath: .any, on: .any).called(0)
+    }
+
     @Test func `applies into a directory that does not exist yet`() async throws {
         // The shared path is configurable, and a caller pointing at a fresh
         // directory shouldn't have to create it first.

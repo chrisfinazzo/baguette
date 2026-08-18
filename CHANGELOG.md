@@ -41,9 +41,12 @@ For releases prior to this changelog, see the
   plain `baguette network` reports the current condition, `network clear`
   un-conditions apps that are *already running*, and the browser keeps an
   amber dot lit whether or not its card was ever opened. Honest about its
-  reach: URLSession-shaped traffic only — WebSockets and `NWConnection` are
-  not conditioned, and for an app whose realtime layer is a WebSocket,
-  `--offline` will not feel offline. See
+  reach: URLSession-shaped traffic only. `URLSessionWebSocketTask` gets its
+  own hooks and takes latency, loss and offline (not bandwidth — an app
+  cannot observe a partial message). Not conditioned: `WKWebView` page
+  loads, `NWConnection`/Network.framework, raw sockets, and realtime SDKs
+  that open their own socket — Ably's `ably-cocoa` vendors SocketRocket, so
+  `--offline` will not feel offline to it. See
   [`docs/features/network.md`](docs/features/network.md).
 
 - **Motion — `baguette motion start|set|stop`, and a walk that drives it.**

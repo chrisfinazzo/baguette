@@ -61,4 +61,21 @@ struct NetworkScheduleTests {
         #expect(NetworkSchedule(bandwidthKbps: -1) == nil)
         #expect(NetworkSchedule(bandwidthKbps: .infinity) == nil)
     }
+
+    @Test func `refuses a bandwidth too large to pace`() {
+        // `Int(Double)` **traps** on a value outside Int's range, so a
+        // finite-but-absurd bandwidth doesn't produce a bad schedule — it
+        // takes the process down. A number this size can arrive from the
+        // wire, where the condition file is hand-editable.
+        #expect(NetworkSchedule(bandwidthKbps: 1e300) == nil)
+        #expect(NetworkSchedule(bandwidthKbps: .greatestFiniteMagnitude) == nil)
+    }
+
+    @Test func `a condition never carries a bandwidth it cannot pace`() {
+        // The invariant that makes `schedule` safe to reach for anywhere: if
+        // a condition validated, its bandwidth can be turned into a schedule.
+        #expect(NetworkCondition(bandwidthKbps: 1e300) == nil)
+        #expect(NetworkCondition(bandwidthKbps: .greatestFiniteMagnitude) == nil)
+        #expect(NetworkCondition(bandwidthKbps: 50_000)?.schedule != nil)
+    }
 }

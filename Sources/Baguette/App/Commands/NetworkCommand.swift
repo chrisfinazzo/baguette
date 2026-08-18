@@ -29,9 +29,11 @@ struct NetworkCommand: ParsableCommand {
             Changing the condition afterwards reaches a running app without \
             a relaunch.
 
-            Only URLSession-shaped traffic is affected — REST, GraphQL and \
-            image loading are; WebSockets and raw sockets are not. Run \
-            `network` on its own to see what is currently applied.
+            Only URLSession-shaped traffic is affected — REST, GraphQL, image \
+            loading and URLSessionWebSocketTask are (WebSockets take latency, \
+            loss and offline, but not bandwidth). An SDK that opens its own \
+            socket, and WKWebView page loads, are not. Run `network` on its \
+            own to see what is currently applied.
             """,
         subcommands: [Set.self, Clear.self, Status.self],
         defaultSubcommand: Status.self

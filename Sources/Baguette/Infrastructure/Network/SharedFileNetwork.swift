@@ -68,9 +68,10 @@ final class SharedFileNetwork: Network, @unchecked Sendable {
 
     func current(on simulator: any Simulator) async -> NetworkCondition? {
         guard let dylibPath, !dylibPath.isEmpty else { return nil }
-        // Armed first: the file is one per host, so its contents say what
-        // was last published anywhere, not what this simulator is subject
-        // to. Answering from the file alone would report a throttle on a
+        // Armed first. The file is per-simulator, but a device can still
+        // hold a stale one without the dylib armed — a simulator reboot
+        // clears `DYLD_INSERT_LIBRARIES` and leaves the condition behind.
+        // Answering from the file alone would report a throttle on a
         // simulator that has none.
         guard await injection.armed(dylibPath: dylibPath, on: simulator) else { return nil }
         guard let data = try? Data(contentsOf: fileURL),

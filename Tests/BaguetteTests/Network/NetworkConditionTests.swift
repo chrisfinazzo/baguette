@@ -63,6 +63,28 @@ struct NetworkConditionTests {
         #expect(condition.lossPercent == 0)
     }
 
+    @Test func `describes itself in one line a human can read back`() {
+        // What the CLI prints, what the server logs, and what the browser
+        // card's armed badge shows. It is the sentence someone reads when
+        // they are working out why their app feels slow, so each state has
+        // to say something true and distinct.
+        #expect(NetworkCondition.offline.summary == "offline")
+        #expect(NetworkCondition.unconditioned.summary == "nothing")
+        #expect(NetworkProfile.threeG.condition.summary == "200 ms latency, 780 kbps")
+        #expect(NetworkProfile.totalLoss.condition.summary == "100% loss")
+        #expect(NetworkCondition(latencyMs: 300)?.summary == "300 ms latency")
+        #expect(NetworkCondition(bandwidthKbps: 400)?.summary == "400 kbps")
+        #expect(NetworkCondition(latencyMs: 300, bandwidthKbps: 400, lossPercent: 5)?.summary
+                    == "300 ms latency, 400 kbps, 5% loss")
+    }
+
+    @Test func `offline says only that, whatever else was set`() {
+        // A device reporting no connection is not also "300 ms latency" —
+        // nothing is travelling for that to describe.
+        let condition = NetworkCondition(latencyMs: 300, isOffline: true)
+        #expect(condition?.summary == "offline")
+    }
+
     @Test func `knows when it is not conditioning anything`() {
         // What `network clear` leaves behind, and what the browser card
         // needs in order to decide whether to show its armed badge. A

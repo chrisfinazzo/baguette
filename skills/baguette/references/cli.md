@@ -458,17 +458,19 @@ baguette network status --udid <UDID>                                     # also
 
 | Subcommand | Args | Effect |
 |------------|------|--------|
-| `set` | **exactly one of** `--profile <name>` / `--latency <ms> --bandwidth <kbps> --loss <percent>` / `--offline` | publish + arm the dylib |
+| `set` | **exactly one of** `--profile <name>` / one or more of `--latency <ms>`, `--bandwidth <kbps>`, `--loss <percent>` / `--offline` | publish + arm the dylib |
 | `clear` | (none) | publish "nothing", then disarm |
 | `status` | (none) | report what this simulator is subject to |
 
 Presets are Network Link Conditioner's, figures included:
 `wifi | dsl | lte | 3g | edge | very-bad-network | 100-loss`. NLC states a
 **one-way** delay, so each preset's round-trip latency is twice NLC's
-number (`3g` = 200 ms, `edge` = 800 ms). Mixing a preset with explicit
-numbers, or with `--offline`, exits non-zero rather than merging — and so
-does a `set` naming nothing at all. `--bandwidth` is downlink only; omit it
-to leave the link unmetered.
+number (`3g` = 200 ms, `edge` = 800 ms). The three numeric flags are independently
+optional: give any one or more of them. An omitted `--latency` or `--loss`
+is zero, and an omitted `--bandwidth` leaves the link unmetered (it is
+downlink only in any case). Mixing a preset with explicit numbers, or with
+`--offline`, exits non-zero rather than merging — and so does a `set`
+naming nothing at all.
 
 **Not a simctl path.** NLC and the `dnctl`/`pfctl` rules under it are
 system-wide, so baguette injects `VirtualNetwork.dylib` via
@@ -482,7 +484,7 @@ relaunch. Confirm injection is live with
 
 Equivalent HTTP routes during `baguette serve`:
 
-```
+```text
 POST http://localhost:8421/simulators/<UDID>/network
      body = {"profile":"3g"}
        or = {"latencyMs":300,"bandwidthKbps":400,"lossPercent":5}
@@ -504,9 +506,10 @@ conditioned either — structurally, since `URLProtocol` is part of the URL
 Loading System. **`WKWebView` and Safari page loads are not
 conditioned either**: WebKit fetches page resources in its own networking
 process. A hybrid app's native `fetch` calls are throttled while the web
-content beside them is not. For an app whose realtime layer is a
-WebSocket, `--offline` degrades its request traffic without the app
-noticing it went offline. Loss is request-level (a proportion of requests
+content beside them is not. For an app whose realtime layer uses a
+**custom** WebSocket transport rather than `URLSessionWebSocketTask`,
+`--offline` degrades its request traffic without the app noticing it went
+offline. Loss is request-level (a proportion of requests
 fail immediately), not packet-level. A debug React Native build has its JS
 bundle download conditioned too, so arm something mild, let the app load,
 then change the condition live. See `docs/features/network.md`.

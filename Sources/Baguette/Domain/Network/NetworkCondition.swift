@@ -56,6 +56,10 @@ struct NetworkCondition: Equatable, Sendable {
         guard lossPercent.isFinite, (0...100).contains(lossPercent) else { return nil }
         if let bandwidthKbps {
             guard bandwidthKbps.isFinite, bandwidthKbps > 0 else { return nil }
+            // A metered condition must be pace-able. Rejecting here is what
+            // makes `schedule` safe to reach for anywhere else: a condition
+            // that validated always has one.
+            guard NetworkSchedule(bandwidthKbps: bandwidthKbps) != nil else { return nil }
         }
         self.latencyMs = latencyMs
         self.bandwidthKbps = bandwidthKbps

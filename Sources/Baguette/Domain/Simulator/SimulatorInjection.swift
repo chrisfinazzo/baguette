@@ -22,8 +22,8 @@ protocol SimulatorInjection: AnyObject, Sendable {
     /// Not throwing: a simulator that never had the variable set is the
     /// normal case on a fresh boot, and the answer there is "no", not an
     /// error. Callers use it to tell a condition that is *published* from
-    /// one that is actually *applied* — the injected features all share a
-    /// single host-wide state file, so a second simulator can see the same
-    /// bytes without being subject to them.
+    /// one that is actually *applied* — a device can hold a state file it
+    /// is no longer subject to, since a simulator reboot clears
+    /// `DYLD_INSERT_LIBRARIES` and leaves the file behind.
     func armed(dylibPath: String, on simulator: any Simulator) async -> Bool
 }

@@ -230,6 +230,10 @@ NSURLSession *VNSharedSession(void) {
     if (!_queue) return;
     dispatch_async(_queue, ^{
         self->_finished = YES;
+        // Resume before cancelling: a suspended task does not act on the
+        // cancel until it runs again, so leaving it suspended strands the
+        // task and its connection for the life of the process.
+        [self vn_resumeIfSuspended];
         [self->_task cancel];
         [self vn_cancelTimer];
     });
@@ -319,6 +323,15 @@ NSURLSession *VNSharedSession(void) {
     }
 }
 
+/// Undoes backpressure. Anything that ends this request has to call it: a
+/// task left suspended never observes a cancel and never releases its
+/// connection.
+- (void)vn_resumeIfSuspended {
+    if (!_suspended) return;
+    _suspended = NO;
+    [_task resume];
+}
+
 - (void)vn_cancelTimer {
     if (!_timer) return;
     dispatch_source_cancel(_timer);
@@ -328,6 +341,7 @@ NSURLSession *VNSharedSession(void) {
 - (void)vn_finish {
     if (_finished) return;
     _finished = YES;
+    [self vn_resumeIfSuspended];
     [self vn_cancelTimer];
     if (_upstreamError) {
         [self.client URLProtocol:self didFailWithError:_upstreamError];
