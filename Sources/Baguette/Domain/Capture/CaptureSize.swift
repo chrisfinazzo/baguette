@@ -121,11 +121,11 @@ struct CaptureSize: Equatable, Sendable {
             if sourceRatio > ratio {
                 return RenderDimensions(
                     width: source.width,
-                    height: Int((Double(source.width) / ratio).rounded())
+                    height: roundedHalfUp(Double(source.width) / ratio)
                 )
             }
             return RenderDimensions(
-                width: Int((Double(source.height) * ratio).rounded()),
+                width: roundedHalfUp(Double(source.height) * ratio),
                 height: source.height
             )
         }
@@ -150,13 +150,13 @@ struct CaptureSize: Equatable, Sendable {
         let sx = Double(canvas.width) / Double(source.width)
         let sy = Double(canvas.height) / Double(source.height)
         let scale = fit == .cover ? max(sx, sy) : min(sx, sy)
-        let drawWidth = Int((Double(source.width) * scale).rounded())
-        let drawHeight = Int((Double(source.height) * scale).rounded())
+        let drawWidth = roundedHalfUp(Double(source.width) * scale)
+        let drawHeight = roundedHalfUp(Double(source.height) * scale)
         return CapturePlacement(
             width: canvas.width,
             height: canvas.height,
-            drawX: Int((Double(canvas.width - drawWidth) / 2).rounded()),
-            drawY: Int((Double(canvas.height - drawHeight) / 2).rounded()),
+            drawX: roundedHalfUp(Double(canvas.width - drawWidth) / 2),
+            drawY: roundedHalfUp(Double(canvas.height - drawHeight) / 2),
             drawWidth: drawWidth,
             drawHeight: drawHeight
         )
@@ -171,6 +171,17 @@ enum CaptureFit: String, Equatable, Sendable, CaseIterable {
     case cover
     /// Distort to fill exactly.
     case stretch
+}
+
+/// Rounds half UP, matching JavaScript's `Math.round`.
+///
+/// Swift's `Double.rounded()` rounds half *away from zero*, so the two
+/// implementations of this vocabulary agree on positive halves and drift
+/// by a pixel on negative ones — which is exactly `.cover`, the one case
+/// where the draw origin goes negative. A frame has to land on the same
+/// pixel whether it was placed by `capture-size.js` or by this file.
+private func roundedHalfUp(_ value: Double) -> Int {
+    Int((value + 0.5).rounded(.down))
 }
 
 /// Where a source lands inside a target canvas. `drawX` / `drawY` may be

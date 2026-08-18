@@ -133,6 +133,21 @@ struct CaptureSizeTests {
             .isIdentity(for: source))
     }
 
+    // Swift's `Double.rounded()` rounds half AWAY FROM ZERO; JavaScript's
+    // `Math.round` rounds half UP. They agree on positive halves and
+    // disagree on negative ones — which is exactly `cover`, the one case
+    // where the draw origin goes negative. The two implementations of this
+    // vocabulary have to place a frame on the same pixel, so the Swift side
+    // rounds half up too. `Tests/Web/capture-size.test.js` asserts the
+    // identical numbers.
+    @Test func `a cover overflow rounds the same way JavaScript does`() throws {
+        let plan = try CaptureSize.parse("square")
+            .plan(source: RenderDimensions(width: 1000, height: 2001), fit: .cover)
+        #expect(plan.drawY == -1001)   // not -1002
+        #expect(plan.width == 2001)
+        #expect(plan.drawHeight == 4004)
+    }
+
     // ── fit parsing ──────────────────────────────────────────
 
     @Test func `fit parses from its wire spelling`() {

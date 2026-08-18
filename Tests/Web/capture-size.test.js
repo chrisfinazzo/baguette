@@ -157,6 +157,18 @@ test('a zero-sized source yields a zero plan instead of dividing by zero', () =>
   assert.equal(plan.sourceWidth, 0);
 });
 
+// The Swift `CaptureSize` has to place a frame on the same pixel as this
+// one. Swift's `Double.rounded()` rounds half away from zero where
+// `Math.round` rounds half up, so they only disagree on a negative half —
+// i.e. a `cover` draw origin. `CaptureSizeTests.swift` asserts these
+// same numbers; if you change one, change both.
+test('a cover overflow rounds the same way the Swift side does', () => {
+  const plan = CaptureSize().parse('square').plan(1000, 2001, 'cover');
+  assert.equal(plan.drawY, -1001);
+  assert.equal(plan.width, 2001);
+  assert.equal(plan.drawH, 4004);
+});
+
 // ── round-tripping through the wire / storage ────────────────
 
 test('spec round-trips through parse for every preset and for custom sizes', () => {
