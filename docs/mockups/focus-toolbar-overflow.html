@@ -44,14 +44,12 @@
     fold order:  Simulate → Inspect → Stream → Control
     never folds: Navigate, View, Capture
 
-  IT WRAPS BEFORE IT FOLDS. The pane in the report is narrow AND
-  TALL. Collapsing everything into one anonymous ⋯ spends the last of
-  the width while leaving the height untouched, which is backwards —
-  so the bar takes a second row first and folds only what two rows
-  cannot hold. Measured against a booted device, that is the whole
-  difference at the width from the report: at 420px a single-row bar
-  had every cluster inside one ⋯, and a two-row bar has four named
-  cluster buttons and the full device name.
+  ONE LINE, ALWAYS. A second row was built and rejected. The pane in
+  the report is narrow and tall, so height looks like the cheap
+  dimension — but a pill with a short identity row above a long
+  control row is lopsided, and it pushes the device down to keep
+  controls that fold perfectly well into a menu. Folding is the answer
+  to a narrow bar; wrapping is a differently-shaped bar.
 
   Control outranks Stream deliberately. Home, App switcher, Shake and
   Rotate are buttons someone presses while working; the codec, the fps
@@ -201,14 +199,7 @@
 
   .nv-bar {
     display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
-    /* WRAPS BEFORE IT FOLDS. The pane baguette gets squeezed into is
-       narrow AND TALL — a browser sidebar beside an editor — so
-       spending the last of the width on an anonymous ⋯ throws away
-       the one dimension that pane has plenty of. A second row holds
-       every cluster by name at widths where a single row had already
-       collapsed them into a bucket. */
-    flex-wrap: wrap; row-gap: 2px;
-    min-height: 44px; padding: 0 10px;
+    height: 44px; padding: 0 10px;
     background: var(--nv-bar-bg); border: 1px solid var(--nv-bar-border);
     border-radius: 999px; box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
     backdrop-filter: blur(18px) saturate(1.5);
@@ -933,35 +924,13 @@
    * table to keep in sync with the CSS, and it stays right when the
    * device name is long or a webfont lands late.
    */
-  /**
-   * How many rows the bar's children landed on.
-   *
-   * `scrollWidth` is useless once wrapping is on — the content always
-   * "fits" horizontally by definition. Grouped with a tolerance, not
-   * counted as distinct tops: the bar centres its children, so a 26px
-   * chip and a 30px button on the SAME row sit at different offsets.
-   */
-  function rows() {
-    const origin = bar.getBoundingClientRect().top;
-    const tops = Array.prototype.slice.call(bar.children)
-        .filter((c) => c.offsetParent)
-        .map((c) => Math.round(c.getBoundingClientRect().top - origin))
-        .sort((a, b) => a - b);
-    if (!tops.length) return 1;
-    let n = 1;
-    for (let i = 1; i < tops.length; i += 1) {
-      if (tops[i] - tops[i - 1] > 14) n += 1;
-    }
-    return n;
-  }
-
-  const MAX_ROWS = 2;
-  const fits = () => rows() <= MAX_ROWS;
+  const fits = () => bar.scrollWidth <= bar.clientWidth + 1;
 
   function layout() {
     const folded = [];
     let merged = false;
     paint(folded, merged);
+    bar.classList.add('measuring');
 
     // Fold one cluster at a time, in `fold` order, re-measuring after
     // each. Re-measuring is what makes this exact — no width table to
@@ -982,6 +951,7 @@
     // this either vanishes into a menu or is pinned; the name is the
     // only control that can survive at a smaller size.
     bar.classList.toggle('tight', !fits());
+    bar.classList.remove('measuring');
 
     const inline = CLUSTERS.filter((c) => folded.indexOf(c.id) < 0);
     document.getElementById('readout').innerHTML =

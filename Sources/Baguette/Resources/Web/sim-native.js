@@ -1372,51 +1372,6 @@
    * is no width table to keep in sync with the CSS, and it stays right
    * when a device name is long or a webfont lands late.
    */
-  /**
-   * How many rows the bar's children currently occupy.
-   *
-   * The pane baguette gets squeezed into is NARROW AND TALL — a
-   * browser sidebar beside an editor. Spending the last of the width
-   * on an anonymous ⋯ throws away the one dimension that pane has
-   * plenty of, so the bar wraps to a second row first and only folds
-   * what a second row cannot hold. Named cluster buttons survive
-   * where they would otherwise have collapsed into a bucket.
-   *
-   * `scrollWidth` is useless once wrapping is on — the content always
-   * "fits" horizontally by definition — so the question becomes how
-   * many rows the children landed on.
-   *
-   * Grouped with a tolerance, not counted as distinct `offsetTop`s.
-   * The bar centres its children, so a 26px chip and a 30px button on
-   * the SAME row sit at different offsets; counting raw tops reported
-   * two rows for a bar that was visibly one.
-   */
-  function toolbarRows(bar) {
-    // The controls are children of `.tb-controls`, not of the bar, so
-    // walking `bar.children` counted the label and the control group —
-    // two boxes — and never saw the clusters wrap inside one of them.
-    const controls = bar.querySelector('.tb-controls');
-    const boxes = [bar.querySelector('.tb-label')].concat(
-        controls ? Array.prototype.slice.call(controls.children) : []);
-    const origin = bar.getBoundingClientRect().top;
-    const tops = [];
-    boxes.forEach((child) => {
-      if (!child || child.hidden || !child.offsetParent) return;
-      tops.push(Math.round(child.getBoundingClientRect().top - origin));
-    });
-    if (!tops.length) return 1;
-    tops.sort((a, b) => a - b);
-    let rows = 1;
-    for (let i = 1; i < tops.length; i += 1) {
-      // Anything further down than the tallest control could account
-      // for is a new row, not a taller sibling on the same one.
-      if (tops[i] - tops[i - 1] > 14) rows += 1;
-    }
-    return rows;
-  }
-
-  const TOOLBAR_MAX_ROWS = 2;
-
   function layoutToolbar() {
     const bar = document.querySelector('#simNativeView .top-bar');
     if (!bar || !toolbarFold) return;
@@ -1425,7 +1380,7 @@
     bar.classList.add('measuring');
     const state = toolbarFold.plan((candidate) => {
       applyToolbarState(candidate);
-      return toolbarRows(bar) <= TOOLBAR_MAX_ROWS;
+      return bar.scrollWidth <= bar.clientWidth + 1;
     });
     bar.classList.remove('measuring');
     fillFoldMenus(state);
