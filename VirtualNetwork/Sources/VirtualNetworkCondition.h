@@ -8,9 +8,11 @@
 
 #import <Foundation/Foundation.h>
 
-/// Where the host publishes. Same shared-`/tmp` convention the camera uses
-/// for `/tmp/SimCam.bgra` and motion for `/tmp/BaguetteMotion.json`.
-extern NSString *const VNConditionPath;
+/// Where the host publishes for *this* simulator, or nil when the process
+/// has no `SIMULATOR_UDID` to derive one from. Same shared-`/tmp` convention
+/// the camera uses for `/tmp/SimCam.bgra`, scoped per device the way
+/// motion's intent is.
+NSString *VNConditionPath(void);
 
 typedef struct {
     /// NO when nothing has been published yet, or the file is unreadable.

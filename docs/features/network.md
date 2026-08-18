@@ -128,7 +128,7 @@ that are already running.
 │ NetworkSchedule(bandwidth) │              └───────────▲────────────┘
 │ NetworkCondition.encoded() │                          │ URLProtocol
 └───────────┬────────────────┘                          │
-            │  /tmp/BaguetteNetwork.json                │
+            │  /tmp/BaguetteNetwork-<udid>.json         │
             ▼  (shared /tmp, as the camera uses)        │
       ┌───────────┐      launchctl setenv        ┌──────┴───────────┐
       │  Network  │ ──── DYLD_INSERT_LIBRARIES ─▶│ VirtualNetwork   │
@@ -234,9 +234,12 @@ answers that in four places:
   second), so it's traceable after the fact.
 
 `status` reports what **this simulator** is subject to, not merely what was
-last published — the condition file is one per host, so a second simulator
-can see the same bytes without having the dylib armed. Reporting a throttle
-there would be a false alarm, and a badge that cries wolf stops being read.
+published. The condition file is per-simulator
+(`/tmp/BaguetteNetwork-<udid>.json`, which the dylib derives from its own
+`SIMULATOR_UDID`), but a device can still hold a stale one without the dylib
+armed — after a simulator reboot clears `DYLD_INSERT_LIBRARIES`, say. So the
+read checks arming as well as content. A badge that cries wolf stops being
+read, and this one has to be believed.
 
 ## Known limits
 
@@ -270,12 +273,6 @@ there would be a false alarm, and a badge that cries wolf stops being read.
   because it is URLSession traffic from the app's process. On `edge` a 23 MB
   bundle takes minutes. Arm with something mild, let the app load, then
   change the condition live.
-- **One condition per host.** All simulators read
-  `/tmp/BaguetteNetwork.json`, like the camera's single `/tmp/SimCam.bgra`
-  and [motion's intent](motion.md#known-limits). Conditioning two simulators
-  differently at once isn't supported yet; the last publish wins. Which
-  simulators are *subject* to it is per-simulator, though — that's what the
-  arming check answers.
 - **Injected, not simulated.** This conditions the app's own process. Nothing
   outside it sees any of it, and a device not running an injected app has a
   perfectly normal network.

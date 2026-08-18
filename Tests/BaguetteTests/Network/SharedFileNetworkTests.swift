@@ -43,6 +43,16 @@ struct SharedFileNetworkTests {
 
     private let threeG = NetworkProfile.threeG.condition
 
+    @Test func `publishes to a path that names the simulator`() async throws {
+        // Every simulator sees the host's `/tmp`, so a single shared file
+        // meant conditioning one device replaced what an injected app on
+        // another was still reading. Both sides derive this path — the
+        // dylib from its own `SIMULATOR_UDID`.
+        #expect(SharedFileNetwork.path(forUDID: "ABC-123")
+                    == "/tmp/BaguetteNetwork-ABC-123.json")
+        #expect(SharedFileNetwork.path(forUDID: "A") != SharedFileNetwork.path(forUDID: "B"))
+    }
+
     @Test func `apply writes the condition where the dylib reads it`() async throws {
         let (network, _, sim, url) = makeNetwork()
 

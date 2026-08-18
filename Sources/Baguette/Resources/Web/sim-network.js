@@ -185,14 +185,27 @@
 
     _scheduleApply() {
       if (this._timer) clearTimeout(this._timer);
-      this._timer = setTimeout(() => this._apply(), 300);
+      this._timer = setTimeout(() => {
+        this._timer = null;
+        this._enqueue(() => this._apply());
+      }, 300);
+    }
+
+    /// Every apply and clear goes through one chain, because the two are not
+    /// interchangeable in flight: typing a number and then hitting Stop could
+    /// otherwise land the POST *after* the DELETE and leave the device
+    /// throttled while the card said it had stopped — which is precisely the
+    /// state this feature spends the rest of its design trying to prevent.
+    _enqueue(task) {
+      this._chain = (this._chain || Promise.resolve()).then(task, task);
+      return this._chain;
     }
 
     async _apply() {
       if (!this.udid) return;
       const body = this._form().toBody();
       // Nothing selected is a clear, not a POST the route would refuse.
-      if (!body) { this.clear(); return; }
+      if (!body) return this._clear();
       try {
         const res = await fetch(`/simulators/${encodeURIComponent(this.udid)}/network`, {
           method: 'POST',
@@ -205,14 +218,27 @@
       }
     }
 
-    async clear() {
-      if (this.udid) {
-        try {
-          await fetch(`/simulators/${encodeURIComponent(this.udid)}/network`,
-                      { method: 'DELETE' });
-        } catch (e) {
-          console.warn('[network] clear failed', e);
-        }
+    clear() {
+      // Drop a debounced apply that hasn't fired yet: it describes a state
+      // the user has just abandoned, and running it after the DELETE would
+      // re-arm the throttle they were trying to stop.
+      if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+      return this._enqueue(() => this._clear());
+    }
+
+    async _clear() {
+      if (!this.udid) return;
+      try {
+        const res = await fetch(`/simulators/${encodeURIComponent(this.udid)}/network`,
+                                { method: 'DELETE' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } catch (e) {
+        // A failed DELETE must not read as stopped — the device is still
+        // conditioned. Re-read rather than assuming either way, so the card
+        // and the badge keep telling the truth.
+        console.warn('[network] clear failed', e);
+        await this._hydrate();
+        return;
       }
       this.state = {
         profile: null, latencyMs: 0, bandwidthKbps: 0, lossPercent: 0, offline: false,

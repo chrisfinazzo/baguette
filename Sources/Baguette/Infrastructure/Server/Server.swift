@@ -373,9 +373,12 @@ struct Server: Sendable {
                 udid: Self.udidParam(r), body: body, simulators: simulators
             ) {
             case .ok:
-                return Self.jsonResponse(
-                    await Self.networkStateJSON(
-                        udid: Self.udidParam(r), simulators: simulators))
+                guard let json = await Self.networkStateJSON(
+                    udid: Self.udidParam(r), simulators: simulators
+                ) else {
+                    return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                }
+                return Self.jsonResponse(json)
             case .invalidBody:
                 return errorJSON(
                     "network body must name exactly one of: a profile "
@@ -396,8 +399,12 @@ struct Server: Sendable {
         // slow", so the UI has to be able to say plainly that one is on.
         router.get("/simulators/:udid/network") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return Self.jsonResponse(
-                await Self.networkStateJSON(udid: Self.udidParam(r), simulators: simulators))
+            guard let json = await Self.networkStateJSON(
+                udid: Self.udidParam(r), simulators: simulators
+            ) else {
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            }
+            return Self.jsonResponse(json)
         }
         router.delete("/simulators/:udid/network") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -1414,12 +1421,17 @@ struct Server: Sendable {
     /// Carries the preset names as well as the current condition, so adding
     /// a preset shows up in the UI without a second edit and the figures
     /// behind each name stay in Swift.
-    static func networkStateJSON(udid: String, simulators: any Simulators) async -> String {
+    ///
+    /// `nil` for a udid that isn't a device — the route answers `404`.
+    /// Reporting an unknown device as one with no conditioning would read
+    /// as reassurance about a simulator that doesn't exist, which is the
+    /// wrong answer to give a badge whose whole job is being believed.
+    static func networkStateJSON(udid: String, simulators: any Simulators) async -> String? {
         let profiles = NetworkProfile.allCases
             .map { "\"\($0.rawValue)\"" }
             .joined(separator: ",")
-        guard let sim = simulators.find(udid: udid),
-              let condition = await sim.network().current(on: sim) else {
+        guard let sim = simulators.find(udid: udid) else { return nil }
+        guard let condition = await sim.network().current(on: sim) else {
             return #"{"ok":true,"active":false,"profiles":[\#(profiles)]}"#
         }
         let bandwidth = condition.bandwidthKbps.map { "\($0)" } ?? "null"

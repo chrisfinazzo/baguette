@@ -3,7 +3,25 @@
 #import <os/lock.h>
 #import <os/log.h>
 
-NSString *const VNConditionPath = @"/tmp/BaguetteNetwork.json";
+/// The condition path for *this* simulator.
+///
+/// Every simulator sees the host's `/tmp`, so a single shared file meant
+/// conditioning one device replaced what an injected app on another was
+/// still reading. `SIMULATOR_UDID` is set in every process the simulator
+/// launches, so both sides derive the same per-device path.
+///
+/// With no UDID there is nothing safe to read — guessing would mean
+/// applying another simulator's throttle — so the path stays nil and
+/// nothing is conditioned.
+NSString *VNConditionPath(void) {
+    static NSString *path;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        const char *udid = getenv("SIMULATOR_UDID");
+        path = udid ? [NSString stringWithFormat:@"/tmp/BaguetteNetwork-%s.json", udid] : nil;
+    });
+    return path;
+}
 
 /// How often the file is stat'ed. Every request asks, and an app under test
 /// can make hundreds a minute, so this keeps a hot path from stat'ing on
@@ -12,7 +30,7 @@ static const double kStatInterval = 0.1;
 
 static VNCondition gCached;
 static double gLastStat;
-static long gLastMtime;
+static struct timespec gLastMtime;
 static long gLastSize;
 static uint64_t gGeneration;
 static os_unfair_lock gLock = OS_UNFAIR_LOCK_INIT;
@@ -82,19 +100,31 @@ static VNCondition VNParse(NSData *data) {
 }
 
 VNCondition VNConditionCurrent(void) {
+    NSString *path = VNConditionPath();
+    if (!path) {
+        VNCondition none = {0};
+        return none;
+    }
     os_unfair_lock_lock(&gLock);
     double now = VNNow();
     if (now - gLastStat >= kStatInterval) {
         gLastStat = now;
         struct stat st;
-        if (stat(VNConditionPath.fileSystemRepresentation, &st) == 0) {
+        if (stat(path.fileSystemRepresentation, &st) == 0) {
             // Re-parse only when the file actually moved. The host writes
             // atomically, so a replacement shows up as a new mtime/size and
             // we never read a half-written condition.
-            if (st.st_mtimespec.tv_sec != gLastMtime || st.st_size != gLastSize) {
-                gLastMtime = st.st_mtimespec.tv_sec;
+            //
+            // Nanoseconds matter here: changing the latency from 300 to 400
+            // leaves the JSON *exactly* as long as before, so a
+            // second-resolution mtime plus a size comparison would read the
+            // new condition as unchanged and keep applying the old one.
+            if (st.st_mtimespec.tv_sec != gLastMtime.tv_sec
+                || st.st_mtimespec.tv_nsec != gLastMtime.tv_nsec
+                || st.st_size != gLastSize) {
+                gLastMtime = st.st_mtimespec;
                 gLastSize = st.st_size;
-                NSData *data = [NSData dataWithContentsOfFile:VNConditionPath];
+                NSData *data = [NSData dataWithContentsOfFile:path];
                 gCached = VNParse(data);
                 gCached.generation = ++gGeneration;
                 if (gCached.conditioning) {
@@ -116,7 +146,7 @@ VNCondition VNConditionCurrent(void) {
             VNCondition empty = {0};
             empty.generation = gGeneration;
             gCached = empty;
-            gLastMtime = 0;
+            gLastMtime = (struct timespec){0, 0};
             gLastSize = 0;
         }
     }

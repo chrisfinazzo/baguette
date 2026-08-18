@@ -139,6 +139,7 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     /// — which for a throttle would be indistinguishable from working.
     func network() -> any Network {
         SharedFileNetwork(
+            fileURL: URL(fileURLWithPath: SharedFileNetwork.path(forUDID: udid)),
             dylibPath: InjectedDylibInstaller.installIfNeeded(.network),
             injection: SimctlSimulatorInjection()
         )

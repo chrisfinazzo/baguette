@@ -168,7 +168,7 @@ struct NetworkRoutesTests {
     @Test func `networkStateJSON reports what the simulator is subject to`() async {
         let w = makeWiring(current: NetworkProfile.threeG.condition)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators)
+        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         #expect(json.contains(#""active":true"#))
         #expect(json.contains(#""latencyMs":200"#))
@@ -179,7 +179,7 @@ struct NetworkRoutesTests {
     @Test func `networkStateJSON reports an unconditioned simulator as inactive`() async {
         let w = makeWiring(current: nil)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators)
+        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         #expect(json.contains(#""active":false"#))
     }
@@ -190,19 +190,20 @@ struct NetworkRoutesTests {
         // a second edit, and the figures behind each name stay in Swift.
         let w = makeWiring(current: nil)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators)
+        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         for profile in NetworkProfile.allCases {
             #expect(json.contains("\"\(profile.rawValue)\""), "\(profile.rawValue) missing")
         }
     }
 
-    @Test func `networkStateJSON reports an unknown device as inactive`() async {
+    @Test func `networkStateJSON refuses an unknown device rather than calling it unthrottled`() async {
+        // "This device has no conditioning" and "there is no such device"
+        // are different answers, and the first one reads as reassurance.
+        // The route turns this nil into a 404, matching motion's read-back.
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(nil)
 
-        let json = await Server.networkStateJSON(udid: "nope", simulators: simulators)
-
-        #expect(json.contains(#""active":false"#))
+        #expect(await Server.networkStateJSON(udid: "nope", simulators: simulators) == nil)
     }
 }

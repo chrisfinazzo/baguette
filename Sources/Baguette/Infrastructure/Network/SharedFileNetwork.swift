@@ -14,9 +14,15 @@ import Foundation
 /// condition nothing — which looks exactly like the feature being off.
 final class SharedFileNetwork: Network, @unchecked Sendable {
 
-    /// Where the condition is published. Same shared-`/tmp` convention as
-    /// the camera's frame buffer and motion's intent.
-    static let defaultPath = "/tmp/BaguetteNetwork.json"
+    /// Where the condition is published for `udid`. Same shared-`/tmp`
+    /// convention as the camera's frame buffer, but **scoped per
+    /// simulator**: every simulator sees the host's `/tmp`, so a single
+    /// shared file would mean conditioning one device replaced the
+    /// condition an injected app on another was still reading. The dylib
+    /// builds this same path from its own `SIMULATOR_UDID`.
+    static func path(forUDID udid: String) -> String {
+        "/tmp/BaguetteNetwork-\(udid).json"
+    }
 
     private let fileURL: URL
     /// `nil` when this build didn't ship the dylib — applying then fails
@@ -25,7 +31,7 @@ final class SharedFileNetwork: Network, @unchecked Sendable {
     private let injection: any SimulatorInjection
 
     init(
-        fileURL: URL = URL(fileURLWithPath: SharedFileNetwork.defaultPath),
+        fileURL: URL,
         dylibPath: String?,
         injection: any SimulatorInjection = SimctlSimulatorInjection()
     ) {
