@@ -277,3 +277,52 @@ test('a second click while a render is in flight is ignored', async (t) => {
   await Promise.all([panel.download(), panel.download()]);
   assert.equal(requests.length, 1);
 });
+
+// ── how a 3D recording frames the stage ──────────────────────
+
+// A screenshot in 3D re-renders server-side at the exact size, so it is
+// always framed. A recording can't: BrowserRecorder composites the stage
+// canvas frame by frame as it arrives. The stage is a viewport onto a
+// scene — a device standing in the middle of empty margins — so
+// letterboxing the WHOLE stage into a tall App Store canvas shrinks the
+// device into the emptiness instead of cropping the emptiness away.
+//
+// Crop as far as the target allows, but never prefer cropping into the
+// device over a bar beside it: `cover` when the target is narrower than
+// the stage (it eats the side margins and keeps full height), `contain`
+// when it is wider (there is no more device to show, only bars).
+
+test('an App Store size crops the stage’s empty sides', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'appstore-6.9' });
+  assert.equal(Sim3DPanel.recordingFit(settings, { width: 1600, height: 1250 }), 'cover');
+});
+
+test('square crops a wider stage too', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'square' });
+  assert.equal(Sim3DPanel.recordingFit(settings, { width: 1600, height: 1250 }), 'cover');
+});
+
+test('a landscape target letterboxes rather than beheading the device', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: '16:9' });
+  assert.equal(Sim3DPanel.recordingFit(settings, { width: 1600, height: 1250 }), 'contain');
+});
+
+test('a target no narrower than the stage letterboxes', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'appstore-6.9' });
+  assert.equal(Sim3DPanel.recordingFit(settings, { width: 400, height: 1600 }), 'contain');
+});
+
+test('native has nothing to crop', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'native' });
+  assert.equal(Sim3DPanel.recordingFit(settings, { width: 1600, height: 1250 }), 'contain');
+});
+
+test('no settings, no opinion', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  assert.equal(Sim3DPanel.recordingFit(null, { width: 1600, height: 1250 }), 'contain');
+});
+
+test('a stage that has not sized itself yet letterboxes', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'appstore-6.9' });
+  assert.equal(Sim3DPanel.recordingFit(settings, { width: 0, height: 0 }), 'contain');
+});

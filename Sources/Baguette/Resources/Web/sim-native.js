@@ -1792,6 +1792,26 @@
 
   // --- Recording ----------------------------------------------------
 
+  /**
+   * The settings a recording should run with, which are not always the
+   * ones on the chip.
+   *
+   * In 3D the source is a stage — a device standing in empty margins —
+   * so `contain` shrinks the device into the emptiness rather than
+   * cropping the emptiness away. `Sim3DPanel.recordingFit` decides how
+   * far it is safe to crop. A screenshot doesn't need this: it
+   * re-renders server-side at the exact size, framed by the camera.
+   * 2D is untouched — there the source canvas IS the device.
+   */
+  function recordingSettings(source) {
+    const settings = captureSettings();
+    if (!settings || !source || source.mode !== '3d') return settings;
+    const Panel = window.Sim3DPanel;
+    if (!Panel || typeof Panel.recordingFit !== 'function') return settings;
+    const fit = Panel.recordingFit(settings, source.canvas);
+    return fit === settings.fit ? settings : settings.with({ fit });
+  }
+
   function toggleRecording() {
     if (recordingState.active) return stopRecording();
     return startRecording();
@@ -1814,7 +1834,7 @@
         // Forward-compatible hint: sizing a recording is the recorder's
         // job (it owns the compose canvas), and it ignores keys it
         // doesn't know. Screenshots are sized here, above.
-        settings: captureSettings(),
+        settings: recordingSettings(source),
         fps: 60,
       });
       rec.start();
