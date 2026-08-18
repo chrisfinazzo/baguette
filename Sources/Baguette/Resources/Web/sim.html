@@ -62,6 +62,10 @@
 <script src="/capture/capture-settings.js"></script>
 <script src="/capture/capture-composer.js"></script>
 <script src="/capture/capture-size-menu.js"></script>
+<!-- Toolbar cluster folding (Resources/Web/toolbar/). Must load before
+     sim-native.js, which builds the clusters at init and needs
+     `window.Baguette._ToolbarFold` to decide what folds. -->
+<script src="/toolbar/toolbar-fold.js"></script>
 <script src="/capture-gallery.js"></script>
 <script src="/recorder.js"></script>
 <script src="/stream-session.js"></script>

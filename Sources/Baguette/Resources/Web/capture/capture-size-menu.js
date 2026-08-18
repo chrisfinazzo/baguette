@@ -37,6 +37,29 @@
   border-color: var(--accent, #2563eb); color: var(--accent, #2563eb);
 }
 .cap-size-chip svg { width: 13px; height: 13px; flex: none; }
+/* The chip is a FIXED width whatever is picked. It used to render the
+   preset's label, so it was "Native" (54px) one moment and "App Store
+   iPad 13″" (132px) the next — the one control whose width the user
+   changes by using it, in a toolbar that is a single row of fixed-size
+   controls, so every icon beside it shifted. Every code fits four
+   tabular characters ("9:16", "6.9″", "1:1"); the box is sized for the
+   widest and the rest centre in it. */
+.cap-size-code {
+  min-width: 34px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* The glyph is the selection's actual shape, drawn to its aspect. It
+   is the only part of the chip that says what the choice IS rather
+   than what it is called — which is what makes a four-character code
+   readable at a glance. Native has no shape of its own, so it draws
+   nothing. */
+.cap-size-glyph {
+  width: 13px; height: 13px; flex: none;
+  display: grid; place-items: center;
+}
+.cap-size-glyph i {
+  display: block; border: 1.5px solid currentColor; border-radius: 2px;
+}
 .cap-size-pop {
   position: absolute; z-index: 60; top: calc(100% + 6px); right: 0;
   width: 236px; padding: 10px; border-radius: 10px;
@@ -145,7 +168,9 @@
       this.root.innerHTML =
         '<button type="button" class="cap-size-chip" aria-expanded="false" ' +
         'aria-haspopup="true" title="Capture output size">' +
-        '<span data-role="label"></span>' + CHEVRON + '</button>' +
+        '<span class="cap-size-glyph" data-role="glyph"></span>' +
+        '<span class="cap-size-code" data-role="label"></span>' +
+        CHEVRON + '</button>' +
         '<div class="cap-size-pop" hidden role="dialog" aria-label="Capture size"></div>';
       this.chip = this.root.querySelector('.cap-size-chip');
       this.pop = this.root.querySelector('.cap-size-pop');
@@ -193,11 +218,28 @@
 
     _renderChip() {
       if (!this.chip) return;
+      const size = this.settings.size;
       const label = this.chip.querySelector('[data-role="label"]');
-      if (label) label.textContent = this.settings.size.label;
-      this.chip.title = this.settings.size.isNative
+      if (label) label.textContent = size.code;
+      const glyph = this.chip.querySelector('[data-role="glyph"]');
+      if (glyph) glyph.innerHTML = CaptureSizeMenu.aspectGlyph(size.aspect(), 11);
+      // The full name lives here now that the chip shows a code. Nothing
+      // is lost: the popover names it too, and this is what a hover
+      // asks for.
+      this.chip.title = size.isNative
         ? 'Capture output size: native'
-        : `Capture output size: ${this.settings.size.label} · ${this.settings.fit}`;
+        : `Capture output size: ${size.label} · ${this.settings.fit}`;
+    }
+
+    /**
+     * A rectangle drawn at `aspect`, fitted into a `size`-px box.
+     * `null` — `native` — draws nothing rather than guessing a shape.
+     */
+    static aspectGlyph(aspect, size) {
+      if (!aspect || !(aspect > 0)) return '';
+      const width = aspect >= 1 ? size : Math.round(size * aspect);
+      const height = aspect >= 1 ? Math.round(size / aspect) : size;
+      return `<i style="width:${width}px;height:${height}px"></i>`;
     }
 
     _renderPopover() {

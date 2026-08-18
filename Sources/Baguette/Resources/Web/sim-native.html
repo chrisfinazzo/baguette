@@ -314,6 +314,13 @@
     box-sizing: border-box;   /* so the max-width below is the real width */
     flex-shrink: 0;
     gap: 12px;
+    /* One line, always. A second row was tried — the pane baguette is
+       squeezed into is narrow and tall, so height looked like the
+       cheap dimension — and it is not worth having: a pill with a
+       short identity row above a long control row is lopsided, and it
+       pushes the device down for controls that fold perfectly well
+       into a menu. Folding is the answer to a narrow bar; wrapping is
+       a different-looking bar. */
     height: 36px;
     padding: 4px 6px 4px 4px;
     background: var(--nv-bar-bg);
@@ -655,7 +662,7 @@
   #simNativeView .tb-controls {
     display: inline-flex; align-items: center; gap: 8px;
     padding-right: 4px;
-    min-width: 0;            /* let the scroll strip shrink + scroll */
+    min-width: 0;
   }
 
   /* Horizontally-scrollable icon strip. Trackpads scroll it directly;
@@ -672,7 +679,171 @@
     scroll-behavior: smooth;
     scrollbar-width: none;                 /* Firefox */
   }
+  /* Clipping is what makes `scrollWidth` meaningful while ToolbarFold
+     tries candidates, and it is worn only for that: a clipped bar also
+     cuts off every popover hanging out of it. */
+  /* Clipping is what makes `scrollWidth` meaningful while ToolbarFold
+     tries candidates, and it is worn only for that: a clipped bar also
+     cuts off every popover hanging out of it. */
+  #simNativeView .top-bar.measuring { overflow: hidden; }
+
+  /* Once every cluster has folded and merged there is nothing left to
+     give but Navigate itself. The OS version goes first — it is a
+     caption nobody acts on — and then the device name truncates,
+     because a shortened name still says which device while a dropped
+     control is simply gone. */
+  #simNativeView .top-bar.tight .tb-os { display: none; }
+  #simNativeView .top-bar.tight .tb-name { max-width: 92px; }
   #simNativeView .tb-scroll::-webkit-scrollbar { display: none; }  /* WebKit */
+
+  /* ── Cluster folding ────────────────────────────────────────────
+     The strip is seven CONTEXT CLUSTERS, not fifteen loose controls:
+     Navigate, Stream, View, Control, Simulate, Inspect, Capture. When
+     the row runs out of width a whole cluster folds into one menu
+     button — never an item, never a partial group. `ToolbarFold`
+     (toolbar/toolbar-fold.js) owns the order; this is its dressing.
+     See docs/mockups/focus-toolbar-overflow.html. */
+  #simNativeView .tb-cluster {
+    display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto;
+  }
+  #simNativeView .tb-cluster[hidden] { display: none; }
+  #simNativeView .tb-sep {
+    flex: 0 0 auto; width: 1px; height: 16px; margin: 0 2px;
+    background: var(--nv-divider);
+  }
+  #simNativeView .tb-sep[hidden] { display: none; }
+
+  /* A folded cluster is an ICON plus a caret, never a text label:
+     folding has to be a saving, and "Inspect" as a label is an 85px
+     button replacing two 30px glyphs. The names still do their work,
+     as the menu's section headings and the button's tooltip. */
+  #simNativeView .tb-fold { position: relative; flex: 0 0 auto; }
+  #simNativeView .tb-fold[hidden] { display: none; }
+  #simNativeView .tb-fold-btn {
+    display: inline-flex; align-items: center; gap: 1px;
+    height: 26px; padding: 0 4px 0 5px;
+    background: transparent; border: 1px solid transparent; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer;
+  }
+  #simNativeView .tb-fold-btn:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-fold-btn[aria-expanded="true"] {
+    border-color: var(--nv-accent); color: var(--nv-accent);
+  }
+  #simNativeView .tb-fold-btn svg { display: block; }
+  #simNativeView .tb-fold-btn .tb-caret { opacity: 0.5; }
+
+  /* A cluster menu is anchored under the button that opened it.
+     `right: 0` put a 234px popover's right edge on a 40px button, so
+     the Stream menu opened almost the full width of the bar to the
+     LEFT of the control it belongs to and read as unrelated to it.
+     Only the merged menu keeps `right: 0` — it sits at the end of the
+     bar, where opening leftward is the only direction available. */
+  /* Border-box throughout this menu. sim-native.html does not set a
+     global `box-sizing`, so `width: 100%` on a padded row resolved to
+     content-width PLUS padding and every row sat a few pixels wider
+     than the popover holding it — which is what clipped the frame-rate
+     readout against the right border. */
+  #simNativeView .tb-fold-pop,
+  #simNativeView .tb-row,
+  #simNativeView .tb-read,
+  #simNativeView .tb-choice,
+  #simNativeView .tb-acc > summary,
+  #simNativeView .tb-acc-body { box-sizing: border-box; }
+
+  #simNativeView .tb-fold-pop {
+    position: absolute; z-index: 60; top: calc(100% + 8px);
+    left: 50%; transform: translateX(-50%);
+    /* Sized for the widest row a cluster menu holds, which is the
+       codec CHOICE — at 208px "MJPEG" was clipped off it. */
+    width: 234px; padding: 6px; border-radius: 12px;
+    /* Opaque, unlike the bar itself. The toolbar's translucency reads
+       as chrome floating over the device; a MENU sits directly on top
+       of the running screen, and at `--nv-bar-bg`'s 0.82 alpha the app
+       behind it showed through the rows. A control you have to squint
+       past a home screen to read is not worth folding into. */
+    background: var(--nv-page-bg);
+    border: 1px solid var(--nv-bar-border);
+    box-shadow: var(--nv-bar-shadow);
+    color: var(--nv-text);
+    font: 500 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    max-height: 60vh; overflow-y: auto;
+  }
+  #simNativeView [data-fold="more"] .tb-fold-pop {
+    left: auto; right: 0; transform: none;
+  }
+  #simNativeView .tb-fold-pop[hidden] { display: none; }
+
+  /* Merged mode is an EXCLUSIVE accordion. Four clusters flattened
+     into one popover is thirteen rows — the "too many things"
+     complaint moved down a level rather than answered. Collapsed it is
+     four rows; `name=` makes them a radio group where supported and
+     the click handler enforces it everywhere else. */
+  #simNativeView .tb-acc > summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px; border-radius: 8px;
+    font: 600 12px/1.3 inherit; color: var(--nv-text);
+  }
+  #simNativeView .tb-acc > summary::-webkit-details-marker { display: none; }
+  #simNativeView .tb-acc > summary:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-acc > summary svg { flex: 0 0 auto; opacity: 0.8; }
+  #simNativeView .tb-acc[open] > summary { color: var(--nv-accent); }
+  #simNativeView .tb-acc > summary .tb-acc-n {
+    margin-left: auto; font-size: 10px; font-weight: 500;
+    color: var(--nv-text-faint); font-variant-numeric: tabular-nums;
+  }
+  #simNativeView .tb-acc > summary .tb-caret { opacity: 0.5; transition: transform 0.15s ease; }
+  #simNativeView .tb-acc[open] > summary .tb-caret { transform: rotate(180deg); }
+  #simNativeView .tb-acc-body { padding: 1px 0 5px 8px; }
+
+  /* A MENU ROW IS NOT ONE THING. Flattening every control to
+     icon + label + value turned the codec picker into a caption
+     reading "Codec H.264" with no way to reach MJPEG. Actions,
+     toggles, choices and readouts each get their own rendering. */
+  #simNativeView .tb-row {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 7px 8px; border: 0; border-radius: 8px; cursor: pointer;
+    background: transparent; color: inherit; font: inherit; text-align: left;
+  }
+  #simNativeView .tb-row:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-row svg { flex: 0 0 auto; opacity: 0.85; }
+  #simNativeView .tb-row.on { color: var(--nv-accent); }
+  #simNativeView .tb-row.on svg { opacity: 1; }
+  /* A dot, not a switch. Every control that reaches this menu — status
+     bar, location, camera, accessibility, logs — OPENS A PANEL. A
+     switch says "a setting you flip and leave"; these are disclosures,
+     and the switch also justified keeping the menu open so you could
+     watch it move, which left the panel you just opened sitting behind
+     the menu covering it. The dot reports the same state without
+     claiming to be a setting. */
+  #simNativeView .tb-dot {
+    margin-left: auto; flex: 0 0 auto;
+    width: 6px; height: 6px; border-radius: 999px;
+    background: transparent;
+  }
+  #simNativeView .tb-row.on .tb-dot { background: var(--nv-accent); }
+
+  /* readout — no hover, no pointer: nothing happens when you press it */
+  #simNativeView .tb-read {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 7px 8px; cursor: default; color: var(--nv-text-muted);
+  }
+  #simNativeView .tb-read svg { flex: 0 0 auto; opacity: 0.55; }
+  #simNativeView .tb-read span:first-of-type { flex: 0 1 auto; min-width: 0; }
+  #simNativeView .tb-read .tb-val {
+    margin-left: auto; padding-left: 8px; flex: 0 0 auto;
+    font-size: 11px; color: var(--nv-text-faint);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
+  /* choice — the options come with it, because a value you cannot
+     change is a caption pretending to be a control */
+  #simNativeView .tb-choice {
+    display: flex; align-items: center; gap: 9px;
+    padding: 6px 8px; border-radius: 8px;
+  }
+  #simNativeView .tb-choice > svg { flex: 0 0 auto; opacity: 0.85; }
+  #simNativeView .tb-choice .fmt-picker { margin-left: auto; }
 
   /* Chevron scroll buttons — hidden unless the strip overflows. */
   #simNativeView .tb-arrow {
@@ -2377,14 +2548,14 @@
             <line x1="6.5" y1="17" x2="11"  y2="17"/>
           </svg>
         </button>
-        <button class="ico-btn" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
+        <button class="ico-btn" id="nativeHome" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <path d="M3 11.2 12 4l9 7.2"/>
             <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
           </svg>
         </button>
-        <button class="ico-btn" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
+        <button class="ico-btn" id="nativeScreenshot" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
@@ -2411,7 +2582,7 @@
           </svg>
           <span class="rec-timer" id="nativeRecordTimer"></span>
         </button>
-        <button class="ico-btn" title="App switcher"
+        <button class="ico-btn" id="nativeAppSwitcher" title="App switcher"
                 aria-label="Open app switcher"
                 onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
           <!-- "App-switcher" glyph mirroring the native Simulator
@@ -2434,7 +2605,7 @@
              App switcher. POSTs to `/simulators/<udid>/shake`; the
              server delegates to `simulator.shake().shake()`, backed by
              `simctl spawn notifyutil`. -->
-        <button class="ico-btn" title="Shake device"
+        <button class="ico-btn" id="nativeShake" title="Shake device"
                 aria-label="Shake device"
                 onclick="window.__nativeShake && window.__nativeShake()">
           <!-- Phone glyph flanked by motion arcs — reads as a device
