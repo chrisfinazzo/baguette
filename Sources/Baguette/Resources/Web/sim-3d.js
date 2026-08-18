@@ -5,6 +5,10 @@
   function Sim3DPanel() {
     this.host = null;
     this.stage = null;
+    // The live 3D frame, painted by the shared StreamSession. Public on
+    // purpose: it is what a recorder captures (`canvas.captureStream()`)
+    // for a 3D screen recording. Non-null from `mountStage()` until
+    // `detach()`, i.e. for the whole time the stream is running.
     this.canvas = null;
     this.udid = '';
     this.model = null;
@@ -16,6 +20,11 @@
     this.mode = 'pose';
     this.variants = {};
     this.screenGlass = false;
+    // The size/fit/background the user picked in the toolbar, shared with
+    // every other capture surface. `null` on pages that don't load the
+    // capture modules — saving still works, it just tracks the live frame.
+    this.captureSettings = null;
+    this.saving = false;
     this.deviceSize = { width: 1, height: 1 };
     this.onFps = null;
     this.pointer = null;
@@ -212,6 +221,16 @@
         background.toLowerCase() === this.background.toLowerCase()) return;
     this.background = background;
     this.scheduleRestart(0);
+  };
+
+  /**
+   * Adopt the toolbar's CaptureSettings. Deliberately does NOT restart the
+   * stream: the live view keeps its own screen-sized framing (see
+   * `outputSize`), and the chosen size only applies to what gets saved —
+   * a one-shot re-render at full resolution.
+   */
+  Sim3DPanel.prototype.setCaptureSettings = function (settings) {
+    this.captureSettings = settings || null;
   };
 
   Sim3DPanel.prototype.detach = function () {
@@ -530,13 +549,214 @@
     this.sendCamera();
   };
 
-  Sim3DPanel.prototype.download = function () {
-    if (!this.canvas || !this.canvas.hasAttribute('data-painted')) return;
-    const link = document.createElement('a');
-    link.href = this.canvas.toDataURL('image/png');
-    link.download = (this.model.id || 'device') + '-live-3d.png';
-    link.click();
+  /**
+   * The dimensions of the live 3D frame — what a ratio size (`square`,
+   * `16:9`) resolves against, since a 3D render has no other intrinsic
+   * size in the browser. Falls back to the size the stream was asked for
+   * before the first frame lands.
+   */
+  Sim3DPanel.prototype.streamSize = function () {
+    if (this.canvas && this.canvas.width && this.canvas.height) {
+      return { width: this.canvas.width, height: this.canvas.height };
+    }
+    return this.stage ? this.outputSize() : null;
   };
+
+  /**
+   * Save the current pose as a PNG.
+   *
+   * The canvas holds a *video-decoded* frame at the live stream's clamped
+   * resolution — fine to look at, lossy to ship. So we ask the server to
+   * re-render the very same pose once, off the stream, at the size the
+   * user picked; that comes back as a clean full-resolution PNG. The
+   * canvas is still the safety net: if the route is missing or the render
+   * fails, the user gets the live frame rather than no file at all.
+   */
+  Sim3DPanel.prototype.download = async function () {
+    if (!this.canvas || !this.canvas.hasAttribute('data-painted')) return;
+    // One click, one render. Each save costs the server a fresh screen
+    // capture plus a RealityKit render, so a double-click must not queue
+    // two of them (and hand the user two files).
+    if (this.saving) return;
+    this.saving = true;
+    this.setSaving(true);
+    const settings = this.captureSettings;
+    try {
+      if (Math.abs(this.zoom - 1) > 0.01) {
+        // `DeviceRenderOptions` has no zoom field — the one-shot render
+        // always frames at the model's default camera distance. Say so
+        // rather than quietly handing back a differently-framed PNG.
+        console.warn(
+            '[3d] saved render ignores the live zoom (' +
+            this.zoom.toFixed(2) + '×) — it frames at 1×'
+        );
+      }
+      const body = Sim3DPanel.renderBody({
+        rotation: this.rotation,
+        variants: this.variants,
+        screenGlass: this.screenGlass,
+        background: this.background,
+        settings: settings,
+        streamSize: this.streamSize(),
+      });
+      const response = await fetch(
+          '/simulators/' + encodeURIComponent(this.udid) + '/render-3d.png',
+          {
+            method: 'POST',
+            cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }
+      );
+      if (!response.ok) {
+        throw new Error('render-3d.png returned HTTP ' + response.status);
+      }
+      const blob = await response.blob();
+      // Name the file after what actually came back, not what we asked
+      // for — `native` doesn't send a size at all, and the server is the
+      // one that knows the screen's true pixel dimensions.
+      const size = Sim3DPanel.pngSize(new Uint8Array(await blob.arrayBuffer()));
+      const name = settings && size
+        ? this.modelId() + '-3d-' + fileSafe(settings.slug(size.width, size.height))
+        : this.modelId() + '-3d';
+      const url = URL.createObjectURL(blob);
+      saveLink(url, name + '.png');
+      // Revoke on the next turn — Safari needs the URL to still resolve
+      // when it processes the synthetic click.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      console.warn(
+          '[3d] lossless render failed, saving the live frame instead', error
+      );
+      this.downloadLiveFrame();
+    } finally {
+      this.saving = false;
+      this.setSaving(false);
+    }
+  };
+
+  /** Busy state on the Save Frame button while a render is in flight. */
+  Sim3DPanel.prototype.setSaving = function (busy) {
+    const button = this.host && this.host.querySelector('[data-role="download"]');
+    if (!button) return;
+    button.disabled = !!busy;
+    button.textContent = busy ? 'Rendering…' : 'Save Frame';
+  };
+
+  /** Last resort: the lossy on-screen frame, named for what it is. */
+  Sim3DPanel.prototype.downloadLiveFrame = function () {
+    if (!this.canvas || !this.canvas.hasAttribute('data-painted')) return;
+    saveLink(this.canvas.toDataURL('image/png'), this.modelId() + '-live-3d.png');
+  };
+
+  Sim3DPanel.prototype.modelId = function () {
+    return (this.model && this.model.id) || 'device';
+  };
+
+  /**
+   * The `DeviceRenderOptions` JSON for `POST /simulators/:udid/render-3d.png`,
+   * built from the current pose plus the shared CaptureSettings.
+   *
+   * Pure and static so the arithmetic is testable without a canvas: given
+   * a pose and a size choice, exactly one body comes out.
+   *
+   * Two things worth knowing about the mapping:
+   *  • `size` is OMITTED for `native` — the server then renders at the
+   *    simulator screen's own pixel size, which is larger (and truer)
+   *    than anything the browser could name.
+   *  • the requested size is NOT run through `outputSize()`'s 480–1600
+   *    clamp. That clamp exists to keep the live video stream cheap; a
+   *    one-shot App Store render is meant to be 1290 × 2796.
+   *
+   * @param {object} o
+   * @param {{x:number,y:number,z:number}} [o.rotation]
+   * @param {object} [o.variants]
+   * @param {boolean} [o.screenGlass]
+   * @param {object} [o.settings]    CaptureSettings; absent → live framing
+   * @param {{width:number,height:number}} [o.streamSize] ratio sizes resolve
+   *   against this
+   * @param {string} [o.background]  fallback canvas colour when there are
+   *   no settings — keeps the saved PNG looking like the live view
+   */
+  Sim3DPanel.renderBody = function (o) {
+    const options = o || {};
+    const rotation = options.rotation || {};
+    const body = {
+      rotation: {
+        x: Number(rotation.x) || 0,
+        y: Number(rotation.y) || 0,
+        z: Number(rotation.z) || 0,
+      },
+      // Copied, not aliased: the panel keeps mutating `this.variants` as
+      // the user clicks finishes, and an in-flight request must not move.
+      variants: Object.assign({}, options.variants),
+      screenGlass: !!options.screenGlass,
+      // Always `cover`, never the CaptureSettings fit. On this route `fit`
+      // is NOT canvas placement — the server hands it to the screen
+      // texture's UV placement on the device mesh, i.e. how the captured
+      // frame sits on the display. The live stream asks for `cover`, so
+      // asking for anything else here would save a render that doesn't
+      // match what the user was looking at. Canvas placement on a 3D
+      // render is the camera's job, and there is no fit for it.
+      fit: 'cover',
+    };
+    const settings = options.settings;
+    if (!settings) {
+      body.background = options.background || 'transparent';
+      return body;
+    }
+    // `effectiveBackground` reports `transparent` at native size, so a
+    // transparent 3D render never gains an unwanted white mat.
+    body.background = settings.effectiveBackground;
+    if (!settings.size.isNative) {
+      const stream = options.streamSize || {};
+      const size = settings.size.resolve(stream.width, stream.height);
+      // A ratio with no source to resolve against yields 0 × 0; leaving
+      // `size` off falls back to the server's native render instead of
+      // asking for an empty image.
+      if (size.width > 0 && size.height > 0) body.size = size;
+    }
+    return body;
+  };
+
+  /**
+   * Width/height straight out of a PNG's IHDR chunk — the 8-byte
+   * signature, then a chunk header, then two big-endian uint32s at byte
+   * 16. Cheaper and synchronous compared with decoding the blob into an
+   * `Image` just to read `naturalWidth` for a filename.
+   *
+   * @param {Uint8Array} bytes
+   * @returns {{width:number,height:number}|null}
+   */
+  Sim3DPanel.pngSize = function (bytes) {
+    if (!bytes || bytes.length < 24) return null;
+    const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    for (let i = 0; i < signature.length; i += 1) {
+      if (bytes[i] !== signature[i]) return null;
+    }
+    const read = (at) => (
+      (bytes[at] << 24 | bytes[at + 1] << 16 | bytes[at + 2] << 8 | bytes[at + 3]) >>> 0
+    );
+    const width = read(16);
+    const height = read(20);
+    return width > 0 && height > 0 ? { width, height } : null;
+  };
+
+  /**
+   * A CaptureSettings slug can carry a ratio spec (`16:9-1600x900`), and
+   * a colon is an illegal filename character on Windows and shows up as
+   * `/` in Finder — fold anything outside the safe set to a dash.
+   */
+  function fileSafe(name) {
+    return String(name).replace(/[^a-z0-9._-]+/gi, '-');
+  }
+
+  function saveLink(href, name) {
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = name;
+    link.click();
+  }
 
   function rangeRow(axis, label, min, max, value) {
     return '<div class="r3d-range-row"><span>' + label + '</span>' +
