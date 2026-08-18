@@ -2074,6 +2074,106 @@
     #simNativeView .screens-card { width: auto; left: 12px; right: 12px; }
   }
 
+  /* --- Capture: output size + recording -------------------------------
+     One picked size drives both the Screenshot button and the recorder,
+     in 2D and in 3D. The vocabulary itself lives in
+     Resources/Web/capture/ (docs/features/capture-size.md); this block
+     is only the focus-mode dressing.
+
+     CaptureSizeMenu ships its own stylesheet, written against a generic
+     token set with light-mode fallbacks so it can mount anywhere.
+     Binding those names to the focus-mode palette on the mount host is
+     what makes the chip and its popover follow dark/light with the rest
+     of the bar, without the module needing to know this page exists. */
+  #simNativeView #nativeCaptureSize {
+    display: inline-flex; flex: 0 0 auto;
+    --nv-panel:  var(--nv-page-bg);
+    --nv-border: var(--nv-divider);
+    --nv-btn:    var(--nv-fmt-track-bg);
+    --accent:     var(--nv-accent);
+    --text-muted: var(--nv-text-muted);
+  }
+  /* Match the toolbar's icon buttons rather than the menu's own 26px. */
+  #simNativeView #nativeCaptureSize .cap-size-chip { height: 28px; }
+  /* Gated with the icon strip: a size means nothing without a stream. */
+  #simNativeView[data-power] #nativeCaptureSize {
+    opacity: 0.35; pointer-events: none;
+  }
+
+  /* `.ico-btn` sets `display: inline-flex`, which beats the UA's
+     `[hidden] { display: none }` — the Record button hides itself when
+     the browser has no MediaRecorder, so it needs this to actually go. */
+  #simNativeView .ico-btn[hidden] { display: none; }
+
+  /* Record. The button carries the whole recording state: a red fill, a
+     pulsing glyph, and an elapsed mm:ss readout that exists only while
+     running — the focus bar has no other surface to say "still
+     recording" on. The readout widens the button, which is why
+     `updateRecordButton` re-runs the toolbar's overflow measurement. */
+  #simNativeView #nativeRecordBtn.recording {
+    width: auto; gap: 5px; padding: 0 8px;
+    background: var(--nv-danger); color: #fff;
+  }
+  #simNativeView #nativeRecordBtn.recording svg {
+    animation: nv-rec-pulse 1.2s ease-in-out infinite;
+  }
+  #simNativeView #nativeRecordBtn .rec-timer {
+    display: none;
+    font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  #simNativeView #nativeRecordBtn.recording .rec-timer { display: inline; }
+  @keyframes nv-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* Finished recordings. A file that lands with no visible link is a
+     file the user loses, and focus mode has no sidebar to hang a
+     gallery off — so the dock is its own small floating card, shown
+     only once something is in it. Bottom-right, clear of the plugin /
+     screens cards at the top and the theme pill on the left. */
+  #simNativeView .rec-dock {
+    position: fixed; bottom: 18px; right: 76px; z-index: 40;
+    width: 236px;
+    display: none; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    overflow: hidden;
+  }
+  #simNativeView .rec-dock[data-open] { display: flex; }
+  #simNativeView .rec-dock-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 6px 7px 12px;
+    border-bottom: 1px solid var(--nv-divider);
+    color: var(--nv-text-muted);
+    font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.09em; text-transform: uppercase;
+  }
+  #simNativeView .rec-dock-head .rec-dock-close { margin-left: auto; width: 22px; height: 22px; }
+  #simNativeView .rec-dock-list {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 6px; max-height: 40vh; overflow-y: auto;
+  }
+  #simNativeView .rec-dock-list a {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 8px;
+    color: var(--nv-text); text-decoration: none;
+    font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .rec-dock-list a:hover { background: var(--nv-btn-hover); }
+  #simNativeView .rec-dock-list a svg { flex: 0 0 auto; color: var(--nv-text-muted); }
+  #simNativeView .rec-dock-list .rec-meta {
+    margin-left: auto; color: var(--nv-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 560px) {
+    #simNativeView .rec-dock { right: 12px; left: 12px; width: auto; }
+  }
+
   /* Preview ribbon — only when opened via file:// */
   #simNativeView .preview-banner {
     display: none; position: fixed; top: 10px; right: 10px; z-index: 999;
@@ -2246,6 +2346,26 @@
             <circle cx="12" cy="13" r="3.5"/>
           </svg>
         </button>
+        <!-- Record — the moving-picture sibling of Screenshot, and the
+             other half of what the size chip drives. Captures the live
+             view in the browser (MediaRecorder over a compose canvas,
+             no server round-trip) in whichever mode is showing: 2D
+             records the bezel composite plus the pinch dots, 3D records
+             the server-rendered device frame as it already is. Hidden
+             outright where MediaRecorder doesn't exist — a Record
+             button that can't record is worse than none. -->
+        <button class="ico-btn" id="nativeRecordBtn" title="Record video"
+                aria-label="Start recording" aria-pressed="false"
+                onclick="window.__nativeRecord && window.__nativeRecord()">
+          <!-- Ring around a filled dot — the universal record glyph.
+               The whole mark pulses while a recording is running. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <circle cx="12" cy="12" r="8.5"/>
+            <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>
+          </svg>
+          <span class="rec-timer" id="nativeRecordTimer"></span>
+        </button>
         <button class="ico-btn" title="App switcher"
                 aria-label="Open app switcher"
                 onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
@@ -2290,6 +2410,17 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
              stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
+
+      <!-- Capture output size — the chip that says "App Store 6.9″" /
+           "Square" / "Native" for both Screenshot and Record. Mounted
+           by CaptureSizeMenu (sim-native.js `mountCaptureUI`), so it
+           stays an empty zero-width box until then.
+
+           Deliberately OUTSIDE `#nativeToolScroll`, even though it
+           belongs with the actions at that strip's right end: the strip
+           is an `overflow-x: auto` container, and the popover this chip
+           opens would be clipped at its edge. -->
+      <div id="nativeCaptureSize"></div>
     </div>
   </div>
 
@@ -2504,6 +2635,27 @@
       </button>
     </header>
     <div id="nativeLocationHost"></div>
+  </aside>
+
+  <!-- Recordings dock. A MediaRecorder artifact only exists as a Blob
+       URL in this tab, so if nothing on the page links to it the
+       recording is simply gone. The dock opens itself when the first
+       one lands and lists them newest-first; closing it revokes every
+       URL it was holding, which is what keeps a long session from
+       accumulating video in memory. -->
+  <aside class="rec-dock" id="nativeRecordDock" aria-label="Recordings">
+    <header class="rec-dock-head">
+      <span>Recordings</span>
+      <button class="ico-btn rec-dock-close" title="Clear recordings"
+              aria-label="Clear recordings"
+              onclick="window.__nativeClearRecordings && window.__nativeClearRecordings()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div class="rec-dock-list" id="nativeRecordList"></div>
   </aside>
 </div>
 

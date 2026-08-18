@@ -355,6 +355,12 @@
     wireUnload();
     applyStoredTheme();
 
+    // Capture surface — the output-size chip and the Record button.
+    // Deliberately not awaited: the size vocabulary is four small files
+    // and nothing on the stream path needs them, so the device paints
+    // while they arrive.
+    void ensureCaptureModules().then(mountCaptureUI);
+
     // Drag-and-drop: drop an .ipa/.app to install, or an image/video to
     // add to Photos. Dumb sender — POSTs the bytes to `/files`; the
     // Swift side routes by extension. The drop zone + highlight are
@@ -436,6 +442,10 @@
   // to swap formats — the WS protocol is per-connection and the
   // server's makeStream(...) is keyed at session open.
   function startSession(format) {
+    // A recording samples the canvas this session paints into; a
+    // restart (format swap, 3D close, device re-open) leaves it blank
+    // for however long the new socket takes to land its first frame.
+    if (session) cancelRecording('stream restarted');
     if (session) { try { session.stop(); } catch (_) {} session = null; }
     // Same text-frame router as sim-stream.js: hand JSON envelopes
     // to the inspector first, then claim paste_result; anything
@@ -1200,6 +1210,10 @@
     // issue here.
     window.__nativeAppSwitcher = () => sim && sim.pressButton('app-switcher');
     window.__nativeScreenshot = () => downloadSnapshot();
+    // Record is Screenshot's moving-picture sibling: same source, same
+    // picked size, one toggle instead of a one-shot.
+    window.__nativeRecord = () => { void toggleRecording(); };
+    window.__nativeClearRecordings = () => clearRecordings();
     window.__nativeClose = () => {
       // Shutting the window from inside a popup-style URL: try
       // window.close (only works for script-opened tabs) then fall
@@ -1431,6 +1445,13 @@
     const btn = document.getElementById('native3DToggle');
     const open = view && view.getAttribute('data-render3d') === 'open';
     if (!view || !host || !stage || !sim) return;
+    // The canvas being recorded is about to be swapped for the other
+    // mode's, and the two are different surfaces at different sizes.
+    cancelRecording('switched between 2D and 3D');
+    // The bezel switch only makes sense in 2D: the 3D render already
+    // carries the device body, so compositing a second one would draw
+    // the phone twice. `open` is the state we're leaving.
+    if (captureMenu) captureMenu.showFrameToggle = open;
     if (open) {
       view.removeAttribute('data-render3d');
       view.removeAttribute('data-render3d-inspector');
@@ -1490,6 +1511,8 @@
   function wireUnload() {
     window.addEventListener('beforeunload', () => {
       try { hidePowerCard(); } catch (_) { /* ignore */ }
+      try { cancelRecording('page unloading'); } catch (_) { /* ignore */ }
+      try { clearRecordings(); } catch (_) { /* ignore */ }
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
       try { if (carplaySession) carplaySession.stop(); } catch (_) { /* ignore */ }
       try { if (carplayScreen) carplayScreen.detach(); } catch (_) { /* ignore */ }
@@ -1507,33 +1530,398 @@
     });
   }
 
-  // Take a snapshot from the live canvas and trigger a download. We
-  // skip CaptureGallery here — the focus chrome has nowhere to put a
-  // thumbnail strip, and the user just wants the file.
-  function downloadSnapshot() {
+  // --- Capture: one picked size, two verbs, two modes ---------------
+  //
+  // "App Store 6.9″" / "Square" / "16:9" is chosen once, on the chip in
+  // the toolbar, and both Screenshot and Record come out at it — in 2D
+  // and in 3D alike. The vocabulary is shared with the HTTP routes and
+  // the CLI and lives in Resources/Web/capture/; see
+  // docs/features/capture-size.md. Nothing here reimplements any of it.
+  //
+  // Those modules are pulled in at runtime rather than with a <script>
+  // tag, because this page has no <head> of its own: sim.html carries
+  // the page's script tags, and `fetchTemplate` deliberately drops the
+  // ones inside sim-native.html. Anything already on the page (sim.html
+  // loads /recorder.js today) is left alone — the guard is the global
+  // the module hangs itself on, not the URL, so this stays correct
+  // whichever page happens to have loaded it first.
+  const CAPTURE_MODULES = [
+    ['/capture/capture-size.js', () => window.Baguette && window.Baguette._CaptureSize],
+    ['/capture/capture-settings.js', () => window.Baguette && window.Baguette._CaptureSettings],
+    ['/capture/capture-composer.js', () => window.Baguette && window.Baguette._CaptureComposer],
+    ['/capture/capture-size-menu.js', () => window.CaptureSizeMenu],
+    ['/recorder.js', () => window.BrowserRecorder],
+  ];
+
+  let captureMenu = null;   // CaptureSizeMenu — the size chip in the toolbar
+
+  // Recording state, mirroring sim-stream.js's `recordingState`:
+  //   recorder  : BrowserRecorder while a recording is in flight
+  //   active    : true between start() and stop()
+  //   startedAt : ms timestamp behind the mm:ss readout
+  //   timer     : interval handle ticking that readout
+  //   entries   : finished artifacts — Blob URLs we own and must revoke
+  const recordingState = {
+    recorder: null, active: false, startedAt: 0, timer: null, entries: [],
+  };
+
+  let _captureModulesPromise = null;
+  function ensureCaptureModules() {
+    if (_captureModulesPromise) return _captureModulesPromise;
+    _captureModulesPromise = (async () => {
+      for (const [src, present] of CAPTURE_MODULES) {
+        if (present()) continue;
+        await loadScript(src);
+      }
+    })();
+    return _captureModulesPromise;
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = () => resolve(true);
+      el.onerror = () => { console.warn('[native] failed to load', src); resolve(false); };
+      document.head.appendChild(el);
+    });
+  }
+
+  function mountCaptureUI() {
+    const host = document.getElementById('nativeCaptureSize');
+    if (host && window.CaptureSizeMenu && !captureMenu) {
+      captureMenu = new window.CaptureSizeMenu({
+        storageKey: 'asc.capture.native',
+        // The bezel switch is meaningless in 3D — the rendered frame
+        // already carries the device body. `toggle3D` flips this.
+        showFrameToggle: !is3DOpen(),
+        // The popover shows each preset's resolved pixels, so it has to
+        // be told what the *composite* is — the bezel viewport when the
+        // frame is on, the bare canvas when it isn't.
+        sourceSize: () => compositeSourceSize(),
+        onChange: () => refreshToolbarScroll(),
+      });
+      captureMenu.mount(host);
+    }
+    // A Record button that can't record is worse than no Record button.
+    const btn = document.getElementById('nativeRecordBtn');
+    if (btn) {
+      btn.hidden = !(window.BrowserRecorder && window.BrowserRecorder.isAvailable());
+    }
+    refreshToolbarScroll();
+  }
+
+  function is3DOpen() {
     const view = document.getElementById('simNativeView');
-    if (view && view.getAttribute('data-render3d') === 'open' && render3DPanel) {
-      render3DPanel.download();
+    return !!(view && view.getAttribute('data-render3d') === 'open');
+  }
+
+  function captureSettings() {
+    if (captureMenu) return captureMenu.settings;
+    const CaptureSettings = window.Baguette && window.Baguette._CaptureSettings;
+    return CaptureSettings ? new CaptureSettings() : null;
+  }
+
+  /**
+   * What a capture reads from, in whichever mode is actually showing.
+   *
+   * 3D is bezel-less on purpose: the server-rendered frame already
+   * contains the device body, so compositing a second bezel over it
+   * would draw the phone twice. `frameImg: null, screen: null` is how
+   * both CaptureComposer and BrowserRecorder spell "bare canvas".
+   *
+   * @returns {{canvas, frameImg, screen, overlayHost, mode}|null}
+   */
+  function activeCaptureSource() {
+    if (is3DOpen()) {
+      const canvas = render3DPanel && render3DPanel.canvas;
+      // `data-painted` is Sim3DPanel's own "a frame has landed" flag;
+      // without it the canvas is a blank allocation.
+      if (!canvas || !canvas.width || !canvas.hasAttribute('data-painted')) return null;
+      return {
+        canvas, frameImg: null, screen: null, overlayHost: null, mode: '3d',
+      };
+    }
+    if (!sim || !sim.canvas || !sim.canvas.width) return null;
+    const settings = captureSettings();
+    const withFrame = settings ? settings.withFrame : false;
+    return {
+      canvas: sim.canvas,
+      frameImg: withFrame && sim._bezel ? sim._bezel.frameImg : null,
+      screen: withFrame ? sim.screen.def : null,
+      overlayHost: sim.pinchOverlayContainer,
+      mode: '2d',
+    };
+  }
+
+  /**
+   * How far to supersample the bezel composite.
+   *
+   * The bezel art is authored at layout scale — 474 × 990 points for an
+   * iPhone 17 Pro Max — while the live canvas carries the device's full
+   * 1290 × 2796 framebuffer. Compositing at the bezel's own size would
+   * resample the screen down by ~3x and throw the detail away before
+   * the picked size ever gets a look at it, so the composite is grown
+   * until the screen cutout is 1:1 with the frames arriving and the
+   * bezel is scaled up to meet it: soft chrome around a sharp screen
+   * beats a sharp frame around a thumbnail. Capped so an unusually
+   * large source can't ask for a canvas the browser refuses to
+   * allocate. 1 with no bezel — the canvas is already the composite.
+   */
+  function compositeScale(source) {
+    if (!source || !source.screen || !source.screen.rect) return 1;
+    const width = source.screen.rect.width;
+    if (!(width > 0)) return 1;
+    return Math.min(4, Math.max(1, source.canvas.width / width));
+  }
+
+  /** The composite's size at capture scale, before the picked size. */
+  function compositeSourceSize() {
+    const source = activeCaptureSource();
+    const Composer = window.Baguette && window.Baguette._CaptureComposer;
+    if (!source || !Composer) return null;
+    const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
+    const scale = compositeScale(source);
+    return {
+      width: Math.round(natural.width * scale),
+      height: Math.round(natural.height * scale),
+    };
+  }
+
+  // Take a snapshot and trigger a download, composed at whatever the
+  // size chip says. We skip CaptureGallery here — the focus chrome has
+  // nowhere to put a thumbnail strip, and the user just wants the file.
+  function downloadSnapshot() {
+    const source = activeCaptureSource();
+    if (!source) return;
+    const settings = captureSettings();
+    const Composer = window.Baguette && window.Baguette._CaptureComposer;
+    // The capture modules failed to load: still hand over the frame at
+    // native size rather than doing nothing at all.
+    if (!settings || !Composer) {
+      source.canvas.toBlob((blob) => {
+        if (blob) saveBlob(blob, `${deviceSlug()}-${captureStamp()}.png`);
+      }, 'image/png');
       return;
     }
-    if (!sim || !sim.canvas) return;
-    const w = lastPaintedSize.w || sim.canvas.width;
-    const h = lastPaintedSize.h || sim.canvas.height;
-    if (!w || !h) return;
-    sim.canvas.toBlob((blob) => {
-      if (!blob) return;
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const safe = (deviceName || 'simulator').replace(/[^A-Za-z0-9._-]/g, '_');
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${safe}-${stamp}.png`;
-      document.body.appendChild(a);
-      a.click();
-      requestAnimationFrame(() => {
-        URL.revokeObjectURL(a.href);
-        a.remove();
+
+    const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
+    if (!natural.width || !natural.height) return;
+    const scale = compositeScale(source);
+    const plan = settings.plan(natural.width * scale, natural.height * scale);
+    if (!plan.width || !plan.height) return;
+
+    const out = document.createElement('canvas');
+    out.width = plan.width;
+    out.height = plan.height;
+    const ctx = out.getContext('2d');
+    // A ratio preset only ever grows the canvas, but a fixed App Store
+    // size can ask for a real rescale — take the browser's good
+    // resampler rather than its default nearest-neighbour.
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    Composer.compose(ctx, plan, settings.effectiveBackground, (c) => {
+      // `compose` has already set the transform for a source of
+      // `natural * scale`; `paintComposite` paints at `natural`, so the
+      // supersample factor goes on here.
+      if (scale !== 1) c.scale(scale, scale);
+      Composer.paintComposite(c, {
+        frameImg: source.frameImg,
+        screen: source.screen,
+        sourceCanvas: source.canvas,
       });
+    });
+    out.toBlob((blob) => {
+      if (!blob) return;
+      saveBlob(blob,
+        `${deviceSlug()}-${captureStamp()}-${settings.slug(plan.width, plan.height)}.png`);
     }, 'image/png');
+  }
+
+  // --- Recording ----------------------------------------------------
+
+  function toggleRecording() {
+    if (recordingState.active) return stopRecording();
+    return startRecording();
+  }
+
+  function startRecording() {
+    if (!window.BrowserRecorder || !window.BrowserRecorder.isAvailable()) return;
+    const source = activeCaptureSource();
+    if (!source) return;
+    try {
+      const rec = new window.BrowserRecorder({
+        canvas: source.canvas,
+        // In 3D both of these are null, which BrowserRecorder already
+        // reads as "record the bare canvas" — the same result a
+        // dedicated `bezel: false` option gives, without depending on
+        // it having landed.
+        frameImg: source.frameImg,
+        screen: source.screen,
+        overlayHost: source.overlayHost,
+        // Forward-compatible hint: sizing a recording is the recorder's
+        // job (it owns the compose canvas), and it ignores keys it
+        // doesn't know. Screenshots are sized here, above.
+        settings: captureSettings(),
+        fps: 60,
+      });
+      rec.start();
+      recordingState.recorder = rec;
+      recordingState.active = true;
+      recordingState.startedAt = Date.now();
+      if (recordingState.timer) clearInterval(recordingState.timer);
+      recordingState.timer = setInterval(updateRecordButton, 250);
+      updateRecordButton();
+    } catch (err) {
+      console.warn('[native] recording failed to start:', err);
+      resetRecordingState();
+      updateRecordButton();
+    }
+  }
+
+  async function stopRecording() {
+    const rec = recordingState.recorder;
+    // Optimistic UI: the button leaves the recording state the instant
+    // the user clicks, because MediaRecorder's final chunk can take a
+    // beat to land on a longer take.
+    recordingState.recorder = null;
+    resetRecordingState();
+    updateRecordButton();
+    if (!rec) return;
+    try {
+      const artifact = await rec.stop();
+      if (!artifact || typeof artifact.url !== 'string') return;
+      // Name it after the device and the picked size, the way the
+      // screenshot is — BrowserRecorder only knows a timestamp.
+      const settings = captureSettings();
+      const ext = (artifact.filename || '').split('.').pop() || 'webm';
+      const slug = settings ? `-${settings.size.spec}` : '';
+      artifact.filename = `${deviceSlug()}-${captureStamp()}${slug}.${ext}`;
+      recordingState.entries.unshift(artifact);
+      renderRecordings();
+    } catch (err) {
+      console.warn('[native] recording failed to stop:', err);
+    }
+  }
+
+  /// Drop an in-flight recording on the floor. The source canvas is
+  /// about to stop being the thing the user asked to record — the
+  /// stream restarted, the device changed, or they flipped 2D↔3D — and
+  /// a recorder left running would keep sampling a dead or wrong
+  /// surface.
+  function cancelRecording(reason) {
+    if (!recordingState.recorder && !recordingState.active) return;
+    try {
+      if (recordingState.recorder) recordingState.recorder.cancel();
+    } catch (_) { /* already torn down */ }
+    recordingState.recorder = null;
+    resetRecordingState();
+    updateRecordButton();
+    console.log('[native] recording cancelled:', reason);
+  }
+
+  function resetRecordingState() {
+    recordingState.active = false;
+    recordingState.startedAt = 0;
+    if (recordingState.timer) {
+      clearInterval(recordingState.timer);
+      recordingState.timer = null;
+    }
+  }
+
+  function updateRecordButton() {
+    const btn = document.getElementById('nativeRecordBtn');
+    if (!btn) return;
+    const was = btn.classList.contains('recording');
+    btn.classList.toggle('recording', recordingState.active);
+    btn.setAttribute('aria-pressed', recordingState.active ? 'true' : 'false');
+    btn.title = recordingState.active ? 'Stop recording' : 'Record video';
+    btn.setAttribute('aria-label',
+      recordingState.active ? 'Stop recording' : 'Start recording');
+    const timer = document.getElementById('nativeRecordTimer');
+    if (timer) {
+      timer.textContent = recordingState.active
+        ? formatElapsed((Date.now() - recordingState.startedAt) / 1000)
+        : '';
+    }
+    // The mm:ss readout appears and disappears with the state, which
+    // changes the button's width — and therefore whether the icon strip
+    // overflows. Without a re-measure the scroll chevrons go stale.
+    if (was !== recordingState.active) refreshToolbarScroll();
+  }
+
+  function renderRecordings() {
+    const dock = document.getElementById('nativeRecordDock');
+    const list = document.getElementById('nativeRecordList');
+    if (!dock || !list) return;
+    if (!recordingState.entries.length) {
+      dock.removeAttribute('data-open');
+      list.innerHTML = '';
+      return;
+    }
+    list.innerHTML = recordingState.entries.map((e) => `
+      <a href="${e.url}" download="${escapeAttribute(e.filename)}"
+         title="Download ${escapeAttribute(e.filename)}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span>${formatElapsed(e.durationSeconds)}</span>
+        <span class="rec-meta">${formatBytes(e.bytes)}</span>
+      </a>`).join('');
+    dock.setAttribute('data-open', '');
+  }
+
+  /// Empty the dock and hand every Blob back to the browser. A recorded
+  /// minute is tens of megabytes held live by its URL; a session that
+  /// records all afternoon and never revokes keeps every one of them.
+  function clearRecordings() {
+    recordingState.entries.forEach((e) => {
+      if (e.url && e.url.startsWith('blob:')) URL.revokeObjectURL(e.url);
+    });
+    recordingState.entries = [];
+    renderRecordings();
+  }
+
+  function formatElapsed(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function formatBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function escapeAttribute(text) {
+    return String(text == null ? '' : text)
+      .replace(/[&<>"]/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+      ));
+  }
+
+  function deviceSlug() {
+    return (deviceName || 'simulator').replace(/[^A-Za-z0-9._-]/g, '_');
+  }
+
+  function captureStamp() {
+    return new Date().toISOString().replace(/[:.]/g, '-');
+  }
+
+  function saveBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    requestAnimationFrame(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    });
   }
 
   console.log('[Baguette] sim-native.js active for', udid);
