@@ -405,7 +405,7 @@ rejected.
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
 | `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG (`?quality=&scale=&size=&fit=&background=`) |
-| `GET`  | `/simulators/:udid/screenshot.png`         | the same frame, lossless |
+| `GET`  | `/simulators/:udid/screenshot.png`         | the same frame, in a lossless container |
 | `GET`  | `/simulators/:udid/screenshot-bezel.png`   | the frame composited inside its DeviceKit bezel (`&buttons=`) |
 | `GET`  | `/simulators/:udid/interface.json`         | appearance + contrast + content size |
 | `POST` | `/simulators/:udid/interface`              | set any subset; answers with the resulting state |

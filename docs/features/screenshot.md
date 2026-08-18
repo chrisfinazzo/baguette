@@ -5,7 +5,8 @@ whatever size you asked for. Entry points that share one capture path:
 
 - `GET /simulators/:udid/screenshot.jpg` — served by `baguette serve`,
   returns `image/jpeg` bytes.
-- `GET /simulators/:udid/screenshot.png` — the same frame, lossless.
+- `GET /simulators/:udid/screenshot.png` — the same frame, in a
+  lossless container.
 - `GET /simulators/:udid/screenshot-bezel.png` — the frame composited
   inside the device's DeviceKit bezel.
 - `baguette screenshot --udid <UDID>` — CLI; writes to `--output` or
@@ -43,7 +44,8 @@ Three later requests reshaped it:
 - **A lossless container.** JPEG is the right default for a dashboard
   thumbnail and the wrong one for anything that gets composited,
   annotated, or re-saved: every round trip through it adds another
-  layer of 8×8 block artefacts. PNG stops the bleeding.
+  layer of 8×8 block artefacts. PNG stops the *further* bleeding — see
+  the known limit about the one JPEG hop still in the capture path.
 - **A size that means something.** `--scale 2` answers "half of
   whatever the device is", which nobody's App Store submission asks
   for. `--size appstore-6.9` answers the question people actually
@@ -202,7 +204,7 @@ producing, not of the stream you're watching.
 | Knob        | CLI flag       | URL param      | Default    | What it changes |
 |-------------|----------------|----------------|------------|-----------------|
 | Format      | `--format`     | the route path | inferred from `--output`, else `jpg` | `png` is lossless; over HTTP the extension *is* the format |
-| Quality     | `--quality`    | `?quality=`    | `0.85`     | JPEG lossy compression (0.0 – 1.0) — see below for PNG |
+| Quality     | `--quality`    | `?quality=`    | `0.85` on `.jpg`, `1.0` on the PNG routes | JPEG lossy compression (0.0 – 1.0) — see below for PNG |
 | Scale       | `--scale`      | `?scale=`      | `1`        | Integer downscale divisor (1 = native, 2 = half, …) |
 | Size        | `--size`       | `?size=`       | `native`   | Output canvas — a preset, `WIDTHxHEIGHT`, or `W:H` |
 | Fit         | `--fit`        | `?fit=`        | `contain`  | `contain` letterboxes, `cover` crops, `stretch` distorts |
@@ -214,11 +216,15 @@ Both `quality` and `scale` are clamped to sane minima — `scale` is
 floored at `1`, `quality` is whatever `kCGImageDestinationLossyCompressionQuality`
 clamps it to (effectively `[0, 1]`).
 
-`--quality` has no effect on a PNG from the CLI — PNG is lossless, so
-there is nothing to trade. The HTTP PNG routes still accept
-`?quality=`, where it governs the intermediate capture rather than the
-delivered file; pass `quality=1` if you are diffing PNGs and want to
-be sure nothing lossy happened upstream of the encoder.
+`--quality` has no effect on a PNG from the CLI. The HTTP PNG routes
+do still accept `?quality=`, but it governs the **JPEG intermediate**
+the capture pipeline produces, not the delivered PNG: `ScreenSnapshot`
+encodes JPEG unconditionally, and the PNG routes decode that back to a
+`CGImage` before re-encoding. It defaults to `1.0` there (against
+`0.85` on `screenshot.jpg`), so a PNG is near-lossless out of the box
+— but not bit-exact. Lowering `?quality=` on a `.png` request degrades
+the image *inside* a lossless container, which is the sort of thing
+worth knowing before you do it by accident.
 
 The preset table lives in [`capture-size.md`](capture-size.md) and is
 not duplicated here — there is one catalogue, and this is one of its
@@ -275,6 +281,16 @@ rectangle. `?size=` / `?fit=` / `?background=` then apply to the
 composited image, so `?size=square&background=ffffff` gives you the
 bezelled device centred on a white square — which is the actual
 marketing shot, in one GET, without a browser.
+
+**The composite is sized off the framebuffer, not off the chrome.**
+DeviceKit geometry is in 1× points; the captured frame is in device
+pixels. Sizing the canvas from the chrome would throw away most of the
+capture, so it goes the other way — the canvas takes the capture's
+resolution and the chrome is resampled up to meet it. An iPhone 17 Pro
+Max asked for `screenshot-bezel.png` with no parameters comes back at
+1483 × 2984, not the chrome's ~494 × 995. It never drops below 1×
+either, so a heavy `?scale=` shrinks the screen content but not the
+bezel around it.
 
 A device with no DeviceKit artwork gets a `404`, not an invented grey
 rectangle. See [`chrome-bezel.md`](chrome-bezel.md) for which devices
@@ -379,6 +395,13 @@ integration-only.
   on a portrait device produces a very wide image. Use an explicit
   `WIDTHxHEIGHT` when you want a bounded output, or `--fit cover` when
   you genuinely do want the crop.
+- **PNG is not bit-exact.** `ScreenSnapshot` encodes JPEG
+  unconditionally, so the PNG routes decode that intermediate and
+  re-encode it losslessly. At the default `?quality=1.0` the loss is
+  negligible, but a golden-image diff of two captures of the *same*
+  unchanged frame is not guaranteed byte-identical. Removing the round
+  trip means teaching the capture helper to hand back a `CGImage`
+  rather than `Data`; it hasn't landed.
 - **`transparent` is a PNG-only answer.** JPEG has no alpha; a
   transparent background composites onto black there. Nothing warns
   you — the flags are independent.
@@ -415,6 +438,10 @@ integration-only.
   same composite the route does; the reason it doesn't exist yet is
   that the chrome rasterization currently lives on the server side of
   the split, not that it's hard.
+- **A JPEG-free PNG path.** `ScreenSnapshot` returns encoded `Data`,
+  which forces the JPEG hop above. Returning a `CGImage` and letting
+  each caller choose its encoder would make `screenshot.png` genuinely
+  bit-exact and would save the bezel route a decode as well.
 - **WebP / AVIF.** The `CGImageDestination` switch is a one-line
   format string; smaller payloads at the same visual quality matter
   for thumbnail-heavy pages like `/farm`.
