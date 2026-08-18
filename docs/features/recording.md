@@ -75,9 +75,12 @@ screen geometry it uses are the same `/simulators/:udid/bezel.png`
 (the bare variant via `?buttons=false`) and
 `/simulators/:udid/definition.json` the SDK already fetches; the
 recorder doesn't refetch them — it reuses the references the SDK's
-`Bezel` part already holds. The `capture/*.js` trio must be loaded
-before `/recorder.js` is used; the recorder throws a clear error at
-`start()` rather than silently falling back to native size.
+`Bezel` part already holds. The `capture/*.js` trio is what makes the
+size options work; a page that doesn't load it still records, at the
+natural composite size, after one `console.warn`. Recording is old
+enough to predate the vocabulary — `sim.html` and the device farm both
+used it before any of this existed — so a hard failure there would have
+broken working pages for the sake of an option they never passed.
 
 ## Pipeline
 
@@ -89,17 +92,22 @@ Live view (DOM, untouched while idle)
    ── Record pressed ──────────────────────────────────────
    ↓
 BrowserRecorder.start()
-   1. natural size = CaptureComposer.compositeSize(frameImg, screen, canvas)
-        bezel on  → screen.viewport      bezel off → the source canvas
-   2. plan = settings.plan(natural.width, natural.height)
+   1. { width, height, scale } =
+        CaptureComposer.composite(frameImg, screen, canvas)
+        bezel on  → screen.viewport GROWN until the screen cutout is 1:1
+                    with the arriving frames (see below)
+        bezel off → the source canvas, scale 1
+   2. plan = settings.plan(width, height)
       allocate compose canvas at plan.width × plan.height   ← TARGET size
    3. start rAF compose loop:
-        CaptureComposer.compose(ctx, plan, background, (c) =>
+        CaptureComposer.compose(ctx, plan, background, (c) => {
+          if (scale !== 1) c.scale(scale, scale)
           CaptureComposer.paintComposite(c, {
             frameImg,        ← bezel under
             sourceCanvas,    ← live frames, clipped to the screen radius
             onOverlay,       ← pinch dots, inside that clip
-          }))
+          })
+        })
    4. compose.captureStream(fps) → MediaRecorder
 
    ── Stop pressed ───────────────────────────────────────
@@ -136,6 +144,18 @@ placement maths; the recorder-specific parts are:
   its scale part-way through, later frames are re-planned against the
   box that was frozen at Record and letterboxed into it. Changing the
   picker takes effect on the *next* recording.
+- **The bezel composite is supersampled before the target size is
+  applied.** DeviceKit authors its bezels in points — an iPhone 17 Pro
+  Max frame is a 474 x 990 viewport around a 438 x 954 cutout — while
+  the live canvas carries the device's full 1320 x 2868 framebuffer.
+  Compositing at the bezel's own size would resample the screen down
+  by ~3x and throw the detail away before the picked size ever got a
+  look at it, so `CaptureComposer.composite` grows the composite until
+  the cutout is 1:1 with the arriving frames and scales the bezel up
+  to meet it. Soft chrome around a sharp screen beats a sharp frame
+  around a thumbnail. Growth is capped at 4x — a canvas the browser
+  refuses to allocate paints nothing at all — and the bezel-less path
+  stays 1:1, because that canvas is already at capture scale.
 - **The filename carries the slug**, so a folder of clips says what
   each one is: `iPhone_17_Pro-<stamp>-appstore-6.9-1290x2796.mp4`.
   `CaptureSettings.slug()` sanitises the spec, so a ratio lands as
@@ -534,11 +554,15 @@ Resources/Web/
     └── …
 ```
 
-`recorder.js` is loaded by `sim.html`, `sim-native.html`, and
-`farm/farm.html` via `<script src="/recorder.js">` — same pattern as
-the other shared modules. Each of those pages loads the `capture/`
-trio first; `recorder.js` needs `CaptureSize`, `CaptureSettings`, and
-`CaptureComposer` on `window.Baguette` before `start()`.
+`recorder.js` is loaded by exactly two pages — `sim.html` and
+`farm/farm.html` — via `<script src="/recorder.js">`, the same pattern
+as the other shared modules. The native view has no script tag of its
+own: `sim-native.html` is a *template* that `sim-native.js` extracts
+into the live page, and `sim.html` is what loads both of them. Each of
+the two pages loads the `capture/` trio first, so `CaptureSize`,
+`CaptureSettings`, and `CaptureComposer` are on `window.Baguette`
+before `start()` — and see [Surface](#surface) for what happens when
+they aren't.
 
 ## Browser support
 

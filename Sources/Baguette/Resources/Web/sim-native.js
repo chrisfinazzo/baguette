@@ -1726,7 +1726,25 @@
   // Take a snapshot and trigger a download, composed at whatever the
   // size chip says. We skip CaptureGallery here — the focus chrome has
   // nowhere to put a thumbnail strip, and the user just wants the file.
+  //
+  // In 3D the picked size is the SERVER's job, not the composer's. The
+  // stage canvas is a wide, mostly-empty frame with a small device
+  // floating in it — letterboxing that whole frame into an App Store
+  // 6.9″ canvas leaves a postage-stamp phone adrift on white, because
+  // `contain` scales the empty stage, not the device inside it. Framing
+  // a 3D shot is the camera's job, and only the renderer has a camera.
+  // `Sim3DPanel.download` re-renders the exact pose off the stream at
+  // the picked size and falls back to the live frame if the route
+  // fails, so the toolbar button and the panel's own Save Frame produce
+  // the same file — which is what a user who set the size once expects.
   function downloadSnapshot() {
+    if (is3DOpen() && render3DPanel && typeof render3DPanel.download === 'function') {
+      if (typeof render3DPanel.setCaptureSettings === 'function') {
+        render3DPanel.setCaptureSettings(captureSettings());
+      }
+      render3DPanel.download();
+      return;
+    }
     const source = activeCaptureSource();
     if (!source) return;
     const settings = captureSettings();
