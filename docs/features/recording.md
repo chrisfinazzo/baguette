@@ -259,10 +259,12 @@ Recorded 152 frames · 5.03s · 2796×2796 → /tmp/r.mp4
   even width and height, so the planned canvas is rounded **up** and
   the frame re-centred inside it. It is never stretched to fit — a
   half-pixel of letterbox is cheaper than a distorted recording.
-- **`transparent` is rejected, not silently flattened.** MP4 has no
+- **`transparent` is rejected, not silently substituted.** MP4 has no
   alpha channel. `--background` takes `#RRGGBB` and nothing else, so
-  you find out at argument-parse time rather than by discovering a
-  black mat in the finished file.
+  you find out at argument-parse time rather than by discovering a mat
+  you didn't choose in the finished file. (The screenshot routes make
+  the opposite call and quietly mat white — a still is cheap to redo,
+  a ten-second take is not.)
 
 ### Pacing: an idle simulator records nothing
 

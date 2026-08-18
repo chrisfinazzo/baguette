@@ -115,17 +115,19 @@ native | appstore-6.9 | appstore-6.5 | appstore-ipad-13 | square |
 
 ### Picking the format
 
-`--format` takes `png` or `jpg` (`jpeg` is accepted as an alias). It
-is **inferred from `--output` when you don't say**: an output path
-ending in `.png` writes PNG, everything else — including stdout —
-writes JPEG. An explicit `--format` always wins. This exists so
+`--format` takes `png` or `jpg`. It is **inferred from `--output` when
+you don't say**: an output path ending in `.png` writes PNG,
+everything else — including stdout — writes JPEG. An explicit `--format` always wins. This exists so
 `-o hero.png` can't quietly produce a file full of JPEG bytes under a
 `.png` name, which is the kind of thing that surfaces three tools
 later as "your PNG is corrupt".
 
-Over HTTP the extension *is* the format: `screenshot.jpg` and
-`screenshot.png` are two routes, not one route with a parameter, so
-an `<img src>` and a `curl -O` both get the right thing for free.
+`jpeg` is accepted as a CLI alias for `jpg`. Over HTTP there is no
+such latitude: the extension *is* the format, and `screenshot.jpg` /
+`screenshot.png` are two literal routes rather than one route with a
+parameter — so an `<img src>` and a `curl -O` both get the right thing
+for free, and `screenshot.jpeg` is a 404 rather than a third spelling
+to keep alive.
 
 ## Pipeline
 
@@ -252,9 +254,12 @@ finished artefact and a marketing shot on a checkerboard is not what
 anyone meant. `transparent` is one word away when you want to
 composite it yourself.
 
-Then mind the format: **JPEG has no alpha channel**, so
-`--background transparent --format jpg` composites the letterbox onto
-**black**, not white. Ask for PNG whenever you ask for transparency.
+Then mind the format: **JPEG has no alpha channel**, so a `.jpg` can't
+honour `transparent` at all. It mats **white** instead — an unmatted
+transparent canvas flattens to black on encode, and a black border
+around a marketing shot is not what "transparent" was asking for.
+`.png` honours it properly, so ask for PNG whenever you ask for
+transparency.
 
 ## The bezel route
 
@@ -276,8 +281,8 @@ a distorted screenshot inside a correct bezel looks broken in a way a
 1-pixel crop does not.
 
 It is PNG-only, and that is not an oversight: the device body has
-transparent corners, and a JPEG of it would be a phone on a black
-rectangle. `?size=` / `?fit=` / `?background=` then apply to the
+rounded, transparent corners, and JPEG has nowhere to put them —
+every composite would arrive already flattened onto a rectangle. `?size=` / `?fit=` / `?background=` then apply to the
 composited image, so `?size=square&background=ffffff` gives you the
 bezelled device centred on a white square — which is the actual
 marketing shot, in one GET, without a browser.
@@ -402,14 +407,14 @@ integration-only.
   unchanged frame is not guaranteed byte-identical. Removing the round
   trip means teaching the capture helper to hand back a `CGImage`
   rather than `Data`; it hasn't landed.
-- **`transparent` is a PNG-only answer.** JPEG has no alpha; a
-  transparent background composites onto black there. Nothing warns
-  you — the flags are independent.
+- **`transparent` is a PNG-only answer.** JPEG has no alpha, so a
+  `.jpg` quietly mats white instead of honouring it. Nothing warns
+  you — format and background are independent flags.
 - **No bezel on the JPEG routes, and no bezel on the CLI.**
   `screenshot-bezel` is PNG only — DeviceKit chrome has rounded
-  corners and therefore alpha, and a JPEG of it would be a phone on a
-  black rectangle. And there is no `--bezel` flag: the composite is an
-  HTTP route, so a shell script wanting one reaches for `curl`.
+  corners and therefore alpha, which JPEG cannot carry. And there is
+  no `--bezel` flag: the composite is an HTTP route, so a shell script
+  wanting one reaches for `curl`.
 - **Bezel composite needs chrome for the device.** Devices with no
   DeviceKit artwork can't be composited; the route 404s rather than
   falling back to a plain rectangle.

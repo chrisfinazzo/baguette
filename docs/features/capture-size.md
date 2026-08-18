@@ -100,9 +100,12 @@ background, and there is no screenshot behind it to protect.
 Two traps behind that, both from the same root — **most image and
 video formats carry no alpha**:
 
-- **JPEG.** A transparent letterbox in a `.jpg` flattens to *black*,
-  not to white. Pass a hex colour, or ask for PNG. Nothing warns you;
-  format and background are independent flags.
+- **JPEG.** A `.jpg` cannot carry a transparent letterbox, so it mats
+  *white* rather than honouring the request — an unmatted transparent
+  canvas flattens to black on encode, and a black border is not what
+  anyone meant by "transparent". Ask for PNG when you want the mat
+  genuinely absent. Nothing warns you; format and background are
+  independent flags.
 - **MP4.** `baguette record --background transparent` is rejected at
   argument-parse time rather than silently flattened, so you learn
   about it before the ten-second take rather than after.
