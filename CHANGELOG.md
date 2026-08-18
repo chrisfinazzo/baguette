@@ -10,6 +10,46 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **Network conditioning — `baguette network set|clear|status`.** Makes a
+  simulator's apps see a worse network than your Mac has: added latency, a
+  capped downlink, a proportion of requests failing, or hard offline. Named
+  presets borrow Network Link Conditioner's vocabulary *and* its figures
+  (`wifi`, `dsl`, `lte`, `3g`, `edge`, `very-bad-network`, `100-loss`), so
+  `3g` means what everyone already means by 3G. NLC itself, and the
+  `dnctl` / `pfctl` rules under it, are **system-wide** — simulator apps use
+  the host's stack as the host user, so there is no interface to scope a
+  rule to and conditioning one simulator that way degrades the whole Mac.
+  Injecting into the app under test is the only way to scope it, so this
+  works the way the [virtual camera](docs/features/camera.md) and
+  [motion](docs/features/motion.md) do. **Only apps launched after
+  `network set` are conditioned**; changing the condition afterwards reaches
+  a running app without a relaunch.
+  Which interception mechanism matters was measured before any of it was
+  designed: `+[NSURLProtocol registerClass:]` reaches only `NSURLConnection`
+  and `NSURLSession.shared`, and against a real React Native app it caught
+  **zero** of the app's own requests over 100 seconds. Swizzling
+  `+defaultSessionConfiguration` is what reaches `fetch`, image loading and
+  REST clients; both ship, and the load banner says which took. Two more
+  measured facts shape the code: request bodies arrive only as
+  `HTTPBodyStream`, which reads **once**, so a conditioned request is never
+  retried; and the response is paced as bytes arrive rather than buffered
+  and replayed, so a 23 MB bundle doesn't sit in memory.
+  The hazard this is designed against is **forgetting it is on** — unlike a
+  wrong camera picture, a throttle reads as "the app is slow" days later. So
+  plain `baguette network` reports the current condition, `network clear`
+  un-conditions apps that are *already running*, and the browser keeps an
+  amber dot lit whether or not its card was ever opened. Honest about its
+  reach: URLSession-shaped traffic only. `URLSessionWebSocketTask` gets its
+  own hooks and takes latency, loss and offline (not bandwidth — an app
+  cannot observe a partial message). Not conditioned: `WKWebView` page
+  loads, `NWConnection`/Network.framework, raw sockets, and realtime SDKs
+  that open their own socket — Ably's `ably-cocoa` vendors SocketRocket, so
+  `--offline` will not feel offline to it. See
+  [`docs/features/network.md`](docs/features/network.md).
+
+
 ---
 
 ## [0.1.92] - 2026-08-18

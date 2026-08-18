@@ -413,6 +413,8 @@ rejected.
 | `POST` | `/simulators/:udid/input`                  | one gesture envelope — same JSON `baguette input` takes |
 | `POST` | `/simulators/:udid/openurl?url=…`          | open a deep link; answers where it went (`app` / `browser` + warning) |
 | `GET`  | `/simulators/:udid/schemes.json?q=`        | URL schemes the device's apps registered, ranked |
+| `POST` `GET` `DELETE` | `/simulators/:udid/motion`      | injected CoreMotion — activity, pedometer, device motion ([docs](docs/features/motion.md)) |
+| `POST` `GET` `DELETE` | `/simulators/:udid/network`     | injected network conditioning — latency, downlink bandwidth, request loss, offline ([docs](docs/features/network.md)) |
 | `GET`  | `/plugins.json`                            | installed plugin manifests   |
 | `POST` | `/plugins/:id/commands/:cmd?udid=`         | run one plugin contribution, answer its rows |
 | `GET`  | `/bakeries.json`                           | trusted bakeries + pinned commits |
@@ -686,16 +688,25 @@ feature lives in one place across both layers.
 ```
 .
 ├── Makefile                          wraps build.sh
-├── build.sh                          builds VirtualCamera.dylib first,
+├── build.sh                          builds the injected dylibs first,
 │                                     then swift build -c release
 ├── Package.swift                     SPM manifest
 │
-├── VirtualCamera/                    iOS-Simulator dylib (vendored from
-│   ├── Sources/*.{h,m}               asc-pro/SimCam). Cross-compiled
-│   ├── build.sh                      against iphonesimulator SDK,
-│   ├── VirtualCamera.dylib           linker-signed adhoc, fat arm64 +
-│   └── VENDORED_FROM.md              x86_64. Loaded into sim apps via
-│                                     DYLD_INSERT_LIBRARIES.
+├── Injected/                         every dylib loaded into sim apps via
+│   │                                 DYLD_INSERT_LIBRARIES. All three are
+│   │                                 cross-compiled against the
+│   │                                 iphonesimulator SDK (fat arm64 +
+│   │                                 x86_64), linker-signed adhoc, and
+│   │                                 share one shared variable — see
+│   │                                 `InjectedDylibs`.
+│   ├── VirtualCamera/                Mac webcam → AVFoundation. Vendored
+│   │   └── …                         from asc-pro/SimCam; see its
+│   │                                 VENDORED_FROM.md.
+│   ├── VirtualMotion/                answers CoreMotion from a published
+│   │   └── …                         intent.
+│   └── VirtualNetwork/               conditions an app's own URLSession
+│       └── …                         traffic — latency, downlink pacing,
+│                                     request loss, offline.
 │
 ├── Sources/Baguette/
 │   ├── App/                          CLI dispatch + use-case orchestration
@@ -927,7 +938,7 @@ public simulator-control tool. Baguette navigates all three:
 The HID recipe is heavily commented in
 `Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift`. The
 camera pipeline lives in `Sources/Baguette/Infrastructure/Camera/`
-and `VirtualCamera/`. The layered architecture is documented in
+and `Injected/VirtualCamera/`. The layered architecture is documented in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## License

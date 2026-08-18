@@ -35,20 +35,38 @@ struct InjectedDylibInstallPlanTests {
         #expect(a.buildDir != b.buildDir)
     }
 
-    @Test func `two dylibs of the same build land beside each other`() {
+    @Test func `every dylib of the same build lands beside the others`() {
         // Same bytes, different dylibs: the directory is shared, the file
-        // names differ. Both can be armed at once.
-        let camera = InjectedDylibInstallPlan.compute(bytes: Data([0x01]), supportDir: "/s",
-                                                      dylib: .camera)
-        let motion = InjectedDylibInstallPlan.compute(bytes: Data([0x01]), supportDir: "/s",
-                                                      dylib: .motion)
-        #expect(camera.buildDir == motion.buildDir)
-        #expect(camera.destPath != motion.destPath)
+        // names differ. All of them can be armed at once, which is the
+        // whole point of `InjectedDylibs` merging by file name.
+        let plans = [InjectedDylib.camera, .motion, .network].map {
+            InjectedDylibInstallPlan.compute(bytes: Data([0x01]), supportDir: "/s", dylib: $0)
+        }
+        #expect(Set(plans.map(\.buildDir)).count == 1)
+        #expect(Set(plans.map(\.destPath)).count == plans.count)
     }
 
     @Test func `each dylib has its own environment override`() {
         #expect(InjectedDylib.camera.environmentOverride == "BAGUETTE_VIRTUALCAMERA_DYLIB")
         #expect(InjectedDylib.motion.environmentOverride == "BAGUETTE_VIRTUALMOTION_DYLIB")
+        #expect(InjectedDylib.network.environmentOverride == "BAGUETTE_VIRTUALNETWORK_DYLIB")
+    }
+
+    @Test func `each dylib knows where it sits in the source tree`() {
+        // The dev-build fallback walks up from the executable looking for
+        // this path. All three live under one `Injected/` folder, so the
+        // lookup has to name it — a bare `<Name>/<Name>.dylib` stopped
+        // resolving the moment they moved.
+        #expect(InjectedDylib.camera.sourceTreePath == "Injected/VirtualCamera/VirtualCamera.dylib")
+        #expect(InjectedDylib.motion.sourceTreePath == "Injected/VirtualMotion/VirtualMotion.dylib")
+        #expect(InjectedDylib.network.sourceTreePath
+                    == "Injected/VirtualNetwork/VirtualNetwork.dylib")
+    }
+
+    @Test func `the network dylib installs under its own file name`() {
+        let plan = InjectedDylibInstallPlan.compute(
+            bytes: Data("hello".utf8), supportDir: "/s", dylib: .network)
+        #expect(plan.destPath == "/s/builds/2cf24dba5fb0/VirtualNetwork.dylib")
     }
 }
 

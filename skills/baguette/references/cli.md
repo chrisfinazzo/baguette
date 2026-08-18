@@ -446,6 +446,74 @@ browser, that's the **Drive motion sensors** toggle on the Location card.
 Floor counting and the magnetometer stay unavailable on purpose. See
 `docs/features/motion.md`.
 
+## Network conditioning — `network`
+
+```bash
+baguette network set    --udid <UDID> --profile 3g                        # a named preset
+baguette network set    --udid <UDID> --latency 300 --bandwidth 400 --loss 5
+baguette network set    --udid <UDID> --offline                           # no connection at all
+baguette network clear  --udid <UDID>                                     # stop, running apps included
+baguette network status --udid <UDID>                                     # also plain `baguette network`
+```
+
+| Subcommand | Args | Effect |
+|------------|------|--------|
+| `set` | **exactly one of** `--profile <name>` / one or more of `--latency <ms>`, `--bandwidth <kbps>`, `--loss <percent>` / `--offline` | publish + arm the dylib |
+| `clear` | (none) | publish "nothing", then disarm |
+| `status` | (none) | report what this simulator is subject to |
+
+Presets are Network Link Conditioner's, figures included:
+`wifi | dsl | lte | 3g | edge | very-bad-network | 100-loss`. NLC states a
+**one-way** delay, so each preset's round-trip latency is twice NLC's
+number (`3g` = 200 ms, `edge` = 800 ms). The three numeric flags are independently
+optional: give any one or more of them. An omitted `--latency` or `--loss`
+is zero, and an omitted `--bandwidth` leaves the link unmetered (it is
+downlink only in any case). Mixing a preset with explicit numbers, or with
+`--offline`, exits non-zero rather than merging — and so does a `set`
+naming nothing at all.
+
+**Not a simctl path.** NLC and the `dnctl`/`pfctl` rules under it are
+system-wide, so baguette injects `VirtualNetwork.dylib` via
+`DYLD_INSERT_LIBRARIES` to scope conditioning to one simulator. dyld
+inserts at exec time, so **only apps launched after `network set` are
+conditioned** — relaunch with
+`xcrun simctl launch --terminate-running-process <UDID> <bundle-id>`.
+Changing the condition afterwards reaches a running app without a
+relaunch. Confirm injection is live with
+`xcrun simctl spawn <UDID> log stream --predicate 'subsystem == "com.baguette.network"'`.
+
+Equivalent HTTP routes during `baguette serve`:
+
+```text
+POST http://localhost:8421/simulators/<UDID>/network
+     body = {"profile":"3g"}
+       or = {"latencyMs":300,"bandwidthKbps":400,"lossPercent":5}
+       or = {"offline":true}
+  → 200 {"ok":true,"active":true,"latencyMs":200,"bandwidthKbps":780,"lossPercent":0,
+         "offline":false,"summary":"200 ms latency, 780 kbps","profiles":[…]}
+  → 400 {"ok":false,"error":"network body must name exactly one of: …"}
+
+GET    http://localhost:8421/simulators/<UDID>/network   (read back; → {"ok":true,"active":false,…} when off)
+DELETE http://localhost:8421/simulators/<UDID>/network   (clear, running apps included)
+```
+
+**Only URLSession-shaped traffic is conditioned.** REST, GraphQL and image
+loading are, and `URLSessionWebSocketTask` gets its own hooks (latency,
+loss, offline — not bandwidth). An SDK that opens its own socket is not
+reached: Ably's ably-cocoa vendors SocketRocket, and its hooks never fire.
+`NWConnection`/Network.framework, raw sockets and most gRPC are not
+conditioned either — structurally, since `URLProtocol` is part of the URL
+Loading System. **`WKWebView` and Safari page loads are not
+conditioned either**: WebKit fetches page resources in its own networking
+process. A hybrid app's native `fetch` calls are throttled while the web
+content beside them is not. For an app whose realtime layer uses a
+**custom** WebSocket transport rather than `URLSessionWebSocketTask`,
+`--offline` degrades its request traffic without the app noticing it went
+offline. Loss is request-level (a proportion of requests
+fail immediately), not packet-level. A debug React Native build has its JS
+bundle download conditioned too, so arm something mild, let the app load,
+then change the condition live. See `docs/features/network.md`.
+
 ## Accessibility tree — `describe-ui`
 
 ```bash

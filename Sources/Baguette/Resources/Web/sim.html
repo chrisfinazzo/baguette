@@ -73,6 +73,11 @@
 <script src="/sim-ax-inspector.js"></script>
 <script src="/sim-camera.js"></script>
 <script src="/sim-status-bar.js"></script>
+<!-- Network conditioning. `network/network-condition-form.js` is the value
+     type (which of the three mutually exclusive sources a request states);
+     `sim-network.js` is the card that draws it, and must load after it. -->
+<script src="/network/network-condition-form.js"></script>
+<script src="/sim-network.js"></script>
 <script src="/sim-file-drop.js"></script>
 <script src="/sim-3d.js"></script>
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +

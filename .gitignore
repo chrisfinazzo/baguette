@@ -7,5 +7,6 @@ DerivedData/
 /Baguette
 # Build intermediates — `build.sh` stages the real copies into
 # Sources/Baguette/Resources/, which are the tracked ones.
-/VirtualCamera/VirtualCamera.dylib
-/VirtualMotion/VirtualMotion.dylib
+/Injected/VirtualCamera/VirtualCamera.dylib
+/Injected/VirtualMotion/VirtualMotion.dylib
+/Injected/VirtualNetwork/VirtualNetwork.dylib

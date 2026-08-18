@@ -87,6 +87,17 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
         return try await body()
     }
 
+    /// Matches by **file name**, not by whole path. Every release installs
+    /// under a fresh sha-keyed directory, so the path this build would arm
+    /// is almost never the path an earlier one did; comparing paths would
+    /// report "not armed" for a dylib that is very much loaded. Same rule
+    /// `InjectedDylibs` merges by.
+    func armed(dylibPath: String, on simulator: any Simulator) async -> Bool {
+        let name = (dylibPath as NSString).lastPathComponent
+        return await currentDylibs(on: simulator).paths
+            .contains { ($0 as NSString).lastPathComponent == name }
+    }
+
     /// Reads what's armed right now.
     ///
     /// A failed read is **not** an error: a simulator that never had the

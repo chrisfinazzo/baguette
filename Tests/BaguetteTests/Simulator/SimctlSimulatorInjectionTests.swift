@@ -107,6 +107,33 @@ struct SimctlSimulatorInjectionTests {
         ])
     }
 
+    @Test func `armed reports whether this simulator would load a dylib`() async {
+        let (injection, sim, _) = makeInjection(armed: "\(motion):\(camera)")
+
+        #expect(await injection.armed(dylibPath: camera, on: sim))
+        #expect(await injection.armed(dylibPath: "/builds/x/VirtualNetwork.dylib", on: sim)
+                    == false)
+    }
+
+    @Test func `armed matches by file name, not by build path`() async {
+        // Every release installs under a fresh sha-keyed directory, so the
+        // path this build would arm is almost never the path an earlier one
+        // did. Comparing whole paths would report "not armed" for a dylib
+        // that is very much loaded — the same reason `InjectedDylibs`
+        // merges by file name.
+        let (injection, sim, _) = makeInjection(armed: "/builds/OLD/VirtualCamera.dylib")
+
+        #expect(await injection.armed(dylibPath: camera, on: sim))
+    }
+
+    @Test func `armed reports nothing armed when the value cannot be read`() async {
+        // A fresh boot never had the variable set. That's "nothing armed",
+        // not an error to surface.
+        let (injection, sim, _) = makeInjection(readExit: 1)
+
+        #expect(await injection.armed(dylibPath: camera, on: sim) == false)
+    }
+
     @Test func `treats an unreadable current value as nothing armed`() async throws {
         // A simulator that never had the variable set is the normal case,
         // and `launchctl getenv` is not required to succeed for it. Failing

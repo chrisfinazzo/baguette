@@ -55,6 +55,10 @@ let package = Package(
                 // CMPedometer and CMMotionManager from the intent baguette
                 // publishes. Same build-and-stage path, same installer.
                 .copy("Resources/VirtualMotion"),
+                // The network counterpart — conditions an app's own
+                // URLSession traffic from the condition baguette publishes.
+                // Same build-and-stage path, same installer.
+                .copy("Resources/VirtualNetwork"),
             ],
             swiftSettings: [
                 // MOCKING is debug-only; release strips mock code entirely.

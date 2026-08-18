@@ -299,6 +299,31 @@ Wired (use freely):
   `xcrun simctl launch --terminate-running-process <X> <bundle-id>`.
   Floor counting and the magnetometer are deliberately still unavailable.
   See [`docs/features/motion.md`](../../docs/features/motion.md).
+- `network` — condition what the device's apps see of the network:
+  latency, downlink bandwidth, request loss, hard offline. **Not a simctl
+  path** — Network Link Conditioner and the `dnctl`/`pfctl` rules under it
+  are system-wide, so baguette injects `VirtualNetwork.dylib` to scope it
+  to one simulator. `baguette network set --udid <X> --profile 3g` (or
+  `--latency <ms> --bandwidth <kbps> --loss <percent>`, or `--offline`) —
+  **exactly one** of those three per invocation; `network clear --udid <X>`
+  stops it, including for apps already running; plain
+  `baguette network --udid <X>` reports what's applied.
+  Presets are NLC's: `wifi | dsl | lte | 3g | edge | very-bad-network |
+  100-loss`. `serve`: `POST /simulators/<X>/network` with
+  `{"profile":"3g"}` / `{"latencyMs":300,"bandwidthKbps":400,"lossPercent":5}`
+  / `{"offline":true}`, `GET` to read back, `DELETE` to clear. Browser: a
+  **Network** card, with an amber toolbar dot whenever conditioning is on.
+  **Same relaunch rule as motion** — only apps launched after `network set`
+  are conditioned; changing it afterwards needs no relaunch.
+  **Three limits to state rather than discover:** only URLSession-shaped
+  traffic is conditioned — `URLSessionWebSocketTask` is (latency, loss,
+  offline; not bandwidth), but an SDK that opens its own socket is not, so
+  Ably's ably-cocoa and Starscream are unreached and `--offline` will not
+  feel offline to them; **`WKWebView` / Safari page loads are not
+  conditioned**, since WebKit loads them in its own networking process, so
+  a hybrid app is throttled natively but not in its web content; and loss
+  is request-level rather than packet-level. See
+  [`docs/features/network.md`](../../docs/features/network.md).
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji
