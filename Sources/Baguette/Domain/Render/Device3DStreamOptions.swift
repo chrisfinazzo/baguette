@@ -12,6 +12,11 @@ struct Device3DStreamOptions: Equatable, Sendable {
     let background: DeviceRenderBackground
     let screenGlass: Bool
 
+    /// The largest frame the live path will encode, per axis. `size=` is
+    /// held to it too, so a preset can't route around the bound `width=` /
+    /// `height=` already carry.
+    private static let maximumAxis = 4096
+
     static let `default` = Device3DStreamOptions(
         rotation: DeviceRotation(x: -8, y: 18, z: 0),
         variants: [:],
@@ -28,6 +33,18 @@ struct Device3DStreamOptions: Equatable, Sendable {
             ?? Self.default.outputSize.width
         let height = try query.single("height").map(parsePositiveInt)
             ?? Self.default.outputSize.height
+        // `size=` names an output shape in the vocabulary the picker and
+        // `--size` share; `width=` / `height=` still say it in pixels and
+        // are unchanged. When both arrive, the requested frame is what a
+        // ratio grows from — the live stream stays bounded in practice by
+        // whatever the browser asked for (`Sim3DPanel` clamps 480–1600).
+        let requested = RenderDimensions(width: width, height: height)
+        let resolved = try query.single("size").map(parseSize)?
+            .resolve(source: requested) ?? requested
+        guard resolved.width > 0, resolved.height > 0,
+              resolved.width <= maximumAxis, resolved.height <= maximumAxis else {
+            throw DeviceModelError.invalidRenderOptions
+        }
         let fit = try query.single("fit").map { value in
             guard let fit = DeviceScreenFit(rawValue: value) else {
                 throw DeviceModelError.invalidRenderOptions
@@ -56,7 +73,7 @@ struct Device3DStreamOptions: Equatable, Sendable {
             rotation: rotation,
             variants: variants,
             outputSize: VideoFrameDimensions(
-                requested: RenderDimensions(width: width, height: height)
+                requested: resolved
             ).renderDimensions,
             fit: fit,
             background: background,
@@ -72,8 +89,16 @@ struct Device3DStreamOptions: Equatable, Sendable {
         return DeviceRotation(x: values[0], y: values[1], z: values[2])
     }
 
+    private static func parseSize(_ value: String) throws -> CaptureSize {
+        do {
+            return try CaptureSize.parse(value)
+        } catch {
+            throw DeviceModelError.invalidRenderOptions
+        }
+    }
+
     private static func parsePositiveInt(_ value: String) throws -> Int {
-        guard let result = Int(value), result > 0, result <= 4096 else {
+        guard let result = Int(value), result > 0, result <= maximumAxis else {
             throw DeviceModelError.invalidRenderOptions
         }
         return result
