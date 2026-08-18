@@ -326,3 +326,88 @@ test('a stage that has not sized itself yet letterboxes', () => {
   const { Sim3DPanel, settings } = panelAndSettings({ size: 'appstore-6.9' });
   assert.equal(Sim3DPanel.recordingFit(settings, { width: 0, height: 0 }), 'contain');
 });
+
+// ── the live stream's pixel budget ───────────────────────────
+
+// A 3D recording crops the stage down to the target's shape, so what
+// survives is a fraction of the stream's pixels — a 6.9" crop of a
+// 1600 × 1129 stage is only 521 px wide, upscaled 2.5× to reach 1290.
+// A picked size therefore spends the WHOLE budget on the long side,
+// supersampling the stage rather than merely being allowed to match
+// it. That is nearly free: measured on an M-series Mac the RealityKit
+// render takes 0.67s at 924 × 652 and 0.72s at 3200 × 2258 — 12× the
+// area for 7% more wall clock. The live view only gets better, since
+// `object-fit: contain` shows the same shape at the same size and a
+// downsampled render is an antialiased one.
+
+test('at native the stage streams at its own pixels', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'native' });
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 924, height: 652 }, settings),
+    { width: 924, height: 652 }
+  );
+});
+
+test('at native an oversized stage scales down without changing shape', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'native' });
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 2400, height: 1694 }, settings),
+    { width: 1600, height: 1129 }
+  );
+});
+
+// The old per-side clamp turned a 3800 × 1240 stage into 1600 × 1240 —
+// aspect 3.07 rendered as 1.29, so the camera framed a different scene
+// than the stage was showing and `object-fit: contain` letterboxed the
+// difference back out.
+test('a very wide stage keeps its aspect instead of being squashed', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'native' });
+  const box = Sim3DPanel.streamBox({ width: 3800, height: 1240 }, settings);
+  assert.deepEqual(box, { width: 1600, height: 522 });
+  assert.ok(Math.abs(box.width / box.height - 3800 / 1240) < 0.01);
+});
+
+test('a tiny stage is floored so the stream is still worth decoding', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'native' });
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 300, height: 212 }, settings),
+    { width: 480, height: 339 }
+  );
+});
+
+test('a picked size supersamples the stage up to the whole budget', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'appstore-6.9' });
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 924, height: 652 }, settings),
+    { width: 2560, height: 1806 }
+  );
+});
+
+test('supersampling keeps the stage’s shape too', () => {
+  const { Sim3DPanel, settings } = panelAndSettings({ size: 'square' });
+  const box = Sim3DPanel.streamBox({ width: 3800, height: 1240 }, settings);
+  assert.deepEqual(box, { width: 2560, height: 835 });
+  assert.ok(Math.abs(box.width / box.height - 3800 / 1240) < 0.01);
+});
+
+test('no settings streams like native', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  assert.deepEqual(
+    Sim3DPanel.streamBox({ width: 924, height: 652 }, null),
+    { width: 924, height: 652 }
+  );
+});
+
+// The restart when a pick crosses the native/sized line is what makes
+// the density take effect; two sized presets share a budget, so
+// switching between them costs nothing.
+test('the budget only moves across the native/sized line', () => {
+  const { Sim3DPanel } = panelAndSettings();
+  const of = (spec) => Sim3DPanel.streamBudget(
+    new (panelAndSettings({ size: spec }).settings.constructor)({ size: spec })
+  );
+  assert.equal(of('native'), 1600);
+  assert.equal(of('appstore-6.9'), 2560);
+  assert.equal(of('square'), 2560);
+  assert.equal(Sim3DPanel.streamBudget(null), 1600);
+});

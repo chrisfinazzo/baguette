@@ -480,7 +480,9 @@ Four details of the request are worth knowing:
 - **`size` is omitted for `native`**, and for a ratio preset when the
   stream size isn't known yet — the server then renders at the screen's
   own pixels. A resolved size is *not* subject to the live stream's
-  480–1600 clamp; that bound belongs to the socket, not to the route.
+  480–1600 bound; that bound belongs to the socket, not to the route.
+  (The socket's own bound rises to 2560 once a capture size is picked —
+  see [Stream density](#stream-density).)
 - **Zoom is not sent.** `DeviceRenderOptions` has no zoom field, so the
   export always frames at 1×. The panel warns in the console when the
   live zoom differs, rather than silently saving a differently-framed
@@ -504,6 +506,35 @@ camera.
 **Recording is the one capture that can't take this path**, because a
 video has no one-shot re-render to delegate to. It crops the stage's
 margins instead — see [Recording the 3D stage](recording.md#recording-the-3d-stage).
+
+### Stream density
+
+The live stream always renders at the **stage's own shape** — framing a
+3D image is the camera's job, and reshaping the live view to a target
+aspect makes it worse, not better. What a picked size changes is
+density:
+
+| pick | long side | a 924 × 652 stage streams at |
+| --- | --- | --- |
+| `native` | the stage's own pixels, bounded 480–1600 | 924 × 652 |
+| any size | the whole 2560 budget | 2560 × 1806 |
+
+Supersampling exists for the recorder: it crops the stage down to the
+target's shape, so only the cropped fraction of these pixels reaches
+the file. The extra render is close to free — 0.67s at 924 × 652
+against 0.72s at 3200 × 2258 on an M-series Mac — and the live view is
+unchanged in shape and display size, merely antialiased.
+
+`setCaptureSettings` restarts the socket only when a pick crosses the
+native/sized line, so it happens at most once a session. Switching
+between two sized presets, or changing fit, background or the bezel,
+leaves it alone.
+
+The box is **scaled**, never clamped per side. The per-side clamp this
+replaced turned a 3800 × 1240 stage into 1600 × 1240 — aspect 3.07
+rendered as 1.29 — so the camera framed a different scene than the
+stage was showing, and `object-fit: contain` letterboxed the
+difference back out.
 
 The saved file carries the size slug like every other capture (see
 [`capture-size.md`](capture-size.md)):

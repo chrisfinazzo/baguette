@@ -502,16 +502,28 @@ From a 1600 × 1250 stage:
 Only recordings, and only in 3D. In 2D the source canvas already *is*
 the device, so the user's own fit choice stands.
 
-**What this costs.** At `appstore-6.9` the recording upscales a
-577 × 1250 region of the live stream to 1290 × 2796. The live 3D
-stream is bounded at 1600 px per side for encoder cost (see
-[`3d-rendering.md`](3d-rendering.md)), so that bound is the ceiling on
-a 3D recording's real detail. Reshaping the stream to the target
-aspect was tried and rejected: an App Store 6.9″ stream is 738 × 1600,
-which `object-fit: contain` then upscales across a much larger stage,
-so the live view went soft and its framing moved. Trading a visible
-regression in the thing the user is looking at for a sharper file is
-the wrong way round.
+**What this costs, and what pays it back.** Cropping means the file
+keeps only a fraction of the stream's pixels — a 6.9″ crop of a
+1600 × 1129 stage is 521 px wide and has to be upscaled 2.5× to reach
+1290. So picking a size also raises the stream's **density**:
+`Sim3DPanel.streamBox` spends the whole 2560 px budget on the long
+side, supersampling the stage instead of merely matching it. The same
+924 × 652 stage then streams at 2560 × 1806, the crop keeps 833 px,
+and the upscale falls to 1.55×. See
+[Stream density](3d-rendering.md#stream-density).
+
+That is nearly free — measured on an M-series Mac the RealityKit
+render takes 0.67s at 924 × 652 and 0.72s at 3200 × 2258, twelve times
+the area for 7% more wall clock — and the live view only improves,
+since `object-fit: contain` shows the same shape at the same size and
+a downsampled render is an antialiased one.
+
+What was tried and *rejected* is reshaping the stream to the target
+**aspect**. An App Store 6.9″ stream is 738 × 1600, which `contain`
+then upscales across a much larger stage: the live view went soft and
+its framing moved. Density is invisible; shape is not. Trading a
+visible regression in the thing the user is looking at for a sharper
+file is the wrong way round.
 
 ## Lifecycle on the page
 
