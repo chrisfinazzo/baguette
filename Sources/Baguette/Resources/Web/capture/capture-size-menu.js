@@ -103,6 +103,13 @@
      * @param {(settings) => void} [opts.onChange]
      * @param {boolean} [opts.showFrameToggle=true]  hide for 3D, where the
      *        rendered frame already contains the device body
+     * @param {boolean} [opts.showFitToggle=true]  hide for 3D: on the
+     *        render-3d route `fit` is the screenshot's UV placement on the
+     *        device's screen mesh, not canvas placement, so offering
+     *        contain/cover there would letterbox the app *inside* the phone
+     *        display. Canvas placement in 3D is the camera's job.
+     * @param {boolean} [opts.showBackgroundToggle=true]  hide for 3D, where
+     *        the render's own background already fills the canvas
      * @param {() => ({width:number,height:number})|null} [opts.sourceSize]
      *        lets the popover show the resolved pixel size per preset
      */
@@ -110,7 +117,12 @@
       const o = opts || {};
       this.storageKey = o.storageKey || 'asc.capture';
       this.onChange = o.onChange || (() => {});
+      // All three are read at render time, not captured, so a caller can
+      // flip them on the instance when the view changes (2D <-> 3D) and
+      // reopen the popover without rebuilding the menu.
       this.showFrameToggle = o.showFrameToggle !== false;
+      this.showFitToggle = o.showFitToggle !== false;
+      this.showBackgroundToggle = o.showBackgroundToggle !== false;
       this.sourceSize = o.sourceSize || (() => null);
       this.settings = window.Baguette._CaptureSettings
         .restore(safeStorage(), this.storageKey);
@@ -221,17 +233,23 @@
           '<input type="text" data-role="custom" placeholder="1920x1080 or 3:2" ' +
           'value="' + escapeAttr(isCustom ? current.size.spec : '') + '">' +
         '</div>' +
-        '<p class="cap-size-head">Fit</p>' +
-        '<div class="cap-size-row">' + seg('fit', CaptureSize.fits, current.fit) + '</div>' +
-        '<p class="cap-size-head">Background</p>' +
-        '<div class="cap-size-row">' +
-          '<input type="color" data-role="background" value="' +
-          escapeAttr(/^#[0-9a-f]{6}$/i.test(current.background) ? current.background : '#ffffff') +
-          '">' +
-          '<label><input type="checkbox" data-role="transparent"' +
-          (current.background === 'transparent' ? ' checked' : '') +
-          '><span>Transparent</span></label>' +
-        '</div>' +
+        (this.showFitToggle
+          ? '<p class="cap-size-head">Fit</p>' +
+            '<div class="cap-size-row">' +
+            seg('fit', CaptureSize.fits, current.fit) + '</div>'
+          : '') +
+        (this.showBackgroundToggle
+          ? '<p class="cap-size-head">Background</p>' +
+            '<div class="cap-size-row">' +
+              '<input type="color" data-role="background" value="' +
+              escapeAttr(/^#[0-9a-f]{6}$/i.test(current.background)
+                ? current.background : '#ffffff') +
+              '">' +
+              '<label><input type="checkbox" data-role="transparent"' +
+              (current.background === 'transparent' ? ' checked' : '') +
+              '><span>Transparent</span></label>' +
+            '</div>'
+          : '') +
         (this.showFrameToggle
           ? '<p class="cap-size-head">Device</p>' +
             '<div class="cap-size-row"><label>' +
@@ -239,9 +257,13 @@
             (current.withFrame ? ' checked' : '') + '><span>Include bezel</span>' +
             '</label></div>'
           : '') +
-        (current.size.isNative
-          ? '<p class="cap-size-note">Native keeps the source size — fit and ' +
-            'background have no effect.</p>'
+        (current.size.isNative && (this.showFitToggle || this.showBackgroundToggle)
+          ? '<p class="cap-size-note">Native keeps the source size — ' +
+            [this.showFitToggle ? 'fit' : null,
+              this.showBackgroundToggle ? 'background' : null]
+              .filter(Boolean).join(' and ') +
+            ' ' + (this.showFitToggle && this.showBackgroundToggle ? 'have' : 'has') +
+            ' no effect.</p>'
           : '');
 
       this.pop.querySelectorAll('[data-size]').forEach((button) => {
@@ -270,14 +292,18 @@
         if (event.key === 'Enter') { event.preventDefault(); commitCustom(); }
       });
 
-      this.pop.querySelector('[data-role="background"]')
-        .addEventListener('input', (event) => {
+      const background = this.pop.querySelector('[data-role="background"]');
+      if (background) {
+        background.addEventListener('input', (event) => {
           this.apply({ background: event.target.value });
         });
-      this.pop.querySelector('[data-role="transparent"]')
-        .addEventListener('change', (event) => {
+      }
+      const transparent = this.pop.querySelector('[data-role="transparent"]');
+      if (transparent) {
+        transparent.addEventListener('change', (event) => {
           this.apply({ background: event.target.checked ? 'transparent' : '#ffffff' });
         });
+      }
       const frame = this.pop.querySelector('[data-role="frame"]');
       if (frame) {
         frame.addEventListener('change', (event) => {
