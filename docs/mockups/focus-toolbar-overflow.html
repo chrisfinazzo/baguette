@@ -261,7 +261,10 @@
   .fold-pop {
     position: absolute; z-index: 60; top: calc(100% + 8px); left: 50%;
     transform: translateX(-50%);
-    width: 208px; padding: 6px; border-radius: 12px;
+    /* 208px clipped "MJPEG" off the codec control — a choice row is
+       the widest thing a cluster menu holds, so the menu is sized for
+       it rather than for the label rows. */
+    width: 234px; padding: 6px; border-radius: 12px;
     background: var(--nv-panel); border: 1px solid var(--nv-divider);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
     font: 500 12px/1.3 inherit; color: var(--nv-text);
@@ -275,7 +278,14 @@
      down a level rather than answered. Collapsed, it is four rows;
      you open the one you want. Uses <details> for the same reason the
      size popover's Options row does: no state to lose, keyboard and
-     screen readers get it for free. */
+     screen readers get it for free.
+
+     EXCLUSIVE, though — `<details>` will happily open all four at
+     once, which puts all thirteen rows back and undoes the whole
+     thing. `name="..."` makes them a radio group in browsers that
+     support it, and the click handler enforces it everywhere else.
+     Open, the tallest state is four headers plus the largest group:
+     eight rows, not thirteen. */
   .fold-acc { border-radius: 8px; }
   .fold-acc + .fold-acc { margin-top: 1px; }
   .fold-acc > summary {
@@ -812,7 +822,7 @@
     el.dataset.id = spec.id;
     const body = spec.groups.length > 1
       ? spec.groups.map((g) =>
-          '<details class="fold-acc"><summary>' + svg(g.icon, 15).replace('<svg', '<svg class="lead"') +
+          '<details class="fold-acc" name="fold-acc"><summary>' + svg(g.icon, 15).replace('<svg', '<svg class="lead"') +
           '<span>' + g.label + '</span><span class="n">' + g.items.length + '</span>' +
           '<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" ' +
           'stroke="currentColor" stroke-width="2.6" stroke-linecap="round" ' +
@@ -1028,6 +1038,19 @@
       const open = chip.getAttribute('aria-expanded') === 'true';
       closeAll();
       if (!open) { pop.removeAttribute('hidden'); chip.setAttribute('aria-expanded', 'true'); }
+      return;
+    }
+    const acc = event.target.closest('.fold-acc > summary');
+    if (acc) {
+      // `name=` handles this in Chrome 120+/Safari 17.4+; do it by hand
+      // so the mockup behaves the same everywhere.
+      const self = acc.parentElement;
+      setTimeout(() => {
+        if (!self.open) return;
+        self.parentElement.querySelectorAll('.fold-acc').forEach((d) => {
+          if (d !== self) d.open = false;
+        });
+      }, 0);
       return;
     }
     const codec = event.target.closest('[data-codec]');
