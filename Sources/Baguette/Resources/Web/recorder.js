@@ -114,6 +114,13 @@
       return { width: 0, height: 0 };
     },
 
+    // The degraded path never supersamples — it exists to keep recording
+    // working on a page that didn't load the capture scripts, not to
+    // reproduce CaptureComposer's geometry.
+    composite(frameImg, screen, sourceCanvas) {
+      return { ...NativeComposer.compositeSize(frameImg, screen, sourceCanvas), scale: 1 };
+    },
+
     paintComposite(ctx, { frameImg, screen, sourceCanvas, onOverlay }) {
       const useBezel = frameImg && frameImg.naturalWidth > 0
         && screen && screen.viewport && screen.rect;
@@ -255,7 +262,7 @@
       // The compose canvas is the recording's full output — captureStream
       // samples it at fps. Its size is whatever the picked CaptureSize
       // resolves the natural composite to.
-      const natural = this._naturalSize();
+      const natural = this._composite();
       this.plan = this.settings
         ? this.settings.plan(natural.width, natural.height)
         : nativePlan(natural, null);
@@ -339,13 +346,13 @@
     /// the bezel on that's the frame's viewport; with it off — a 3D view,
     /// whose server-rendered canvas already contains the device body — the
     /// source canvas is the whole picture.
-    _naturalSize() {
-      const size = this._composer.compositeSize(
+    _composite() {
+      const c = this._composer.composite(
         this.bezel ? this.frameImg : null,
         this.bezel ? this.screen : null,
         this.sourceCanvas
       );
-      return size.width > 0 && size.height > 0 ? size : FALLBACK_SIZE;
+      return c.width > 0 && c.height > 0 ? c : { ...FALLBACK_SIZE, scale: 1 };
     }
 
     _startPaintLoop() {
@@ -365,7 +372,7 @@
       // compose canvas. Nothing left to paint onto — drop the frame.
       if (!this.composeCtx || !this.plan) return;
 
-      const natural = this._naturalSize();
+      const natural = this._composite();
       if (natural.width !== this.plan.sourceWidth
         || natural.height !== this.plan.sourceHeight) {
         // The source reconfigured mid-recording. Re-plan against the
@@ -377,6 +384,10 @@
       }
 
       this._composer.compose(this.composeCtx, this.plan, this.background, (ctx) => {
+        // `compose` set the transform for a source the size of the grown
+        // composite; `paintComposite` paints at the bezel's own size, so
+        // the supersample factor goes on here.
+        if (natural.scale !== 1) ctx.scale(natural.scale, natural.scale);
         this._composer.paintComposite(ctx, {
           frameImg: this.bezel ? this.frameImg : null,
           screen: this.bezel ? this.screen : null,

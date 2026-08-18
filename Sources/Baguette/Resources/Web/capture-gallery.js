@@ -54,9 +54,9 @@
       const withBezel = settings.withFrame && this._hasBezel();
 
       const shot = await this._fetchScreenshot(settings, withBezel);
-      const natural = this._naturalSize(shot.image, withBezel, options.naturalSize);
+      const natural = this._composite(shot.image, withBezel, options.naturalSize);
       const plan = settings.plan(natural.width, natural.height);
-      const dataUrl = this._paint(plan, settings, shot, withBezel);
+      const dataUrl = this._paint(plan, settings, shot, withBezel, natural.scale);
 
       return this._push({
         dataUrl,
@@ -133,22 +133,28 @@
 
     // ── composition ────────────────────────────────────────────
 
-    /** The composite's size before the picked size is applied. */
-    _naturalSize(image, withBezel, legacyNaturalSize) {
+    /**
+     * The composite at capture scale, before the picked size is applied.
+     * `CaptureComposer.composite` grows a point-authored bezel until its
+     * cutout is 1:1 with the screenshot, so an App Store size resamples
+     * from the full framebuffer rather than from a ~3x-shrunk copy of it.
+     */
+    _composite(image, withBezel, legacyNaturalSize) {
       const composer = composerOrNull();
       const size = composer
-        ? composer.compositeSize(
+        ? composer.composite(
           withBezel ? this.frameImg : null,
           withBezel ? this.screen : null,
           image
         )
-        : { width: image.width || 0, height: image.height || 0 };
+        : { width: image.width || 0, height: image.height || 0, scale: 1 };
       if (size.width > 0 && size.height > 0) return size;
       // Defensive: an image that decoded without dimensions would give a
       // 0 × 0 canvas — fall back to the size the stream last painted at.
       return {
         width: legacyNaturalSize ? legacyNaturalSize.w : 0,
         height: legacyNaturalSize ? legacyNaturalSize.h : 0,
+        scale: 1,
       };
     }
 
@@ -158,7 +164,7 @@
      * them — re-encoding a 1290 × 2796 JPEG as lossless PNG would cost
      * megabytes per thumbnail for an identical picture.
      */
-    _paint(plan, settings, shot, withBezel) {
+    _paint(plan, settings, shot, withBezel, scale) {
       if (!withBezel && isIdentity(plan)
         && settings.effectiveBackground === 'transparent') {
         return shot.dataUrl;
@@ -170,6 +176,10 @@
       canvas.height = plan.height;
       const ctx = canvas.getContext('2d');
       composer.compose(ctx, plan, settings.effectiveBackground, (c) => {
+        // `compose` set the transform for a source the size of the grown
+        // composite; `paintComposite` paints at the bezel's own size, so
+        // the supersample factor goes on here.
+        if (scale && scale !== 1) c.scale(scale, scale);
         composer.paintComposite(c, {
           frameImg: withBezel ? this.frameImg : null,
           screen: withBezel ? this.screen : null,

@@ -1704,53 +1704,47 @@
   }
 
   /**
-   * How far to supersample the bezel composite.
-   *
-   * The bezel art is authored at layout scale — 474 × 990 points for an
-   * iPhone 17 Pro Max — while the live canvas carries the device's full
-   * 1290 × 2796 framebuffer. Compositing at the bezel's own size would
-   * resample the screen down by ~3x and throw the detail away before
-   * the picked size ever gets a look at it, so the composite is grown
-   * until the screen cutout is 1:1 with the frames arriving and the
-   * bezel is scaled up to meet it: soft chrome around a sharp screen
-   * beats a sharp frame around a thumbnail. Capped so an unusually
-   * large source can't ask for a canvas the browser refuses to
-   * allocate.
-   *
-   * 1 whenever the composite ISN'T the bezel viewport. `compositeSize`
-   * reports the viewport only once the bezel <img> has decoded, and
-   * falls back to the framebuffer otherwise — before the image lands,
-   * or after a 404, where `bezel.js` hides the element and leaves
-   * `naturalWidth` at 0. That fallback is already at capture scale, so
-   * scaling it again would allocate ~9x the pixels for an upscaled
-   * blur. Comparing the reported size against the viewport is how we
-   * tell the two apart.
+   * The composite at capture scale — `CaptureComposer.composite` grows
+   * the bezel until the screen cutout is 1:1 with the arriving frames,
+   * so an App Store size resamples from the full framebuffer rather than
+   * from a ~3x-downsampled thumbnail. Returns `{width, height, scale}`.
    */
-  function compositeScale(source, natural) {
-    const screen = source && source.screen;
-    if (!screen || !screen.rect || !screen.viewport || !natural) return 1;
-    if (natural.width !== screen.viewport.width) return 1;
-    if (!(screen.rect.width > 0)) return 1;
-    return Math.min(4, Math.max(1, source.canvas.width / screen.rect.width));
+  function activeComposite() {
+    const source = activeCaptureSource();
+    const Composer = window.Baguette && window.Baguette._CaptureComposer;
+    if (!source || !Composer) return null;
+    return Composer.composite(source.frameImg, source.screen, source.canvas);
   }
 
   /** The composite's size at capture scale, before the picked size. */
   function compositeSourceSize() {
-    const source = activeCaptureSource();
-    const Composer = window.Baguette && window.Baguette._CaptureComposer;
-    if (!source || !Composer) return null;
-    const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
-    const scale = compositeScale(source, natural);
-    return {
-      width: Math.round(natural.width * scale),
-      height: Math.round(natural.height * scale),
-    };
+    const composite = activeComposite();
+    if (!composite) return null;
+    return { width: composite.width, height: composite.height };
   }
 
   // Take a snapshot and trigger a download, composed at whatever the
   // size chip says. We skip CaptureGallery here — the focus chrome has
   // nowhere to put a thumbnail strip, and the user just wants the file.
+  //
+  // In 3D the picked size is the SERVER's job, not the composer's. The
+  // stage canvas is a wide, mostly-empty frame with a small device
+  // floating in it — letterboxing that whole frame into an App Store
+  // 6.9″ canvas leaves a postage-stamp phone adrift on white, because
+  // `contain` scales the empty stage, not the device inside it. Framing
+  // a 3D shot is the camera's job, and only the renderer has a camera.
+  // `Sim3DPanel.download` re-renders the exact pose off the stream at
+  // the picked size and falls back to the live frame if the route
+  // fails, so the toolbar button and the panel's own Save Frame produce
+  // the same file — which is what a user who set the size once expects.
   function downloadSnapshot() {
+    if (is3DOpen() && render3DPanel && typeof render3DPanel.download === 'function') {
+      if (typeof render3DPanel.setCaptureSettings === 'function') {
+        render3DPanel.setCaptureSettings(captureSettings());
+      }
+      render3DPanel.download();
+      return;
+    }
     const source = activeCaptureSource();
     if (!source) return;
     const settings = captureSettings();
@@ -1764,10 +1758,9 @@
       return;
     }
 
-    const natural = Composer.compositeSize(source.frameImg, source.screen, source.canvas);
-    if (!natural.width || !natural.height) return;
-    const scale = compositeScale(source, natural);
-    const plan = settings.plan(natural.width * scale, natural.height * scale);
+    const composite = Composer.composite(source.frameImg, source.screen, source.canvas);
+    if (!composite.width || !composite.height) return;
+    const plan = settings.plan(composite.width, composite.height);
     if (!plan.width || !plan.height) return;
 
     const out = document.createElement('canvas');
@@ -1780,10 +1773,10 @@
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     Composer.compose(ctx, plan, settings.effectiveBackground, (c) => {
-      // `compose` has already set the transform for a source of
-      // `natural * scale`; `paintComposite` paints at `natural`, so the
-      // supersample factor goes on here.
-      if (scale !== 1) c.scale(scale, scale);
+      // `compose` has already set the transform for a source the size of
+      // the grown composite; `paintComposite` paints at the bezel's own
+      // size, so the supersample factor goes on here.
+      if (composite.scale !== 1) c.scale(composite.scale, composite.scale);
       Composer.paintComposite(c, {
         frameImg: source.frameImg,
         screen: source.screen,
@@ -1798,6 +1791,26 @@
   }
 
   // --- Recording ----------------------------------------------------
+
+  /**
+   * The settings a recording should run with, which are not always the
+   * ones on the chip.
+   *
+   * In 3D the source is a stage — a device standing in empty margins —
+   * so `contain` shrinks the device into the emptiness rather than
+   * cropping the emptiness away. `Sim3DPanel.recordingFit` decides how
+   * far it is safe to crop. A screenshot doesn't need this: it
+   * re-renders server-side at the exact size, framed by the camera.
+   * 2D is untouched — there the source canvas IS the device.
+   */
+  function recordingSettings(source) {
+    const settings = captureSettings();
+    if (!settings || !source || source.mode !== '3d') return settings;
+    const Panel = window.Sim3DPanel;
+    if (!Panel || typeof Panel.recordingFit !== 'function') return settings;
+    const fit = Panel.recordingFit(settings, source.canvas);
+    return fit === settings.fit ? settings : settings.with({ fit });
+  }
 
   function toggleRecording() {
     if (recordingState.active) return stopRecording();
@@ -1821,7 +1834,7 @@
         // Forward-compatible hint: sizing a recording is the recorder's
         // job (it owns the compose canvas), and it ignores keys it
         // doesn't know. Screenshots are sized here, above.
-        settings: captureSettings(),
+        settings: recordingSettings(source),
         fps: 60,
       });
       rec.start();

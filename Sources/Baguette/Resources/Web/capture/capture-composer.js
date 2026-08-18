@@ -49,6 +49,58 @@
     }
 
     /**
+     * The composite's size *at capture scale*, plus the factor a painter
+     * has to apply to reach it.
+     *
+     * DeviceKit authors its bezels in points — an iPhone 17 Pro Max frame
+     * is a 474 x 990 viewport with a 438 x 954 cutout — while the live
+     * canvas carries the device's full 1320 x 2868 framebuffer. Painting
+     * at `compositeSize` resamples the screen down by ~3x and throws the
+     * detail away before the picked size ever gets a look at it, which
+     * defeats the point of asking for an App Store size. So the composite
+     * grows until the cutout is 1:1 with the frames arriving and the
+     * bezel is scaled up to meet it: soft chrome around a sharp screen
+     * beats a sharp frame around a thumbnail.
+     *
+     * Only the bezel path grows. Without a bezel the source canvas *is*
+     * the composite and is already at capture scale, so scaling it again
+     * would allocate many times the pixels for an upscaled blur.
+     *
+     *   const c = CaptureComposer.composite(frameImg, screen, canvas);
+     *   const plan = size.plan(c.width, c.height, fit);
+     *   CaptureComposer.compose(ctx, plan, background, (x) => {
+     *     if (c.scale !== 1) x.scale(c.scale, c.scale);
+     *     CaptureComposer.paintComposite(x, { frameImg, screen, sourceCanvas });
+     *   });
+     *
+     * @returns {{width:number, height:number, scale:number}}
+     */
+    static composite(frameImg, screen, sourceCanvas) {
+      const natural = CaptureComposer.compositeSize(frameImg, screen, sourceCanvas);
+      const scale = CaptureComposer.compositeScale(natural, screen, sourceCanvas);
+      if (scale === 1) return { ...natural, scale };
+      return {
+        width: Math.round(natural.width * scale),
+        height: Math.round(natural.height * scale),
+        scale,
+      };
+    }
+
+    /**
+     * How far `compositeSize` has to grow for the screen cutout to match
+     * the frames. 1 whenever the composite isn't the bezel viewport —
+     * comparing the reported size against the viewport is how we tell a
+     * bezel composite from the source-canvas fallback `compositeSize`
+     * returns before the image decodes or after a 404.
+     */
+    static compositeScale(natural, screen, sourceCanvas) {
+      if (!natural || !screen || !screen.rect || !screen.viewport) return 1;
+      if (natural.width !== screen.viewport.width) return 1;
+      if (!(screen.rect.width > 0) || !sourceCanvas || !(sourceCanvas.width > 0)) return 1;
+      return Math.min(4, Math.max(1, sourceCanvas.width / screen.rect.width));
+    }
+
+    /**
      * Paint the device composite at its natural size, origin (0, 0).
      *
      * @param {CanvasRenderingContext2D} ctx
