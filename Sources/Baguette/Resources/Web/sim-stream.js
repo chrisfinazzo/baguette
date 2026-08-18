@@ -25,8 +25,14 @@
 
   let activeUdid = null;
   let activeName = null;
+  let sizeMenu = null;      // CaptureSizeMenu — output size / fit / bezel
   let captureWithFrame = false;
   let lastPaintedSize = { w: 0, h: 0 };
+
+  // One persisted selection for both capture surfaces in this sidebar —
+  // a screenshot and a recording of the same device should come out the
+  // same shape without asking twice.
+  const CAPTURE_STORAGE_KEY = 'asc.capture.stream';
 
   // Recording state. BrowserRecorder spins up a compose canvas only
   // while active; references are pulled from what's already on the
@@ -181,7 +187,13 @@
     session = new window.StreamSession({
       udid, format, version: 'v2',
       canvas: sim.canvas,
-      onSize: (w, h) => { lastPaintedSize = { w, h }; },
+      onSize: (w, h) => {
+        const changed = w !== lastPaintedSize.w || h !== lastPaintedSize.h;
+        lastPaintedSize = { w, h };
+        // Ratio presets resolve against the source, so the hint moves
+        // when the stream scale does.
+        if (changed) renderCaptureSizeHint();
+      },
       onFps:  (fps) => {
         const el = document.getElementById('simStreamFps');
         if (el) el.textContent = fps + ' fps';
@@ -196,6 +208,7 @@
     });
     gallery.clear();
     renderGallery();
+    mountCaptureSizeMenu();
 
     // Live unified-log panel — opens its own WS to /simulators/<udid>/logs.
     // Independent of the stream socket so logs survive even when the
@@ -241,6 +254,7 @@
     if (recordingState.recorder) {
       try { recordingState.recorder.cancel(); } catch { /* ignore */ }
     }
+    if (sizeMenu) { sizeMenu.detach(); sizeMenu = null; }
     if (axInspector) { axInspector.detach(); axInspector = null; }
     if (cameraPanel) { cameraPanel.detach(); cameraPanel = null; }
     if (session) { session.stop(); session = null; }
@@ -256,6 +270,104 @@
     const list = document.getElementById('simListView');
     if (list) list.style.display = '';
     if (window.loadSimDeviceList) window.loadSimDeviceList();
+  }
+
+  // --- Capture size ---------------------------------------------------
+  // The sidebar's screenshot and its recording share one CaptureSettings,
+  // edited through the CaptureSizeMenu chip in the Captures card header.
+
+  /** The current selection, or null when /capture/*.js isn't loaded
+   *  (the host SPA can pull in sim-stream.js on its own). Call sites
+   *  treat null as "no resizing", i.e. exactly the old behaviour. */
+  function captureSettings() {
+    return sizeMenu ? sizeMenu.settings : null;
+  }
+
+  /**
+   * What a ratio preset resolves against.
+   *
+   * With the bezel composited in, the output is bezel-sized — both
+   * surfaces draw the source into the frame image's natural box.
+   *
+   * Bare, it's the device's *native* pixel size, not `lastPaintedSize`:
+   * `/screenshot.jpg` is always served at native resolution regardless
+   * of the stream's Resolution knob, and the recorder ratchets the
+   * stream to scale 1 before it starts. `lastPaintedSize` is the
+   * decoded frame, i.e. native divided by that knob — so multiply it
+   * back out rather than resolving a `square` against a third of the
+   * device.
+   *
+   * Reads `withFrame` off the menu rather than the module mirror: the
+   * menu re-renders its popover (calling back in here) before it fires
+   * `onChange`, so the mirror is one interaction stale mid-toggle.
+   */
+  function captureSourceSize() {
+    const wantFrame = sizeMenu ? sizeMenu.settings.withFrame : captureWithFrame;
+    const fimg = wantFrame && sim && sim._bezel ? sim._bezel.frameImg : null;
+    if (fimg && fimg.naturalWidth > 0) {
+      return { width: fimg.naturalWidth, height: fimg.naturalHeight };
+    }
+    if (lastPaintedSize.w && lastPaintedSize.h) {
+      const divisor = readActiveQuality().scale || 1;
+      return {
+        width: lastPaintedSize.w * divisor,
+        height: lastPaintedSize.h * divisor,
+      };
+    }
+    return null;
+  }
+
+  function mountCaptureSizeMenu() {
+    const host = document.getElementById('simCaptureSizeHost');
+    if (!host || !window.CaptureSizeMenu) return;
+    if (sizeMenu) { sizeMenu.detach(); sizeMenu = null; }
+    host.innerHTML = '';
+    sizeMenu = new window.CaptureSizeMenu({
+      storageKey: CAPTURE_STORAGE_KEY,
+      showFrameToggle: true,
+      sourceSize: captureSourceSize,
+      onChange: (settings) => {
+        // `withFrame` lives on the settings value; this mirror is what
+        // the rest of the file (and the legacy `_simToggleFrame` entry
+        // point) reads, so there is still exactly one flag.
+        captureWithFrame = settings.withFrame;
+        renderCaptureSizeHint();
+      },
+    });
+    sizeMenu.mount(host);
+    // CaptureSettings defaults `withFrame` to true, but the checkbox this
+    // menu replaces shipped unchecked — and it drives the *recorder* as
+    // well as the screenshot. Seed the first run to false so an upgrading
+    // user's recordings don't silently gain a bezel; once they've touched
+    // the switch, the persisted value wins.
+    if (!hasStoredCaptureSettings()) sizeMenu.apply({ withFrame: false });
+    captureWithFrame = sizeMenu.settings.withFrame;
+    renderCaptureSizeHint();
+  }
+
+  function hasStoredCaptureSettings() {
+    try {
+      return window.localStorage.getItem(CAPTURE_STORAGE_KEY) != null;
+    } catch {
+      return false;  // Safari private browsing — treat as first run
+    }
+  }
+
+  // The pixels the current selection resolves to, shown under the two
+  // capture buttons. Reads the same `plan()` the capture surfaces do, so
+  // it can't drift from what they produce once both are on the shared
+  // vocabulary (capture-gallery.js / recorder.js land alongside this).
+  function renderCaptureSizeHint() {
+    const el = document.getElementById('simCaptureSizeOut');
+    if (!el) return;
+    const settings = captureSettings();
+    const source = captureSourceSize();
+    if (!settings || !source) { el.textContent = ''; return; }
+    const plan = settings.plan(source.width, source.height);
+    if (!plan.width || !plan.height) { el.textContent = ''; return; }
+    el.textContent = settings.size.isNative
+      ? `${plan.width} × ${plan.height} · native`
+      : `${plan.width} × ${plan.height} · ${settings.size.label} · ${settings.fit}`;
   }
 
   function renderGallery() {
@@ -292,7 +404,14 @@
     sim.type(t);
     el.value = '';
   };
-  window._simToggleFrame = (checked) => { captureWithFrame = checked; };
+  // The standalone "with frame" checkbox is gone — CaptureSizeMenu's
+  // "Include bezel" switch is the same flag. This entry point stays for
+  // anything still calling it (host SPA, plugins) and routes into the
+  // menu so both stay one state.
+  window._simToggleFrame = (checked) => {
+    if (sizeMenu) sizeMenu.apply({ withFrame: !!checked });
+    else captureWithFrame = !!checked;
+  };
 
   window._simSetFormat = (btn) => {
     if (!btn) return;
@@ -327,7 +446,14 @@
   window._simCapture = async () => {
     if (!gallery) return;
     try {
+      // Belt and braces: `settings` is the new shape CaptureGallery reads
+      // for output size / fit / background, `withFrame` + `naturalSize`
+      // are the shape it has always read. Passing both means this call
+      // site works against either version of capture-gallery.js — the
+      // two land on separate branches and neither has to wait for the
+      // other. Drop the legacy pair once `settings` is required.
       const r = await gallery.capture({
+        settings: captureSettings(),
         withFrame: captureWithFrame,
         naturalSize: lastPaintedSize,
       });
@@ -359,11 +485,7 @@
       if (label) label.textContent = 'Saving…';
       if (timer) timer.textContent = '';
       if (btn)   btn.classList.remove('recording');
-      // Restore the stream quality the user had before we bumped it.
-      if (recordingState.savedQuality) {
-        applyQuality(recordingState.savedQuality);
-        recordingState.savedQuality = null;
-      }
+      restoreSavedQuality();
       try {
         const artifact = await rec.stop();
         onRecordFinished(artifact);
@@ -386,10 +508,17 @@
       recordingState.savedQuality = readActiveQuality();
       applyQuality({ scale: 1, fps: 60, bps: 8_000_000 });
 
-      // The "with frame" toggle drives both screenshots AND
-      // recordings — passing `screen: null` to the recorder makes it
-      // fall through to bare-screen mode (no bezel composite).
+      // The bezel switch drives both screenshots AND recordings —
+      // passing `screen: null` to the recorder makes it fall through to
+      // bare-screen mode (no bezel composite).
+      //
+      // Belt and braces, same as `_simCapture`: `settings` carries the
+      // output size for a recorder that understands it, while the
+      // canvas / frameImg / screen / overlayHost / fps quartet is what
+      // today's recorder.js reads. Both shapes ship together so this
+      // call site is correct whichever version is loaded.
       const rec = new window.BrowserRecorder({
+        settings:    captureSettings(),
         canvas:      sim.canvas,
         frameImg:    captureWithFrame ? sim._bezel.frameImg     : null,
         screen:      captureWithFrame ? sim.screen.def          : null,
@@ -403,6 +532,18 @@
       onRecordError(err);
     }
   };
+
+  // Put the pre-recording knobs back. Unconditional on every path that
+  // leaves "not recording": stop, *and* a start that threw. Restoring
+  // only on stop pins the live stream at scale 1 / 60fps / 8 Mbps for
+  // the rest of the session when `new BrowserRecorder(...)` or
+  // `.start()` fails, with no recording to show for it and no way back
+  // short of a reload.
+  function restoreSavedQuality() {
+    if (!recordingState.savedQuality) return;
+    applyQuality(recordingState.savedQuality);
+    recordingState.savedQuality = null;
+  }
 
   function onRecordStarted() {
     recordingState.active = true;
@@ -426,6 +567,7 @@
   function onRecordError(err) {
     recordingState.active = false;
     recordingState.recorder = null;
+    restoreSavedQuality();  // a start that never began must not keep the bump
     if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
     updateRecordButton();
     updateRecordTimer();
