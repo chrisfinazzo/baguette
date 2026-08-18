@@ -82,12 +82,20 @@ static void VMStamp(id logItem, double timestamp) {
 
 /// Size of the `CLMotionActivity` struct, derived from the ivar layout so a
 /// future field addition doesn't silently truncate it.
+/// The furthest byte `VMMakeActivity` writes: the `startTime` double at +80.
+/// If a future runtime reorders or shrinks the `fState`…`fEndTime` gap, a
+/// smaller buffer would let those writes run off the end of the heap
+/// allocation, so the derived size is rejected rather than trusted.
+static const size_t kVMActivityMinStateSize = 88;
+
 static size_t VMActivityStateSize(void) {
     Class cls = objc_getClass("CMMotionActivity");
     Ivar state = class_getInstanceVariable(cls, "fState");
     Ivar endTime = class_getInstanceVariable(cls, "fEndTime");
     if (!state || !endTime) return 0;
-    return (size_t)(ivar_getOffset(endTime) - ivar_getOffset(state));
+    ptrdiff_t gap = ivar_getOffset(endTime) - ivar_getOffset(state);
+    if (gap < (ptrdiff_t)kVMActivityMinStateSize) return 0;
+    return (size_t)gap;
 }
 
 CMMotionActivity *VMMakeActivity(int32_t activityType, int32_t confidence, NSDate *startDate) {

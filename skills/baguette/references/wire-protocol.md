@@ -362,8 +362,15 @@ POST /simulators/<UDID>/motion
 Content-Type: application/json
 ```
 
+Name the kind outright:
+
 ```json
 { "activity": "running", "speed": 3.6, "confidence": "high" }
+```
+
+…or send only a speed and let the server classify it:
+
+```json
 { "speed": 6 }
 ```
 

@@ -85,6 +85,20 @@ struct MotionRoutesTests {
         #expect(request?.speed == 13.4)
     }
 
+    @Test func `parseMotionRequest rejects an unsupported confidence`() {
+        // Silently downgrading an unknown word to `high` would report a
+        // confidence the caller never asked for. Say no instead.
+        #expect(Server.parseMotionRequest(
+            json: #"{"activity":"walking","confidence":"certain"}"#) == nil)
+    }
+
+    @Test func `parseMotionRequest rejects a negative speed`() {
+        // A negative speed classifies as `unknown`, which would arm a session
+        // that reports no motion at all — indistinguishable from a bug.
+        #expect(Server.parseMotionRequest(json: #"{"speed":-1}"#) == nil)
+        #expect(Server.parseMotionRequest(json: #"{"activity":"walking","speed":-1}"#) == nil)
+    }
+
     @Test func `parseMotionRequest rejects an unknown activity`() {
         #expect(Server.parseMotionRequest(json: #"{"activity":"swimming"}"#) == nil)
         #expect(Server.parseMotionRequest(json: "not json") == nil)
@@ -120,6 +134,41 @@ struct MotionRoutesTests {
         let outcome = await Server.applyMotion(
             udid: "U", body: "not json", simulators: w.simulators, sessions: w.sessions)
         #expect(outcome == .invalidBody)
+    }
+
+    @Test func `motion state reports an unknown device rather than an idle one`() async {
+        // The POST and DELETE routes 404 an unknown udid; the read-back said
+        // `{"active":false}`, which reads as "this device has motion off"
+        // rather than "there is no such device".
+        let simulators = MockSimulators()
+        given(simulators).find(udid: .any).willReturn(nil)
+        let sessions = MotionSessions(makeMotion: { _ in MockMotion() })
+
+        #expect(await Server.motionState(udid: "nope", simulators: simulators,
+                                         sessions: sessions) == nil)
+    }
+
+    @Test func `a failed disarm is reported rather than swallowed`() async {
+        // If disarming fails, future app launches still load the dylib. An
+        // API that answered `ok` there would leave motion silently injected.
+        let simulators = MockSimulators()
+        let sim = MockSimulator()
+        given(simulators).find(udid: .any).willReturn(sim)
+        given(sim).udid.willReturn("U")
+        given(sim).name.willReturn("iPhone 17 Pro")
+        let motion = MockMotion()
+        given(motion).publish(.any, on: .any).willReturn(())
+        given(motion).clear(on: .any).willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+        let sessions = MotionSessions(makeMotion: { _ in motion })
+        _ = await Server.applyMotion(udid: "U", body: #"{"activity":"walking"}"#,
+                                     simulators: simulators, sessions: sessions)
+
+        let outcome = await Server.stopMotion(udid: "U", simulators: simulators,
+                                              sessions: sessions)
+
+        #expect(outcome == .dispatchFailed)
+        // The session survives so the caller can retry the disarm.
+        #expect(sessions.active(udid: "U") != nil)
     }
 
     @Test func `stopMotion parks the device and forgets the session`() async {

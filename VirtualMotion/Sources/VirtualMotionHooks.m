@@ -15,6 +15,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <os/log.h>
+#import <os/lock.h>
 #import "VirtualMotionIntent.h"
 #import "VirtualMotionFactory.h"
 
@@ -93,20 +94,38 @@ static NSOperationQueue *gActivityQueue;
 static CMMotionActivityHandler gActivityHandler;
 static int32_t gLastActivityType = INT32_MIN;
 static dispatch_source_t gActivityTimer;
+/// Guards the four globals above.
+///
+/// `VMDeliverActivity` runs on the timer's background queue while
+/// `stopActivityUpdates` runs on the app's thread and releases the handler
+/// block. Without this, the timer could copy a block that the app had just
+/// deallocated and crash inside the app under test — the worst possible
+/// failure for a debugging tool. The handler is copied into a local under
+/// the lock (ARC retains it) and invoked outside it, so an app handler can
+/// never run while the lock is held.
+static os_unfair_lock gActivityLock = OS_UNFAIR_LOCK_INIT;
 
 static void VMDeliverActivity(BOOL force) {
-    if (!gActivityHandler || !gActivityQueue) return;
-    VMIntent intent = VMIntentCurrent();
-    if (!force && intent.activityType == gLastActivityType) return;
-    gLastActivityType = intent.activityType;
+    os_unfair_lock_lock(&gActivityLock);
     CMMotionActivityHandler handler = gActivityHandler;
+    NSOperationQueue *queue = gActivityQueue;
+    os_unfair_lock_unlock(&gActivityLock);
+    if (!handler || !queue) return;
+
+    VMIntent intent = VMIntentCurrent();
+    os_unfair_lock_lock(&gActivityLock);
+    BOOL unchanged = !force && intent.activityType == gLastActivityType;
+    if (!unchanged) gLastActivityType = intent.activityType;
+    os_unfair_lock_unlock(&gActivityLock);
+    if (unchanged) return;
+
     CMMotionActivity *activity = VMMakeActivity(intent.activityType, intent.confidence,
                                                 NSDate.date);
     if (!activity) return;
     // Transitions only, so this stays quiet — and a transition is exactly
     // what an app waiting to leave "stationary" is listening for.
     VMLog(@"[VirtualMotion] delivering activity type %d to the app", intent.activityType);
-    [gActivityQueue addOperationWithBlock:^{ handler(activity); }];
+    [queue addOperationWithBlock:^{ handler(activity); }];
 }
 
 static BOOL VMActivityAvailable(id self, SEL _cmd) { return YES; }
@@ -118,9 +137,11 @@ static void VMStartActivityUpdates(id self, SEL _cmd, NSOperationQueue *queue,
     // the dylib not being loaded, and the app never subscribing. Without
     // this line they look identical from outside.
     VMLog(@"[VirtualMotion] app subscribed to activity updates");
+    os_unfair_lock_lock(&gActivityLock);
     gActivityQueue = queue;
     gActivityHandler = handler;
     gLastActivityType = INT32_MIN;
+    os_unfair_lock_unlock(&gActivityLock);
     VMDeliverActivity(YES);
     if (gActivityTimer) return;
     gActivityTimer = dispatch_source_create(
@@ -134,8 +155,10 @@ static void VMStartActivityUpdates(id self, SEL _cmd, NSOperationQueue *queue,
 }
 
 static void VMStopActivityUpdates(id self, SEL _cmd) {
+    os_unfair_lock_lock(&gActivityLock);
     gActivityHandler = nil;
     gActivityQueue = nil;
+    os_unfair_lock_unlock(&gActivityLock);
 }
 
 static void VMQueryActivity(id self, SEL _cmd, NSDate *from, NSDate *to,
@@ -175,6 +198,11 @@ static BOOL VMPedometerNo(id self, SEL _cmd) { return NO; }
 static void VMStartPedometerUpdates(id self, SEL _cmd, NSDate *from,
                                     CMPedometerHandler handler) {
     VMLog(@"[VirtualMotion] app subscribed to pedometer updates");
+    // CoreMotion allows a restart without an intervening stop. Replacing the
+    // associated object without cancelling the old timer would leave it
+    // running, and the app would get every reading twice.
+    VMPedometerState *previous = objc_getAssociatedObject(self, kPedometerStateKey);
+    if (previous.timer) dispatch_source_cancel(previous.timer);
     VMPedometerState *state = [VMPedometerState new];
     state.from = from ?: NSDate.date;
     objc_setAssociatedObject(self, kPedometerStateKey, state, OBJC_ASSOCIATION_RETAIN);
@@ -311,6 +339,9 @@ static void VMStartAccelerometerUpdates(id self, SEL _cmd, NSOperationQueue *que
     VMManagerState *state = VMState(self);
     state.accelerometerActive = YES;
     double interval = VMClampInterval(((CMMotionManager *)self).accelerometerUpdateInterval);
+    // Cancel a stream already running before replacing it — a restart
+    // without a stop would otherwise deliver twice.
+    if (state.accelerometerTimer) dispatch_source_cancel(state.accelerometerTimer);
     state.accelerometerTimer = VMTimer(interval, ^{
         CMAccelerometerData *data = VMCurrentAccelerometerData();
         if (data) [queue addOperationWithBlock:^{ handler(data, nil); }];
@@ -322,6 +353,9 @@ static void VMStartGyroUpdates(id self, SEL _cmd, NSOperationQueue *queue,
     VMManagerState *state = VMState(self);
     state.gyroActive = YES;
     double interval = VMClampInterval(((CMMotionManager *)self).gyroUpdateInterval);
+    // Cancel a stream already running before replacing it — a restart
+    // without a stop would otherwise deliver twice.
+    if (state.gyroTimer) dispatch_source_cancel(state.gyroTimer);
     state.gyroTimer = VMTimer(interval, ^{
         CMGyroData *data = VMCurrentGyroData();
         if (data) [queue addOperationWithBlock:^{ handler(data, nil); }];
@@ -334,6 +368,9 @@ static void VMStartDeviceMotionUpdates(id self, SEL _cmd, NSOperationQueue *queu
     VMManagerState *state = VMState(self);
     state.deviceMotionActive = YES;
     double interval = VMClampInterval(((CMMotionManager *)self).deviceMotionUpdateInterval);
+    // Cancel a stream already running before replacing it — a restart
+    // without a stop would otherwise deliver twice.
+    if (state.deviceMotionTimer) dispatch_source_cancel(state.deviceMotionTimer);
     state.deviceMotionTimer = VMTimer(interval, ^{
         CMDeviceMotion *motion = VMCurrentDeviceMotion();
         if (motion) [queue addOperationWithBlock:^{ handler(motion, nil); }];

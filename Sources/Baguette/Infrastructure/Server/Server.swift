@@ -327,10 +327,14 @@ struct Server: Sendable {
         // Read-back for the card's readout — the one place motion differs
         // from location, which has no GET because simctl cannot report the
         // active position. Here the state is ours, so we can answer.
-        router.get("/simulators/:udid/motion") { [motionSessions] r, _ in
+        router.get("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return Self.jsonResponse(
-                await Self.motionStateJSON(udid: Self.udidParam(r), sessions: motionSessions))
+            guard let json = await Self.motionState(
+                udid: Self.udidParam(r), simulators: simulators, sessions: motionSessions
+            ) else {
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            }
+            return Self.jsonResponse(json)
         }
         router.delete("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -1102,9 +1106,22 @@ struct Server: Sendable {
               let dict = object as? [String: Any] else {
             return nil
         }
-        let confidence = (dict["confidence"] as? String)
-            .flatMap(MotionConfidence.init(rawValue:)) ?? .high
+        // A supplied-but-unknown confidence is rejected rather than quietly
+        // downgraded to `high` — reporting a confidence nobody asked for is
+        // worse than refusing the request.
+        let confidence: MotionConfidence
+        if let word = dict["confidence"] as? String {
+            guard let parsed = MotionConfidence(rawValue: word) else { return nil }
+            confidence = parsed
+        } else {
+            confidence = .high
+        }
+        // A negative speed classifies as `unknown`, which would arm a session
+        // that reports no motion at all — indistinguishable from a broken
+        // feature. CoreLocation's "-1 means I don't know" has no meaning as
+        // an *instruction*.
         let speed = doubleField(dict["speed"])
+        if let speed, speed < 0 { return nil }
         if let activity = dict["activity"] as? String {
             guard let kind = MotionKind(rawValue: activity), kind != .unknown else { return nil }
             return MotionRequest(
@@ -1156,13 +1173,25 @@ struct Server: Sendable {
             return .unknownDevice
         }
         if let session = await sessions.active(udid: udid) {
-            await session.stop()
+            // Keep the session when the stop failed, so a retry still has
+            // something to disarm — dropping it would strand an armed dylib
+            // with nothing tracking it.
+            guard await session.stop() else { return .dispatchFailed }
         }
         await sessions.end(udid: udid)
         return .ok
     }
 
-    /// The `{"activity":…,"steps":…}` payload the browser's readout shows.
+    /// The `{"activity":…,"steps":…}` payload the browser's readout shows, or
+    /// `nil` when no such simulator exists — the caller turns that into the
+    /// same `404` the POST and DELETE routes give, rather than reporting an
+    /// unknown device as one with motion switched off.
+    static func motionState(udid: String, simulators: any Simulators,
+                            sessions: MotionSessions) async -> String? {
+        guard !udid.isEmpty, simulators.find(udid: udid) != nil else { return nil }
+        return await motionStateJSON(udid: udid, sessions: sessions)
+    }
+
     static func motionStateJSON(udid: String, sessions: MotionSessions) async -> String {
         guard let session = await sessions.active(udid: udid) else {
             return #"{"ok":true,"active":false}"#

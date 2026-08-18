@@ -96,11 +96,28 @@ enum InjectedDylibInstaller {
     /// the same path) and skip the rewrite. Skipping preserves the linker's
     /// adhoc signature, which iOS 26's simulator dyld rejects after any
     /// post-build `codesign --force`.
+    /// The write goes to a unique temporary file and is then moved into
+    /// place, because the existence check above is a time-of-check that two
+    /// concurrent callers (a camera start and a motion arm, say) can both
+    /// pass. A direct write would let one caller arm the path while the
+    /// other was still filling it, and dyld would reject the truncated
+    /// dylib. A move is atomic, so a racing caller sees either no file or a
+    /// complete one — and whoever loses the race is happy, since identical
+    /// bytes are what put them at this sha-keyed path to begin with.
     static func apply(plan: InjectedDylibInstallPlan, bytes: Data) throws {
         let fm = FileManager.default
         if fm.fileExists(atPath: plan.destPath) { return }
         try fm.createDirectory(atPath: plan.buildDir, withIntermediateDirectories: true)
-        try bytes.write(to: URL(fileURLWithPath: plan.destPath))
-        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: plan.destPath)
+        let staging = URL(fileURLWithPath: plan.buildDir)
+            .appendingPathComponent(".\(UUID().uuidString).partial")
+        try bytes.write(to: staging)
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: staging.path)
+        do {
+            try fm.moveItem(at: staging, to: URL(fileURLWithPath: plan.destPath))
+        } catch {
+            try? fm.removeItem(at: staging)
+            // Another caller finishing first is success, not failure.
+            guard fm.fileExists(atPath: plan.destPath) else { throw error }
+        }
     }
 }

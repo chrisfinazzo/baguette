@@ -70,6 +70,25 @@ struct MotionLedgerTests {
         #expect(banked.metres == 3.75)
     }
 
+    @Test func `resumes the totals a published intent was carrying`() {
+        // The CLI holds no session state — each `baguette motion set` is a
+        // fresh process. Without this it published `stepsBefore: 0` every
+        // time and an app's step count restarted on every command.
+        // Reconstructing from the published intent means the file itself is
+        // the state, and the CLI and the server agree.
+        let published = MotionIntent(kind: .walking, confidence: .high, speed: 1.5,
+                                     startedAt: 1000, stepsBefore: 812, distanceBefore: 610)
+
+        let ledger = MotionLedger.resuming(from: published, at: 1010)
+
+        #expect(ledger.steps == 812 + 20)
+        #expect(ledger.metres == 610 + 20 * 0.75)
+    }
+
+    @Test func `resumes from nothing when no intent was published`() {
+        #expect(MotionLedger.resuming(from: nil, at: 1010) == .empty)
+    }
+
     @Test func `hands its totals to the next leg`() {
         // The banked figures are exactly what the next intent carries, so
         // the dylib adds its own leg on top and never sees a discontinuity.

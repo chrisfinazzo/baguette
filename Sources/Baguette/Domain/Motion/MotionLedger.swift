@@ -42,6 +42,20 @@ struct MotionLedger: Equatable, Sendable {
                             metres: metres + Double(taken) * profile.strideMetres)
     }
 
+    /// Rebuilds the running totals from an intent that is already published.
+    ///
+    /// A `MotionSession` keeps its ledger in memory, but the CLI is a fresh
+    /// process every invocation and has none. The published intent already
+    /// carries what came before it, so the file is the state: take its
+    /// `stepsBefore` / `distanceBefore` and add the leg it has been running
+    /// since. Without this, every `baguette motion set` published zeroes and
+    /// an app's step count restarted on each command.
+    static func resuming(from published: MotionIntent?, at now: Double) -> MotionLedger {
+        guard let published else { return .empty }
+        return MotionLedger(steps: published.stepsBefore, metres: published.distanceBefore)
+            .banking(published, at: now)
+    }
+
     /// Opens the next leg carrying these totals forward.
     func intent(kind: MotionKind, confidence: MotionConfidence, speed: Double,
                 startedAt: Double) -> MotionIntent {

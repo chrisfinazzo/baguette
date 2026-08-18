@@ -85,16 +85,28 @@ final class MotionSession {
     /// rather than a stale walk. The totals already walked survive, because
     /// a pedometer that reset to zero would make an app's chart jump
     /// backwards.
-    func stop() async {
-        guard case .publishing = phase, let simulator = armedSimulator else { return }
+    /// - Returns: `true` when the device was parked **and** disarmed. On
+    ///   `false` the session is left intact so the caller can retry: a failed
+    ///   disarm means the dylib is still loading into every app launched on
+    ///   that simulator, and answering "stopped" would hide that.
+    @discardableResult
+    func stop() async -> Bool {
+        guard case .publishing = phase, let simulator = armedSimulator else { return true }
         bankCurrentLeg()
         let parked = MotionIntent.stationary(startedAt: now(), stepsBefore: ledger.steps,
                                             distanceBefore: ledger.metres)
-        try? await motion.publish(parked, on: simulator)
-        try? await motion.clear(on: simulator)
+        do {
+            try await motion.publish(parked, on: simulator)
+            try await motion.clear(on: simulator)
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
         phase = .idle
         current = nil
         armedSimulator = nil
+        lastError = nil
+        return true
     }
 
     private func publish(kind: MotionKind, confidence: MotionConfidence, speed: Double,
@@ -116,8 +128,20 @@ final class MotionSession {
 
     /// Rolls the leg in flight into the running totals, so the next intent
     /// carries them forward.
+    ///
+    /// Banking **re-bases** the current intent to start now. On the success
+    /// path that's invisible, because the intent is replaced a moment later.
+    /// It matters when the publish that follows *fails*: the device carries
+    /// on reporting the old intent, so something is still running, but the
+    /// seconds just banked must not be banked again. Leaving `startedAt`
+    /// alone counted the same leg on every subsequent bank and inflated the
+    /// step total for the rest of the session.
     private func bankCurrentLeg() {
         guard let current else { return }
-        ledger = ledger.banking(current, at: now())
+        let at = now()
+        ledger = ledger.banking(current, at: at)
+        self.current = MotionIntent(
+            kind: current.kind, confidence: current.confidence, speed: current.speed,
+            startedAt: at, stepsBefore: ledger.steps, distanceBefore: ledger.metres)
     }
 }

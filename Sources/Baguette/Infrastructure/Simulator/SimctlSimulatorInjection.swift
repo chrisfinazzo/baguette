@@ -39,13 +39,43 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
     }
 
     func arm(dylibPath: String, on simulator: any Simulator) async throws {
-        let armed = await currentDylibs(on: simulator)
-        try await write(armed.adding(dylibPath), on: simulator)
+        try await locked(simulator) {
+            let armed = await self.currentDylibs(on: simulator)
+            try await self.write(armed.adding(dylibPath), on: simulator)
+        }
     }
 
     func disarm(dylibPath: String, on simulator: any Simulator) async throws {
-        let armed = await currentDylibs(on: simulator)
-        try await write(armed.removing(dylibPath), on: simulator)
+        try await locked(simulator) {
+            let armed = await self.currentDylibs(on: simulator)
+            try await self.write(armed.removing(dylibPath), on: simulator)
+        }
+    }
+
+    /// Runs `body` holding an exclusive lock on this simulator's environment.
+    ///
+    /// The read-modify-write is not atomic on its own: if the camera and
+    /// motion arm at the same moment, both can read the same old value and
+    /// the second `setenv` drops the first one's dylib. The lock is a **file**
+    /// lock rather than something on this instance, because `CoreSimulator`
+    /// hands out a fresh `SimctlSimulatorInjection` per call and the CLI is a
+    /// different process from the server entirely — an in-process lock would
+    /// protect nothing.
+    private func locked<T>(_ simulator: any Simulator,
+                           _ body: () async throws -> T) async throws -> T {
+        let fm = FileManager.default
+        let directory = URL(fileURLWithPath: InjectedDylibInstaller.defaultSupportDir)
+            .appendingPathComponent("locks")
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let lockPath = directory.appendingPathComponent("\(simulator.udid).inject.lock").path
+        let descriptor = open(lockPath, O_CREAT | O_RDWR, 0o644)
+        // A lock we cannot take is not worth failing the arm over — the race
+        // it guards is narrow, and refusing to arm is the worse outcome.
+        guard descriptor >= 0 else { return try await body() }
+        defer { close(descriptor) }
+        flock(descriptor, LOCK_EX)
+        defer { flock(descriptor, LOCK_UN) }
+        return try await body()
     }
 
     /// Reads what's armed right now.

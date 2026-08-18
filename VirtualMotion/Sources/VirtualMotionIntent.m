@@ -2,7 +2,25 @@
 #import <sys/stat.h>
 #import <os/lock.h>
 
-NSString *const VMIntentPath = @"/tmp/BaguetteMotion.json";
+/// The intent path for *this* simulator.
+///
+/// Every simulator sees the host's `/tmp`, so a single shared file meant a
+/// publish for one device replaced the intent an injected app on another was
+/// still reading. `SIMULATOR_UDID` is set in every process the simulator
+/// launches, so both sides can derive the same per-device path.
+///
+/// With no UDID there is nothing safe to read — guessing would mean serving
+/// another simulator's motion — so the path stays nil and every surface
+/// reports no motion.
+NSString *VMIntentPath(void) {
+    static NSString *path;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        const char *udid = getenv("SIMULATOR_UDID");
+        path = udid ? [NSString stringWithFormat:@"/tmp/BaguetteMotion-%s.json", udid] : nil;
+    });
+    return path;
+}
 
 /// How often the file is stat'ed. Sampling runs at up to 100 Hz, so this
 /// keeps a hot loop from stat'ing on every tick; the intent itself changes
@@ -16,7 +34,7 @@ static const double kRoadHz = 12.0;
 
 static VMIntent gCached;
 static double gLastStat;
-static long gLastMtime;
+static struct timespec gLastMtime;
 static long gLastSize;
 static os_unfair_lock gLock = OS_UNFAIR_LOCK_INIT;
 
@@ -36,6 +54,14 @@ static VMIntent VMParse(NSData *data) {
     intent.confidence = [json[@"confidence"] intValue];
     intent.speed = [json[@"speed"] doubleValue];
     intent.startedAt = [json[@"startedAt"] doubleValue];
+    // A missing or zero `startedAt` would make the leg integrate from 1970
+    // and report a preposterous step count on the first pedometer read.
+    // Treat a payload without it — truncated, or simply not ours — as no
+    // motion at all rather than as motion since the epoch.
+    if (intent.startedAt <= 0) {
+        VMIntent invalid = {0};
+        return invalid;
+    }
     intent.stepsBefore = [json[@"stepsBefore"] longValue];
     intent.distanceBefore = [json[@"distanceBefore"] doubleValue];
     intent.cadenceHz = [profile[@"cadenceHz"] doubleValue];
@@ -46,19 +72,31 @@ static VMIntent VMParse(NSData *data) {
 }
 
 VMIntent VMIntentCurrent(void) {
+    NSString *path = VMIntentPath();
+    if (!path) {
+        VMIntent none = {0};
+        return none;
+    }
     os_unfair_lock_lock(&gLock);
     double now = VMNow();
     if (now - gLastStat >= kStatInterval) {
         gLastStat = now;
         struct stat st;
-        if (stat(VMIntentPath.fileSystemRepresentation, &st) == 0) {
+        if (stat(path.fileSystemRepresentation, &st) == 0) {
             // Re-parse only when the file actually moved. The host writes
             // atomically, so a replacement shows up as a new mtime/size and
             // we never read a half-written intent.
-            if (st.st_mtimespec.tv_sec != gLastMtime || st.st_size != gLastSize) {
-                gLastMtime = st.st_mtimespec.tv_sec;
+            //
+            // Nanoseconds matter here: a republish fires on a 0.1 m/s speed
+            // change, which can leave the JSON exactly as long as before
+            // (1.4 -> 1.5), so a whole-second mtime plus a byte count would
+            // call a genuinely new intent unchanged.
+            if (st.st_mtimespec.tv_sec != gLastMtime.tv_sec
+                || st.st_mtimespec.tv_nsec != gLastMtime.tv_nsec
+                || st.st_size != gLastSize) {
+                gLastMtime = st.st_mtimespec;
                 gLastSize = st.st_size;
-                NSData *data = [NSData dataWithContentsOfFile:VMIntentPath];
+                NSData *data = [NSData dataWithContentsOfFile:path];
                 gCached = VMParse(data);
             }
         } else {
@@ -67,7 +105,7 @@ VMIntent VMIntentCurrent(void) {
             // stillness, not a phantom walk.
             VMIntent empty = {0};
             gCached = empty;
-            gLastMtime = 0;
+            gLastMtime = (struct timespec){0};
             gLastSize = 0;
         }
     }
