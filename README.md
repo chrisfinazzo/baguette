@@ -149,8 +149,9 @@ open http://localhost:8421/farm
 `/simulators` lists every simulator on the machine with Boot / Shutdown
 buttons; click any booted device to open its focus-mode page —
 full-window live stream, DeviceKit-sourced bezel, top toolbar with
-Camera / Accessibility / Logs / Home / Screenshot / App-switcher
-controls, and a sidebar-view jump button.
+Camera / Accessibility / Logs / Home / Screenshot / Record /
+App-switcher controls, an output-size chip, and a sidebar-view jump
+button.
 
 `/farm` is the multi-device control surface. See
 [Device farm](#device-farm) below.
@@ -161,6 +162,11 @@ Headless from the terminal works too:
 baguette list
 baguette boot --udid <UDID>
 baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+
+# an App Store-sized screenshot, and a 10-second clip at the same size
+baguette screenshot --udid <UDID> --size appstore-6.9 -o hero.png
+baguette record     --udid <UDID> --size appstore-6.9 --duration 10 \
+                    --output demo.mp4
 ```
 
 ## Build from source
@@ -205,14 +211,30 @@ baguette <command> [options]
                                              device reads "unknown" — a state,
                                              not an error.
 
-  # Frames + screenshots
+  # Frames, screenshots + video. --size speaks one shared vocabulary
+  # (presets like appstore-6.9 / square / 16:9, plus WIDTHxHEIGHT and
+  # W:H) — see docs/features/capture-size.md. NB render-3d's --fit
+  # places the screenshot on the device MESH, not on the canvas.
   stream     --udid <UDID> [--fps 60] [--format mjpeg|avcc]
                                              Stream frames on stdout
-  screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
-                                             One-shot JPEG (defaults to stdout)
+  screenshot --udid <UDID> [--output <path>] [--format png|jpg]
+             [--quality 0.85] [--scale 1]
+             [--size native] [--fit contain] [--background '#ffffff']
+                                             One frame (defaults to stdout;
+                                             --format is inferred from the
+                                             --output extension)
+  record     --udid <UDID> --output <file.mp4|file.mov>
+             [--size native] [--fit contain] [--background '#ffffff']
+             [--fps 30] [--duration <sec>] [--bitrate 8000000]
+                                             Record H.264 video until --duration
+                                             elapses or ^C; either way the file
+                                             is flushed and playable. --output
+                                             is required (no stdout) and its
+                                             extension picks the container.
   render-3d  (--udid <UDID> | --screen <image> --device <model-id>)
              [--variant <set>=<choice>] [--rotation X,Y,Z]
-             [--size WIDTHxHEIGHT] [--output <path>]
+             [--size <spec>] [--fit cover] [--background transparent]
+             [--screen-glass] [--output <path>]
                                              Render a screenshot on a 3D device
                                              model as PNG
 
@@ -302,6 +324,36 @@ baguette <command> [options]
   press --udid … --button <name> [--duration <sec>]
 ```
 
+## Capture size — one vocabulary
+
+Screenshots and recordings, 2D and 3D, browser and CLI, all take the
+same output size. Say it once and get the same pixels wherever you
+say it:
+
+| spec | resolves to |
+|---|---|
+| `native` *(default)* | the source's own dimensions |
+| `appstore-6.9` / `appstore-6.5` / `appstore-ipad-13` | Apple's submission sizes |
+| `square` / `16:9` / `9:16` / `4:3` / `4:5` | a ratio, resolved against the source |
+| `1920x1080` | exact pixels |
+| `3:2` | any other ratio |
+
+```bash
+baguette screenshot --udid <UDID> --size appstore-6.9 -o hero.png
+baguette record     --udid <UDID> --size square --duration 10 -o clip.mp4
+baguette render-3d  --udid <UDID> --size square -o device.png
+curl -o shot.png 'localhost:8421/simulators/<UDID>/screenshot.png?size=square'
+```
+
+`--fit` (`contain` / `cover` / `stretch`) says what happens when the
+aspects disagree, and `--background` fills the letterbox. A ratio
+**grows** the source rather than cropping it — `square` on a phone
+gives you the whole phone centred in a square, not a square cut out of
+the middle. Unknown sizes are rejected, never approximated.
+
+Full details, including why the ratio maths works that way, in
+[`docs/features/capture-size.md`](docs/features/capture-size.md).
+
 ## `baguette serve` — the web UI
 
 ```bash
@@ -352,7 +404,9 @@ rejected.
 | `GET`  | `/simulators/:udid/definition.json`        | SDK bootstrap: identity + screen rect + bezel image URLs + per-button envelope/box/transform |
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
-| `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG (`?quality=&scale=`) |
+| `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG (`?quality=&scale=&size=&fit=&background=`) |
+| `GET`  | `/simulators/:udid/screenshot.png`         | the same frame, lossless |
+| `GET`  | `/simulators/:udid/screenshot-bezel.png`   | the frame composited inside its DeviceKit bezel (`&buttons=`) |
 | `GET`  | `/simulators/:udid/interface.json`         | appearance + contrast + content size |
 | `POST` | `/simulators/:udid/interface`              | set any subset; answers with the resulting state |
 | `GET`  | `/simulators/:udid/describe-ui.json`       | accessibility tree over HTTP (`?x=&y=` hit-tests a point) |
@@ -662,6 +716,9 @@ feature lives in one place across both layers.
 │   │   │                             Scroll / Pinch / Pan / Key / TypeText /
 │   │   │                             Keyboard / DeviceEdge / GesturePhase
 │   │   ├── Screen/                   Screen (frame source)
+│   │   ├── Capture/                  CaptureSize + CaptureFit +
+│   │   │                             CapturePlacement — one output-size
+│   │   │                             vocabulary for every capture surface
 │   │   ├── Stream/                   Stream + StreamConfig / StreamFormat
 │   │   │                             + Envelope (MJPEG / AVCC framing)
 │   │   ├── Chrome/                   Chromes aggregate + DeviceChrome /
@@ -753,6 +810,12 @@ feature lives in one place across both layers.
 │       ├── frame-decoder.js          MJPEG / AVCC strategy
 │       ├── stream-session.js         WebSocket + paint loop
 │       ├── capture-gallery.js        screenshot fetch + thumbs
+│       ├── capture/                  the shared output-size vocabulary
+│       │   ├── capture-size.js       presets + placement maths (mirrors
+│       │   │                         Domain/Capture/CaptureSize.swift)
+│       │   ├── capture-settings.js   the user's selection, persisted
+│       │   ├── capture-composer.js   bezel / screen / overlay painter
+│       │   └── capture-size-menu.js  the toolbar picker
 │       ├── baguette/                 JS SDK — Baguette.use({…}) entry,
 │       │   ├── baguette.js           transport.js (the only wire-format
 │       │   ├── transport.js          owner), simulator.js, parts/<name>.js
