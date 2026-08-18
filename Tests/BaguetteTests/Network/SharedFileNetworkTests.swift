@@ -150,6 +150,34 @@ struct SharedFileNetworkTests {
         verify(injection).arm(dylibPath: .any, on: .any).called(0)
     }
 
+    @Test func `current reports the condition this simulator is subject to`() async throws {
+        let (network, injection, sim, _) = makeNetwork()
+        given(injection).armed(dylibPath: .any, on: .any).willReturn(true)
+        try await network.apply(threeG, on: sim)
+
+        #expect(await network.current(on: sim) == threeG)
+    }
+
+    @Test func `current reports nothing for a simulator that is not armed`() async throws {
+        // The condition file is one per host, so a second simulator sees the
+        // same bytes without being subject to them. Reporting "3g applied"
+        // there would be a false alarm, and a badge that cries wolf is a
+        // badge people stop reading — which is exactly what this feature
+        // cannot afford.
+        let (network, injection, sim, _) = makeNetwork()
+        given(injection).armed(dylibPath: .any, on: .any).willReturn(false)
+        try await network.apply(threeG, on: sim)
+
+        #expect(await network.current(on: sim) == nil)
+    }
+
+    @Test func `current reports nothing when nothing has been published`() async {
+        let (network, injection, sim, _) = makeNetwork()
+        given(injection).armed(dylibPath: .any, on: .any).willReturn(true)
+
+        #expect(await network.current(on: sim) == nil)
+    }
+
     @Test func `applies into a directory that does not exist yet`() async throws {
         // The shared path is configurable, and a caller pointing at a fresh
         // directory shouldn't have to create it first.

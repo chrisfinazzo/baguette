@@ -25,6 +25,20 @@ protocol Network: AnyObject, Sendable {
     /// publishes an unconditioned state for them to read — otherwise they
     /// would stay throttled for as long as they keep running.
     func clear(on simulator: any Simulator) async throws
+
+    /// What this simulator's apps are actually subject to, or `nil` when
+    /// nothing is.
+    ///
+    /// This exists for one reason: a throttle nobody remembers arming does
+    /// not announce itself, it just makes the app feel slow — so "is
+    /// anything on?" has to be answerable cheaply, by the CLI's `status`
+    /// and by the browser card's badge.
+    ///
+    /// *This* simulator, not the host. The condition is published to one
+    /// shared file, so a second simulator can see the same bytes without
+    /// having the dylib armed; reporting a condition there would be a false
+    /// alarm, and a badge that cries wolf stops being read.
+    func current(on simulator: any Simulator) async -> NetworkCondition?
 }
 
 /// Failure modes the network surface surfaces. Maps to a CLI exit message /

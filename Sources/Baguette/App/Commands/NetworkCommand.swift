@@ -164,23 +164,13 @@ struct NetworkCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            _ = try NetworkCommand.resolve(options)
-            let published = NetworkCommand.publishedCondition()
-            guard let published, !published.isUnconditioned else {
-                log("No network conditioning is applied.")
+            let simulator = try NetworkCommand.resolve(options)
+            guard let applied = await simulator.network().current(on: simulator) else {
+                log("\(simulator.name): no network conditioning applied.")
                 return
             }
-            log("Network conditioning applied: \(published.summary)")
+            log("\(simulator.name) network: \(applied.summary)")
         }
-    }
-
-    /// Reads whatever condition is currently published. Unreadable or
-    /// absent means nothing is being conditioned, which is also what a
-    /// fresh host looks like.
-    static func publishedCondition() -> NetworkCondition? {
-        guard let data = try? Data(
-            contentsOf: URL(fileURLWithPath: SharedFileNetwork.defaultPath)) else { return nil }
-        return try? NetworkCondition(decoding: data)
     }
 
     private static func resolve(_ options: DeviceOption) throws -> any Simulator {

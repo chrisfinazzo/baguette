@@ -60,6 +60,19 @@ final class SharedFileNetwork: Network, @unchecked Sendable {
         try await injection.disarm(dylibPath: dylibPath, on: simulator)
     }
 
+    func current(on simulator: any Simulator) async -> NetworkCondition? {
+        guard let dylibPath, !dylibPath.isEmpty else { return nil }
+        // Armed first: the file is one per host, so its contents say what
+        // was last published anywhere, not what this simulator is subject
+        // to. Answering from the file alone would report a throttle on a
+        // simulator that has none.
+        guard await injection.armed(dylibPath: dylibPath, on: simulator) else { return nil }
+        guard let data = try? Data(contentsOf: fileURL),
+              let condition = try? NetworkCondition(decoding: data),
+              !condition.isUnconditioned else { return nil }
+        return condition
+    }
+
     private func publish(_ condition: NetworkCondition) throws {
         let directory = fileURL.deletingLastPathComponent()
         if !FileManager.default.fileExists(atPath: directory.path) {
