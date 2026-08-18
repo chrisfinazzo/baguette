@@ -24,6 +24,22 @@ static NSString *const kVNHandled = @"BaguetteNetworkHandled";
 static const NSUInteger kHighWaterBytes = 4 * 1024 * 1024;
 static const NSUInteger kLowWaterBytes = 1 * 1024 * 1024;
 
+/// Whether `request` is a WebSocket upgrade rather than an ordinary fetch.
+///
+/// Checked by header because the scheme is no help: `wss:` has already been
+/// rewritten to `https:` by the time a URLProtocol is consulted. `Upgrade`
+/// is the header the RFC requires and the one URLSession sets; the
+/// `Sec-WebSocket-*` pair is belt and braces in case a future runtime
+/// populates them at a different point in the chain.
+static BOOL VNIsWebSocketUpgrade(NSURLRequest *request) {
+    NSString *upgrade = [request valueForHTTPHeaderField:@"Upgrade"];
+    if (upgrade.length && [upgrade caseInsensitiveCompare:@"websocket"] == NSOrderedSame) {
+        return YES;
+    }
+    return [request valueForHTTPHeaderField:@"Sec-WebSocket-Key"].length > 0
+        || [request valueForHTTPHeaderField:@"Sec-WebSocket-Version"].length > 0;
+}
+
 #pragma mark - Shared session
 
 /// The upstream callbacks, declared ahead of the delegate that calls them.
@@ -147,7 +163,22 @@ NSURLSession *VNSharedSession(void) {
     if (!condition.conditioning) return NO;
 
     NSString *scheme = request.URL.scheme.lowercaseString;
-    return [scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"];
+    if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) return NO;
+
+    // A WebSocket handshake arrives here as an ordinary https GET — the
+    // `wss:` scheme is already gone by the time a URLProtocol sees it. Taking
+    // it would be worse than useless: we re-issue through a data task, the
+    // Upgrade never completes, and every WebSocket in the app fails to
+    // connect the moment any condition is armed. Messages are conditioned by
+    // the hooks in VirtualNetworkWebSocket.m instead, which is the only layer
+    // where a WebSocket is still a WebSocket.
+    if (VNIsWebSocketUpgrade(request)) {
+        VNLogThrottled("ws-upgrade",
+                       @"[VirtualNetwork] leaving a websocket handshake alone: %@",
+                       request.URL.absoluteString);
+        return NO;
+    }
+    return YES;
 }
 
 + (NSURLRequest *)canonicalRequestForRequest:(NSURLRequest *)request { return request; }

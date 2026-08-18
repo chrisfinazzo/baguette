@@ -30,8 +30,34 @@
 typedef void (^VNSendCompletion)(NSError *error);
 typedef void (^VNReceiveCompletion)(NSURLSessionWebSocketMessage *message, NSError *error);
 
-static void (*gOriginalSend)(id, SEL, NSURLSessionWebSocketMessage *, VNSendCompletion);
-static void (*gOriginalReceive)(id, SEL, VNReceiveCompletion);
+/// One entry per class we replaced a method on.
+///
+/// `NSURLSessionWebSocketTask` is the public face; the object an app actually
+/// holds is a private concrete subclass that implements these methods itself.
+/// Replacing the public class's IMP therefore changes nothing — measured, and
+/// it is why the first version of these hooks installed cleanly and never
+/// fired. So every class in the hierarchy that *directly* implements them is
+/// hooked, and each keeps its own original to chain to.
+typedef struct {
+    __unsafe_unretained Class cls;
+    void (*send)(id, SEL, NSURLSessionWebSocketMessage *, VNSendCompletion);
+    void (*receive)(id, SEL, VNReceiveCompletion);
+} VNHookedClass;
+
+/// Generous: in practice this is one or two classes.
+static VNHookedClass gHooked[8];
+static NSUInteger gHookedCount;
+
+/// The original implementations for `self`, found by walking its class chain
+/// — the instance may be a subclass of whichever class we replaced.
+static const VNHookedClass *VNOriginalsFor(id object) {
+    for (Class cls = object_getClass(object); cls; cls = class_getSuperclass(cls)) {
+        for (NSUInteger i = 0; i < gHookedCount; i++) {
+            if (gHooked[i].cls == cls) return &gHooked[i];
+        }
+    }
+    return NULL;
+}
 
 /// How long an offline failure is held before being reported.
 ///
@@ -60,9 +86,11 @@ static void VNAfter(double seconds, dispatch_block_t block) {
 
 static void VNSendMessage(id self, SEL _cmd, NSURLSessionWebSocketMessage *message,
                           VNSendCompletion completion) {
+    const VNHookedClass *originals = VNOriginalsFor(self);
+    if (!originals) return;   // can't happen: we only replace what we record.
     VNCondition condition = VNConditionCurrent();
     if (!condition.conditioning) {
-        gOriginalSend(self, _cmd, message, completion);
+        originals->send(self, _cmd, message, completion);
         return;
     }
     if (condition.offline) {
@@ -78,7 +106,7 @@ static void VNSendMessage(id self, SEL _cmd, NSURLSessionWebSocketMessage *messa
     VNLogThrottled("ws-send", @"[VirtualNetwork] conditioning websocket send (%.0f ms)",
                    condition.latencyMs);
     VNAfter(condition.latencyMs / 1000.0, ^{
-        gOriginalSend(self, _cmd, message, completion);
+        originals->send(self, _cmd, message, completion);
     });
 }
 
@@ -122,12 +150,14 @@ static void VNDeliver(id self, SEL _cmd, NSURLSessionWebSocketMessage *message,
 }
 
 static void VNReceiveMessage(id self, SEL _cmd, VNReceiveCompletion completion) {
+    const VNHookedClass *originals = VNOriginalsFor(self);
+    if (!originals) return;
     VNCondition condition = VNConditionCurrent();
     if (!condition.conditioning) {
-        gOriginalReceive(self, _cmd, completion);
+        originals->receive(self, _cmd, completion);
         return;
     }
-    gOriginalReceive(self, _cmd, ^(NSURLSessionWebSocketMessage *message, NSError *error) {
+    originals->receive(self, _cmd, ^(NSURLSessionWebSocketMessage *message, NSError *error) {
         VNDeliver(self, _cmd, message, error, completion);
     });
 }
@@ -144,18 +174,108 @@ static void VNReceiveMessage(id self, SEL _cmd, VNReceiveCompletion completion) 
 /// bandwidth cap would be to delay whole messages by their size — which is
 /// latency wearing a different name. Latency, loss and offline say what they
 /// mean here; bandwidth would not.
-BOOL VNInstallWebSocketHooks(void) {
-    Class cls = objc_getClass("NSURLSessionWebSocketTask");
-    if (!cls) return NO;
 
-    Method send = class_getInstanceMethod(cls, @selector(sendMessage:completionHandler:));
-    Method receive = class_getInstanceMethod(
-        cls, @selector(receiveMessageWithCompletionHandler:));
-    if (!send || !receive) return NO;
+/// Replaces both methods on `cls`, but only if `cls` implements them itself —
+/// `class_getInstanceMethod` happily returns an inherited method, and
+/// replacing that would rewrite the superclass's implementation from under
+/// every other subclass.
+static BOOL VNHookClass(Class cls) {
+    SEL sendSel = @selector(sendMessage:completionHandler:);
+    SEL receiveSel = @selector(receiveMessageWithCompletionHandler:);
 
-    gOriginalSend = (void *)method_getImplementation(send);
-    gOriginalReceive = (void *)method_getImplementation(receive);
+    unsigned int count = 0;
+    Method *methods = class_copyMethodList(cls, &count);
+    BOOL ownsSend = NO, ownsReceive = NO;
+    for (unsigned int i = 0; i < count; i++) {
+        SEL name = method_getName(methods[i]);
+        if (name == sendSel) ownsSend = YES;
+        if (name == receiveSel) ownsReceive = YES;
+    }
+    free(methods);
+    if (!ownsSend || !ownsReceive) return NO;
+    if (gHookedCount >= sizeof(gHooked) / sizeof(gHooked[0])) return NO;
+
+    Method send = class_getInstanceMethod(cls, sendSel);
+    Method receive = class_getInstanceMethod(cls, receiveSel);
+    gHooked[gHookedCount] = (VNHookedClass){
+        .cls = cls,
+        .send = (void *)method_getImplementation(send),
+        .receive = (void *)method_getImplementation(receive),
+    };
+    gHookedCount++;
     method_setImplementation(send, (IMP)VNSendMessage);
     method_setImplementation(receive, (IMP)VNReceiveMessage);
+    return YES;
+}
+
+/// Hooks whatever class `task` actually is, the first time we see one.
+///
+/// This is why task creation is intercepted at all. Sweeping the class list
+/// at load finds only `NSURLSessionWebSocketTask`; the concrete subclass that
+/// overrides these methods is registered lazily, the first time an app asks
+/// for a socket — so a load-time sweep hooks the public class, reports
+/// success, and never fires. Measured, twice.
+static void VNAdoptTaskClass(id task) {
+    if (!task) return;
+    Class cls = object_getClass(task);
+    for (NSUInteger i = 0; i < gHookedCount; i++) {
+        if (gHooked[i].cls == cls) return;
+    }
+    if (VNHookClass(cls)) {
+        VNLog(@"[VirtualNetwork] websocket hooks on %@", NSStringFromClass(cls));
+    }
+}
+
+static id (*gOriginalTaskWithURL)(id, SEL, NSURL *);
+static id (*gOriginalTaskWithURLProtocols)(id, SEL, NSURL *, NSArray *);
+static id (*gOriginalTaskWithRequest)(id, SEL, NSURLRequest *);
+
+static id VNTaskWithURL(id self, SEL _cmd, NSURL *url) {
+    id task = gOriginalTaskWithURL(self, _cmd, url);
+    VNAdoptTaskClass(task);
+    return task;
+}
+static id VNTaskWithURLProtocols(id self, SEL _cmd, NSURL *url, NSArray *protocols) {
+    id task = gOriginalTaskWithURLProtocols(self, _cmd, url, protocols);
+    VNAdoptTaskClass(task);
+    return task;
+}
+static id VNTaskWithRequest(id self, SEL _cmd, NSURLRequest *request) {
+    id task = gOriginalTaskWithRequest(self, _cmd, request);
+    VNAdoptTaskClass(task);
+    return task;
+}
+
+BOOL VNInstallWebSocketHooks(void) {
+    Class session = objc_getClass("NSURLSession");
+    if (!session) return NO;
+
+    Method withURL = class_getInstanceMethod(session, @selector(webSocketTaskWithURL:));
+    Method withProtocols = class_getInstanceMethod(
+        session, @selector(webSocketTaskWithURL:protocols:));
+    Method withRequest = class_getInstanceMethod(
+        session, @selector(webSocketTaskWithRequest:));
+    if (!withURL && !withProtocols && !withRequest) return NO;
+
+    if (withURL) {
+        gOriginalTaskWithURL = (void *)method_getImplementation(withURL);
+        method_setImplementation(withURL, (IMP)VNTaskWithURL);
+    }
+    if (withProtocols) {
+        gOriginalTaskWithURLProtocols = (void *)method_getImplementation(withProtocols);
+        method_setImplementation(withProtocols, (IMP)VNTaskWithURLProtocols);
+    }
+    if (withRequest) {
+        gOriginalTaskWithRequest = (void *)method_getImplementation(withRequest);
+        method_setImplementation(withRequest, (IMP)VNTaskWithRequest);
+    }
+
+    // The public class too, in case a runtime makes it concrete. Harmless
+    // when it isn't — the per-class table means the subclass hook chains to
+    // its own original either way.
+    Class base = objc_getClass("NSURLSessionWebSocketTask");
+    if (base && VNHookClass(base)) {
+        VNLog(@"[VirtualNetwork] websocket hooks on %@", NSStringFromClass(base));
+    }
     return YES;
 }

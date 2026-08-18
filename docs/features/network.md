@@ -225,6 +225,22 @@ The offline backoff exists because clients re-arm the receive as soon as one
 completes; failing instantly turns an offline socket into a busy loop pinning
 a core inside the app under test.
 
+Two things had to be got right for any of this to work, both found by
+running it rather than by reading:
+
+- **The handshake must be left alone.** A WebSocket upgrade reaches
+  `canInitWithRequest:` as an ordinary `https` GET — the `wss:` scheme is
+  gone by then. Claiming it means re-issuing through a data task, the
+  Upgrade never completes, and *every* WebSocket in the app fails to connect
+  the moment any condition is armed. The protocol now declines anything
+  carrying an `Upgrade: websocket` header.
+- **The class to hook is registered lazily.** The app holds a private
+  `__NSURLSessionWebSocketTask`, which overrides both methods, and it does
+  not exist when the dylib loads. Sweeping the class list at load hooks the
+  public `NSURLSessionWebSocketTask`, reports success, and never fires. So
+  task creation is intercepted instead, and the concrete class is hooked the
+  first time one is handed out.
+
 Note the socket itself is not torn down: the TCP connection stays up while
 messages are refused. What the app observes is a dead channel with the right
 error code, which is what matters for testing; it is not a substitute for
