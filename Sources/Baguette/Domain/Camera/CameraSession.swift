@@ -40,6 +40,11 @@ final class CameraSession {
     /// sim until it reboots, so teardown must unset it.
     private var armedSimulator: (any Simulator)?
 
+    /// The dylib path `start` armed — retained because the variable is
+    /// shared with other injecting features, so teardown has to name its
+    /// own entry rather than dropping whatever else is loaded.
+    private var armedDylibPath: String?
+
     private var frameCount: UInt64 = 0
     private var fpsLastSample: (Date, UInt64)?
 
@@ -86,6 +91,7 @@ final class CameraSession {
             return
         }
         armedSimulator = simulator
+        armedDylibPath = dylibPath
         let capture = capture(for: source)
         do {
             try await capture.start(source: source) { [weak self] frame in
@@ -93,8 +99,9 @@ final class CameraSession {
             }
         } catch {
             lastError = error.localizedDescription
-            try? await injection.disarm(on: simulator)
+            try? await injection.disarm(dylibPath: dylibPath, on: simulator)
             armedSimulator = nil
+            armedDylibPath = nil
             return
         }
         activeCapture = capture
@@ -116,16 +123,18 @@ final class CameraSession {
         guard case .streaming = phase else { return }
         let capture = activeCapture
         let sim = armedSimulator
+        let dylibPath = armedDylibPath
         phase = .idle
         activeCapture = nil
         armedSimulator = nil
+        armedDylibPath = nil
         startedAt = nil
         fps = 0
         fpsLastSample = nil
 
         await capture?.stop()
-        if let sim {
-            try? await injection.disarm(on: sim)
+        if let sim, let dylibPath {
+            try? await injection.disarm(dylibPath: dylibPath, on: sim)
         }
     }
 

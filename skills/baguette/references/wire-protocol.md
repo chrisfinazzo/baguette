@@ -352,6 +352,50 @@ POST /simulators/<UDID>/shake
 Response: `{"ok":true}`; `404` unknown udid; `500 shake failed (simctl
 error)`. iOS-only. See [`docs/features/shake.md`](../../../docs/features/shake.md).
 
+## Motion HTTP routes
+
+Not a gesture verb, and not a simctl path — CoreMotion reports
+unavailable in a stock simulator, so these arm an injected dylib:
+
+```http
+POST /simulators/<UDID>/motion
+Content-Type: application/json
+```
+
+Name the kind outright:
+
+```json
+{ "activity": "running", "speed": 3.6, "confidence": "high" }
+```
+
+…or send only a speed and let the server classify it:
+
+```json
+{ "speed": 6 }
+```
+
+Either spelling works: `activity` names the kind
+(`stationary|walking|running|cycling|automotive`), or a bare `speed` is
+classified server-side — which is what the browser sends, so the activity
+bands live in Swift rather than in JS. Response is the current state, the
+same shape `GET` returns:
+
+```json
+{ "ok": true, "active": true, "activity": "cycling",
+  "steps": 24, "metres": 18.0, "speed": 6.00 }
+```
+
+`GET /simulators/<UDID>/motion` reads it back (`{"ok":true,"active":false}`
+when off); `DELETE` parks the device stationary and disarms. `400` for a
+body naming neither activity nor speed, `404` unknown udid, `500` when the
+build carries no `VirtualMotion.dylib`.
+
+**Only apps launched after the POST see anything** — dyld inserts at exec
+time. Once armed, `POST …/location` drives the activity from the speed it
+carries (walk vector, route `speed`, or a bare point → stationary); a
+location request never arms motion on its own. See
+[`docs/features/motion.md`](../../../docs/features/motion.md).
+
 ## 3D render HTTP routes
 
 3D rendering is HTTP, not a WebSocket gesture verb:

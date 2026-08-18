@@ -79,6 +79,14 @@ protocol Simulator: Sendable {
     /// invocation is stateless.
     func location() -> any Location
 
+    /// Drive what this simulator's apps read from CoreMotion — activity,
+    /// pedometer counters and device-motion samples. Unlike `location()`
+    /// there is no `simctl` verb behind it: the surface is unavailable in a
+    /// stock simulator, so it works by injecting a dylib into apps. Each
+    /// call returns a fresh handle; the state lives in the published intent
+    /// file, not the handle.
+    func motion() -> any Motion
+
     /// This simulator's shared pasteboard — set plain text, read it
     /// back, or sync the host Mac's full pasteboard across (images
     /// included). Each call returns a fresh handle; the underlying
