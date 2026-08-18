@@ -42,6 +42,16 @@
 
 <script src="/stream-session.js"></script>
 <script src="/frame-decoder.js"></script>
+<!-- Capture-size vocabulary — the size a user picks once ("App Store
+     6.9″", "square") in the focus pane, spelled the same way the routes
+     and the CLI spell it. Ahead of /recorder.js: BrowserRecorder reads
+     the shared CaptureSize/CaptureComposer to size its output. Within
+     the group, size → settings → composer → menu, since each restores
+     the previous one in its constructor. -->
+<script src="/capture/capture-size.js"></script>
+<script src="/capture/capture-settings.js"></script>
+<script src="/capture/capture-composer.js"></script>
+<script src="/capture/capture-size-menu.js"></script>
 <script src="/recorder.js"></script>
 <!-- Baguette SDK — farm-tile uses Transport / Screen / Keyboard
      directly (no Bezel; the farm tile is its own surface). -->

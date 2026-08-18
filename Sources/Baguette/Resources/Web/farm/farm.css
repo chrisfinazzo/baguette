@@ -924,6 +924,66 @@ body.focus-resizing {
 }
 .preset:hover { border-color: var(--phosphor); color: var(--phosphor); }
 
+/* ===== CAPTURE OUTPUT SIZE =====
+   CaptureSizeMenu (capture/capture-size-menu.js) ships its own <style>,
+   themed off `--nv-*` hooks with light-mode fallbacks. The farm runs a
+   dark mission-control palette, so bind those hooks to farm tokens here
+   and take over the two places the shared sheet hard-codes white on
+   `--accent` — white on phosphor lime is unreadable.
+
+   The picker host is full-width and the popover is pinned to both its
+   edges (`left:0;right:0`) rather than the sheet's `right:0` alone: the
+   focus pane is a scroll container that clips, and it resizes down to
+   260px, narrower than the popover's natural 236px + padding. */
+.capture-row {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 8px 0 0;
+}
+.capture-row .label {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.capture-row .dims {
+  margin-left: auto;
+  font: 600 11px/1 var(--mono);
+  color: var(--phosphor);
+  font-variant-numeric: tabular-nums;
+}
+/* Amber, the farm's "reading is off" colour: the recorder built its
+   compose canvas at a different size than the picker asked for. */
+.capture-row .dims.stale { color: var(--amber); }
+.capture-picker { margin-top: 8px; }
+.focus .cap-size {
+  --nv-text:      var(--text);
+  --nv-panel:     var(--panel);
+  --nv-btn:       var(--panel-hi);
+  --nv-btn-hover: var(--rule-2);
+  --nv-border:    var(--rule-2);
+  --text-muted:   var(--muted);
+  --accent:       var(--phosphor);
+  display: block; width: 100%;
+}
+.focus .cap-size-chip {
+  width: 100%; justify-content: space-between;
+  height: 30px; border-radius: 3px;
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.focus .cap-size-pop {
+  left: 0; right: 0; width: auto;
+  border-radius: 3px;
+  font-family: var(--mono);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+.focus .cap-size-list button[aria-checked="true"] { color: var(--bg); }
+.focus .cap-size-list button[aria-checked="true"] .dim { color: rgba(10, 12, 16, 0.7); }
+.focus .cap-size-seg button[aria-checked="true"] {
+  background: var(--panel-hi); color: var(--phosphor); box-shadow: none;
+}
+.focus .cap-size-row input[type="text"] { background: var(--bg); }
+
 /* ===== CLI MIRROR FOOTER ===== */
 footer {
   display: flex; align-items: center;
