@@ -496,9 +496,12 @@ DELETE http://localhost:8421/simulators/<UDID>/network   (clear, running apps in
 ```
 
 **Only URLSession-shaped traffic is conditioned.** REST, GraphQL and image
-loading are; `URLSessionWebSocketTask`, `NWConnection`/Network.framework,
-raw sockets and most gRPC are not — structurally, since `URLProtocol` is
-part of the URL Loading System. **`WKWebView` and Safari page loads are not
+loading are, and `URLSessionWebSocketTask` gets its own hooks (latency,
+loss, offline — not bandwidth). An SDK that opens its own socket is not
+reached: Ably's ably-cocoa vendors SocketRocket, and its hooks never fire.
+`NWConnection`/Network.framework, raw sockets and most gRPC are not
+conditioned either — structurally, since `URLProtocol` is part of the URL
+Loading System. **`WKWebView` and Safari page loads are not
 conditioned either**: WebKit fetches page resources in its own networking
 process. A hybrid app's native `fetch` calls are throttled while the web
 content beside them is not. For an app whose realtime layer is a

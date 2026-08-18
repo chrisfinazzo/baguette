@@ -316,9 +316,10 @@ Wired (use freely):
   **Same relaunch rule as motion** — only apps launched after `network set`
   are conditioned; changing it afterwards needs no relaunch.
   **Three limits to state rather than discover:** only URLSession-shaped
-  traffic is conditioned (WebSockets, `NWConnection` and raw sockets are
-  not — so for an app whose realtime layer is a WebSocket, `--offline`
-  will not feel offline); **`WKWebView` / Safari page loads are not
+  traffic is conditioned — `URLSessionWebSocketTask` is (latency, loss,
+  offline; not bandwidth), but an SDK that opens its own socket is not, so
+  Ably's ably-cocoa and Starscream are unreached and `--offline` will not
+  feel offline to them; **`WKWebView` / Safari page loads are not
   conditioned**, since WebKit loads them in its own networking process, so
   a hybrid app is throttled natively but not in its web content; and loss
   is request-level rather than packet-level. See

@@ -24,9 +24,10 @@ worth putting first:
 > **Changing the condition afterwards needs no relaunch** — a running app
 > picks it up within about 100 ms.
 
-> **This only sees URLSession-shaped traffic.** REST, GraphQL and image
-> loading are conditioned. WebSockets and raw sockets are not. Read
-> [Known limits](#known-limits) before trusting a result.
+> **This only sees URLSession-shaped traffic.** REST, GraphQL, image loading
+> and `URLSessionWebSocketTask` are conditioned. `WKWebView` page loads and
+> raw sockets are not. Read [Known limits](#known-limits) before trusting a
+> result.
 
 ## Why this needs a dylib at all
 
@@ -201,6 +202,57 @@ One-per-request would add an unmeasured TLS handshake to every request in a
 tool whose job is adding a measured delay, and an ephemeral configuration
 would silently drop the cookies an app authenticates with.
 
+### WebSockets
+
+WebSockets are part of the URL Loading System but do **not** go through
+`NSURLProtocol` — once the socket is open, messages bypass the protocol
+machinery entirely. So `URLSessionWebSocketTask` gets its own pair of hooks,
+on the two methods every client funnels through:
+
+| | Outbound (`sendMessage:`) | Inbound (`receiveMessageWithCompletionHandler:`) |
+| --- | --- | --- |
+| latency | delayed before sending | delayed before delivery |
+| loss | the send fails | the message is **dropped** and the receive re-issued |
+| offline | fails `NSURLError -1009` | fails `-1009` after a short backoff |
+
+Inbound loss swallows the message and listens again rather than completing
+with an error, because those are different events: a client that gets an
+error on its receive stops listening, which is a dropped *connection*, not a
+dropped message. Apps react to the two very differently, and only one of them
+is what `--loss` means.
+
+The offline backoff exists because clients re-arm the receive as soon as one
+completes; failing instantly turns an offline socket into a busy loop pinning
+a core inside the app under test.
+
+Note the socket itself is not torn down: the TCP connection stays up while
+messages are refused. What the app observes is a dead channel with the right
+error code, which is what matters for testing; it is not a substitute for
+pulling the network out from under a connection.
+
+#### This only reaches Apple's WebSocket API
+
+`URLSessionWebSocketTask` arrived in iOS 13, and plenty of realtime SDKs
+predate it or ship their own transport. **Ably's `ably-cocoa` vendors
+SocketRocket** (`ARTSRWebSocket`), which is built on `CFStream` rather than
+`URLSession` — measured against a driver app using it, the hooks installed
+(`websockets=1`) and **not one of them fired**. Starscream is in the same
+category.
+
+So check what your realtime layer actually uses before trusting `--offline`
+to reach it. The banner tells you the hooks are installed; only the
+`conditioning websocket …` lines tell you they are being used:
+
+```bash
+xcrun simctl spawn <udid> log stream --predicate 'subsystem == "com.baguette.network"'
+# [VirtualNetwork] conditioning websocket send (200 ms)
+```
+
+Nothing conditions an SDK that opens its own socket, and no amount of work at
+this layer would — that would need a hook further down, at `CFStream` or the
+BSD socket calls, which conditions the simulator's own daemons along with the
+app.
+
 ### The load-time check
 
 If neither mechanism installs, the dylib **unregisters itself and conditions
@@ -265,10 +317,13 @@ read, and this one has to be believed.
 
 ## Known limits
 
-- **URLSession-shaped traffic only.** `URLProtocol` is part of the URL
-  Loading System; `URLSessionWebSocketTask`, `NWConnection` /
-  Network.framework, raw sockets, and most gRPC stacks bypass it entirely and
-  are **not conditioned**. This is structural, not an oversight.
+- **URLSession-shaped traffic only.** `NWConnection` / Network.framework,
+  raw sockets, and most gRPC stacks bypass the URL Loading System entirely
+  and are **not conditioned**. This is structural, not an oversight. In
+  practice `NWConnection` is rare in app code — Apple's own guidance is to
+  use `URLSession` for HTTP and drop to Network.framework only for custom
+  protocols — but a realtime SDK built on raw sockets rather than
+  `URLSessionWebSocketTask` (Starscream, for instance) falls outside this.
 
 - **`WKWebView` and Safari page loads are not conditioned.** WebKit fetches
   page resources in its own networking process, on a path `URLProtocol` does
@@ -281,11 +336,15 @@ read, and this one has to be believed.
   conditioned while the web content inside its `WKWebView` is not, so the
   same screen can be half-throttled.
 
-  It bites harder than it sounds. Testing against a driver app whose realtime
-  layer is a WebSocket, `--offline` failed every REST call with
-  `NSURLError -1009` while the app's UI **did not change at all** — still
-  "Online", still receiving realtime events. For an app like that, "offline"
-  degrades request traffic without the app ever noticing it went offline.
+- **WebSockets carry latency, loss and offline — but not bandwidth.**
+  `URLSessionWebSocketTask` has its own hooks (see
+  [WebSockets](#websockets)); a bandwidth cap is not among them, because an
+  app cannot observe a partial message, so capping one could only mean
+  delaying whole messages by size — which is latency wearing another name.
+  A realtime SDK that opens its own socket rather than using
+  `URLSessionWebSocketTask` is **not reached at all** — Ably's `ably-cocoa`
+  (SocketRocket) and Starscream are both in that category, measured for the
+  first. See [WebSockets](#websockets).
 - **Request-level, not packet-level.** "20% loss" means 20% of requests fail:
   no partial transfers, no retransmits, no congestion-window behaviour. Loss
   fails a request **immediately** (`NSURLErrorNetworkConnectionLost`) rather

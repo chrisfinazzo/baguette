@@ -21,6 +21,10 @@
 #import "VirtualNetworkCondition.h"
 #import "VirtualNetworkProtocol.h"
 
+/// Defined in VirtualNetworkWebSocket.m — WebSockets bypass NSURLProtocol
+/// once open, so they need hooks of their own.
+extern BOOL VNInstallWebSocketHooks(void);
+
 static IMP gOriginalDefault;
 static IMP gOriginalEphemeral;
 
@@ -101,8 +105,15 @@ __attribute__((constructor)) static void VirtualNetworkInit(void) {
               @"conditioned — an app's own requests almost certainly will not.");
     }
 
+    BOOL websockets = VNInstallWebSocketHooks();
+    if (!websockets) {
+        VNLog(@"[VirtualNetwork] websocket hooks did not install — an app whose realtime "
+              @"layer is a WebSocket will keep working normally under any condition, "
+              @"including offline.");
+    }
+
     VNCondition condition = VNConditionCurrent();
-    VNLog(@"[VirtualNetwork] installed (registerClass=%d configSwizzle=%d) — %@",
-          registered, swizzled,
+    VNLog(@"[VirtualNetwork] installed (registerClass=%d configSwizzle=%d websockets=%d) — %@",
+          registered, swizzled, websockets,
           condition.conditioning ? @"a condition is armed" : @"nothing is being conditioned");
 }

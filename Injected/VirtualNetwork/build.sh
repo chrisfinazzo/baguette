@@ -31,6 +31,7 @@ build_slice() {
         -o "VirtualNetwork.${arch}.dylib" \
         Sources/VirtualNetworkCondition.m \
         Sources/VirtualNetworkProtocol.m \
+        Sources/VirtualNetworkWebSocket.m \
         Sources/VirtualNetworkHooks.m
 }
 
