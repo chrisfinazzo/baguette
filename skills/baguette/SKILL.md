@@ -279,6 +279,24 @@ Wired (use freely):
   derived on a flat lat/lon grid so diagonal bearings skew by
   `1/cos(latitude)` (~6.5° at lat 37; cardinals are exact). See
   [`docs/features/location.md`](../../docs/features/location.md).
+- `motion` — make the device's apps read CoreMotion: `CMMotionActivity`
+  (walking / running / cycling / automotive), `CMPedometer` counters, and
+  `CMMotionManager` samples. **Not a simctl path** — all three are
+  unavailable in a stock simulator, so baguette injects
+  `VirtualMotion.dylib`. `baguette motion start --udid <X> [--activity
+  <kind>] [--speed <m/s>]` arms it (plain `start` = walking);
+  `baguette motion set --udid <X> --activity <kind>` changes it;
+  `baguette motion stop --udid <X>` parks it stationary and disarms.
+  `serve`: `POST /simulators/<X>/motion` with `{"activity":"running"}` or
+  just `{"speed":6}` (classified server-side), `GET` to read back
+  `{activity,steps,metres,speed}`, `DELETE` to stop. Browser: a **Drive
+  motion sensors** toggle on the Location card — once on, the walk
+  joystick and route speeds already being posted drive the activity.
+  **The one thing that surprises people: only apps launched _after_
+  arming see anything** (dyld inserts at exec time) — relaunch with
+  `xcrun simctl launch --terminate-running-process <X> <bundle-id>`.
+  Floor counting and the magnetometer are deliberately still unavailable.
+  See [`docs/features/motion.md`](../../docs/features/motion.md).
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji

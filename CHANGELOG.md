@@ -12,6 +12,38 @@ For releases prior to this changelog, see the
 
 ### Added
 
+- **Motion — `baguette motion start|set|stop`, and a walk that drives it.**
+  Makes a simulator's apps read `CMMotionActivity` (walking, running,
+  cycling, automotive), `CMPedometer` counters, and `CMMotionManager`
+  samples. All three report **unavailable** in a stock simulator —
+  CoreMotion and locationd both gate on a hardware-capability bit derived
+  from the device's HW type, and a simulated device is an "Unsupported HW
+  type", so locationd refuses a motion-activity subscription outright. The
+  runtime even ships a simulation hook
+  (`simulateMotionState:withState:withHint:`) that locationd accepts and
+  that changes nothing, because the availability gate sits upstream of it.
+  So this works the way the [virtual camera](docs/features/camera.md) does:
+  by injecting a dylib into the app under test. **Only apps launched after
+  `motion start` see anything** — dyld inserts at exec time.
+  Turn it on in the browser's **Location** card and the walk joystick and
+  route speeds it already posts classify the activity, so the preset you
+  picked (`Walk 1.4 · Cycle 6 · Drive 13.4`) is what your app observes;
+  pinning a point parks it as stationary, which is exactly when locationd
+  drops `course` to `-1`. Motion stays **opt-in** — moving the device never
+  arms a simulator-wide `DYLD_INSERT_LIBRARIES` on your behalf.
+  The ABI notes are the part worth keeping: those `{fff}` structs pass **by
+  value** (a pointer reads zeros and displaces the timestamp),
+  `CMGyroData`'s initialiser takes **degrees** while its property returns
+  radians, `CMDeviceMotion`'s quaternion is stored `w,x,y,z` against a
+  public `x,y,z,w`, its `gravity` is derived from attitude rather than set,
+  it ignores its own `timestamp:` argument, and `CMMotionActivity` built by
+  poking ivars reads back fine and then crashes in `-description`. A
+  load-time self-check verifies each surface and **skips hooking any that
+  fails**, so a future iOS leaves apps seeing the platform's honest
+  "unavailable" rather than fabricated garbage. Floor counting and the
+  magnetometer are refused on purpose. See
+  [`docs/features/motion.md`](docs/features/motion.md).
+
 - **Deep links — `baguette openurl <url>` and `baguette schemes`.** Opens a link
   on a booted simulator, and lists the URL schemes its apps registered (ranked:
   an app's own scheme before its reverse-DNS and `exp+` aliases). Unlike
