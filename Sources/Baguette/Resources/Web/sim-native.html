@@ -1084,6 +1084,18 @@
   }
   #simNativeView .location-host .loc-field:focus { outline: none; border-color: var(--nv-accent); }
   #simNativeView .location-host .loc-unit { font: 500 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted); }
+  /* Motion toggle — sits under the readout in every mode, since motion
+     follows whatever the card is doing (walk, route, or a pinned point). */
+  #simNativeView .location-host .loc-motion { justify-content: space-between; }
+  #simNativeView .location-host .loc-motion-toggle {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    font: 500 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .location-host .loc-motion-toggle input { accent-color: var(--nv-accent); }
+  #simNativeView .location-host .loc-motion-state {
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-accent);
+  }
   #simNativeView .location-host .loc-actions { display: flex; gap: 8px; margin-top: 12px; }
   #simNativeView .location-host .loc-apply {
     flex: 1; padding: 8px; border: 0; border-radius: 8px; cursor: pointer;

@@ -261,6 +261,16 @@
         '</div>' +
         '<div class="loc-map" id="nativeLocationMap"></div>' +
         '<div class="loc-readout" id="nativeLocationReadout">Click the map to choose a position.</div>' +
+        // Motion rides on whatever the card is already doing: once armed,
+        // the walk vector / route speed this panel posts classifies the
+        // activity server-side. No second control surface, no new wire.
+        '<div class="loc-row loc-motion">' +
+          '<label class="loc-motion-toggle">' +
+            '<input type="checkbox" id="nativeLocationMotion"> ' +
+            '<span>Drive motion sensors</span>' +
+          '</label>' +
+          '<span class="loc-motion-state" id="nativeLocationMotionState"></span>' +
+        '</div>' +
         '<div class="loc-row loc-route-only" hidden>' +
           '<label class="loc-row-label">Speed</label>' +
           '<input class="loc-field" id="nativeLocationSpeed" type="number" min="1" ' +
@@ -311,6 +321,8 @@
           if (this.replay) this._endReplay('Replay stopped.');
           else this._replay();
         });
+
+      this._setupMotion();
 
       this.host.querySelector('#nativeLocationSearchBtn')
         .addEventListener('click', () => this._search());
@@ -460,6 +472,95 @@
         () => this._readout('Location permission denied or unavailable.'),
         { enableHighAccuracy: true, timeout: 8000 }
       );
+    }
+
+    // ---- motion --------------------------------------------------
+
+    // Arming rewrites a simulator-wide DYLD_INSERT_LIBRARIES that dyld only
+    // honours at exec time, so the toggle says out loud that the app has to
+    // be relaunched. Everything after that is automatic: the walk vectors
+    // and route speeds this card already posts classify the activity.
+    _setupMotion() {
+      const box = this.host.querySelector('#nativeLocationMotion');
+      if (!box) return;
+      box.addEventListener('change', () => this._toggleMotion(box.checked));
+      this._refreshMotion();
+    }
+
+    _toggleMotion(on) {
+      const url = `/simulators/${encodeURIComponent(this.udid)}/motion`;
+      if (!on) {
+        this._stopMotionPoll();
+        fetch(url, { method: 'DELETE' })
+          .then(() => this._motionState(''))
+          .catch(() => this._motionState('stop failed'));
+        return;
+      }
+      // Send the speed the card is set to move at and let the server
+      // classify it — the same division of labour as every other control
+      // here. Duplicating the activity thresholds in JS would put domain
+      // logic in the frontend, and the two copies would drift.
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speed: this._presetSpeed() }),
+      })
+        .then((res) => (res.ok ? res.json() : res.json().then((e) => Promise.reject(e))))
+        .then((state) => {
+          this._paintMotion(state);
+          this._motionHint();
+          this._startMotionPoll();
+        })
+        .catch((err) => {
+          // Report what the server said rather than guessing at one cause —
+          // a 400 (bad body) and a 500 (no dylib in this build) need
+          // different fixes.
+          this._motionState('failed');
+          this._readout(`Motion failed — ${(err && err.error) || 'network error'}`);
+          this.host.querySelector('#nativeLocationMotion').checked = false;
+        });
+    }
+
+    _startMotionPoll() {
+      this._stopMotionPoll();
+      // Slow on purpose: this is a readout, and the interesting number
+      // (steps) only moves a couple of times a second.
+      this.motionTimer = setInterval(() => this._refreshMotion(), 2000);
+    }
+
+    _stopMotionPoll() {
+      if (this.motionTimer) clearInterval(this.motionTimer);
+      this.motionTimer = null;
+    }
+
+    _refreshMotion() {
+      fetch(`/simulators/${encodeURIComponent(this.udid)}/motion`)
+        .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+        .then((state) => {
+          const box = this.host.querySelector('#nativeLocationMotion');
+          if (box) box.checked = !!state.active;
+          this._paintMotion(state);
+          if (state.active) this._startMotionPoll();
+        })
+        .catch(() => {});
+    }
+
+    _paintMotion(state) {
+      if (!state || !state.active) { this._motionState(''); return; }
+      // Show the speed behind the classification, so a surprising activity
+      // ("why does it say cycling?") explains itself.
+      const speed = state.speed > 0 ? ` · ${state.speed} m/s` : '';
+      const steps = state.steps ? ` · ${state.steps} steps` : '';
+      this._motionState(`${state.activity}${speed}${steps}`);
+    }
+
+    _motionState(text) {
+      const el = this.host.querySelector('#nativeLocationMotionState');
+      if (el) el.textContent = text;
+    }
+
+    _motionHint() {
+      this._readout('Motion armed — relaunch the app to pick it up.');
     }
 
     // ---- walk mode ----------------------------------------------

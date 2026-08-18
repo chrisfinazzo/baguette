@@ -31,6 +31,10 @@ final class MotionSession {
     /// Metres accrued so far, on the same basis as `steps`.
     var metres: Double { ledger.metres }
 
+    /// The speed currently being reported, in metres per second. Surfaced
+    /// alongside the kind so a readout can show *why* it says what it says.
+    var speed: Double { current?.speed ?? 0 }
+
     /// The smallest speed change worth a republish. Each publish costs a
     /// `launchctl` spawn and the joystick sends a fresh vector several
     /// times a second; this is the same epsilon `sim-location.js` already
