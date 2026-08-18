@@ -11,6 +11,12 @@
 (function () {
   'use strict';
 
+  // The farm's own slot in the shared capture-size vocabulary — each
+  // surface persists its selection separately (`asc.capture.native`,
+  // `asc.capture.farm`, …) because "square for marketing shots on the
+  // native page" rarely means "square for every farm recording too".
+  const CAPTURE_STORAGE_KEY = 'asc.capture.farm';
+
   function FarmFocus(host) {
     this.host = host;
     this.tile = null;
@@ -28,7 +34,18 @@
       recorder: null,
       active: false, startedAt: 0, timer: null,
       entries: [],
+      // Frozen at Record-press time: what the user asked for, the size we
+      // predicted, and the size the recorder's compose canvas actually is.
+      settings: null, plannedSize: null, outputSize: null,
     };
+
+    // Output-size picker (capture/capture-size-menu.js). Rebuilt on every
+    // `show` because `show` replaces the pane's innerHTML wholesale; the
+    // selection itself survives in localStorage under CAPTURE_STORAGE_KEY.
+    this.captureMenu = null;
+    // Defaulted here so `_captureSourceSize` is safe to call before the
+    // first `show` wires the real closure in.
+    this._getRecorderContext = () => null;
   }
 
   FarmFocus.prototype.show = function (device, tile, callbacks) {
@@ -80,6 +97,15 @@
           <button class="preset" data-button="screenshot">Snap UI</button>
           <button class="preset" data-button="rotate">Rotate</button>
         </div>
+      </div>
+
+      <div class="controls">
+        <h4>Capture Output</h4>
+        <div class="capture-row">
+          <span class="label">Output</span>
+          <span class="dims" data-readout="capture-dims" title="Resolved recording output">—</span>
+        </div>
+        <div class="capture-picker" data-role="capture-size"></div>
       </div>
 
       <div class="controls">
@@ -151,6 +177,89 @@
     if (recBtn) {
       recBtn.onclick = () => this._toggleRecord(recBtn);
     }
+
+    // Mounted last: the menu's `sourceSize` closure reads the recorder
+    // context, which only exists once the callbacks above are wired.
+    this._mountCaptureMenu();
+  };
+
+  // ---- capture output size -------------------------------------------
+
+  // Guarded end to end: this is the last thing `show` does, and FarmApp
+  // re-parents the live canvas + promotes the tile *after* `show`
+  // returns. A capture module that failed to load must cost the user a
+  // size picker, never the video.
+  FarmFocus.prototype._mountCaptureMenu = function () {
+    if (this.captureMenu) { this.captureMenu.detach(); this.captureMenu = null; }
+    const host = this.host.querySelector('[data-role="capture-size"]');
+    if (!host || !window.CaptureSizeMenu ||
+        !window.Baguette || !window.Baguette._CaptureSettings) return;
+    try {
+      this.captureMenu = new window.CaptureSizeMenu({
+        storageKey: CAPTURE_STORAGE_KEY,
+        showFrameToggle: true,
+        sourceSize: () => this._captureSourceSize(),
+        onChange: () => this._renderCaptureDims(),
+      }).mount(host);
+    } catch (err) {
+      this.captureMenu = null;
+      console.warn('[FarmFocus] capture size picker unavailable:', err && err.message);
+    }
+    this._renderCaptureDims();
+  };
+
+  /** The CaptureSettings a recording started right now would use. */
+  FarmFocus.prototype.captureSettings = function () {
+    return this.captureMenu ? this.captureMenu.settings : null;
+  };
+
+  // What the recorder's compose canvas comes out at before the capture
+  // size is applied. Mirrors recorder.js `composeSize`: with a bezel to
+  // composite, the recording is the definition's viewport; otherwise it
+  // is the live canvas's own pixels. Keeping the two in step is what
+  // makes the readout the number the file actually gets.
+  FarmFocus.prototype._captureSourceSize = function () {
+    const ctx = this._getRecorderContext();
+    if (!ctx) return null;
+    const settings = this.captureSettings();
+    const wantsFrame = !settings || settings.withFrame;
+    if (wantsFrame && ctx.frameImg && ctx.frameImg.naturalWidth > 0 &&
+        ctx.screen && ctx.screen.viewport) {
+      return { width: ctx.screen.viewport.width, height: ctx.screen.viewport.height };
+    }
+    if (ctx.canvas && ctx.canvas.width > 0) {
+      return { width: ctx.canvas.width, height: ctx.canvas.height };
+    }
+    return null;
+  };
+
+  // While idle this is a prediction; once recording it's the compose
+  // canvas the recorder actually built, which is the only number that
+  // can't be wrong. They differ only against a BrowserRecorder that
+  // doesn't understand `settings` yet — hence the `stale` flag rather
+  // than silently showing a size the file won't have.
+  FarmFocus.prototype._renderCaptureDims = function () {
+    const el = this.host.querySelector('[data-readout="capture-dims"]');
+    if (!el) return;
+    const recording = this.recording.active && this.recording.outputSize;
+    const out = recording ? this.recording.outputSize : this._resolvedOutputSize();
+    const planned = recording ? this.recording.plannedSize : out;
+    const honoured = sameSize(planned, out);
+    const text = out ? out.width + '\u00d7' + out.height : '\u2014';
+    if (el.textContent !== text) el.textContent = text;
+    el.classList.toggle('stale', !!out && !honoured);
+    el.title = honoured
+      ? 'Resolved recording output'
+      : 'This recorder records at its own size — the chosen capture size was not applied';
+  };
+
+  FarmFocus.prototype._resolvedOutputSize = function () {
+    const settings = this.captureSettings();
+    const source = this._captureSourceSize();
+    if (!settings || !source) return null;
+    const plan = settings.plan(source.width, source.height);
+    if (!plan || !plan.width || !plan.height) return null;
+    return { width: plan.width, height: plan.height };
   };
 
   FarmFocus.prototype._toggleRecord = async function (recBtn) {
@@ -164,9 +273,17 @@
       if (label) label.textContent = 'Saving…';
       if (timer) timer.textContent = '';
       recBtn.classList.remove('recording');
+      // Snapshot what this clip was recorded as before awaiting: focusing
+      // another device mid-save runs `show` → `_resetRecording`, which
+      // clears these slots out from under the resolved artifact.
+      const naming = {
+        settings:    this.recording.settings,
+        plannedSize: this.recording.plannedSize,
+        outputSize:  this.recording.outputSize,
+      };
       try {
         const artifact = await rec.stop();
-        this._onRecordFinished(artifact);
+        this._onRecordFinished(artifact, naming);
       } catch (err) {
         this._onRecordError(err);
       }
@@ -179,6 +296,11 @@
     }
     const ctx = this._getRecorderContext();
     if (!ctx || !ctx.canvas) { this._onRecordError(new Error('no live canvas')); return; }
+    // The size travels in the context alongside the DOM handles (see
+    // FarmApp.getRecorderContext) so a re-focus mid-session can't strand
+    // us on a stale selection; the local menu is the fallback for a
+    // caller that doesn't supply one.
+    const settings = ctx.settings || this.captureSettings();
     try {
       const rec = new window.BrowserRecorder({
         canvas:      ctx.canvas,
@@ -186,9 +308,22 @@
         screen:      ctx.screen,
         overlayHost: ctx.overlayHost,
         fps: 60,
+        // Belt and braces: `settings` is the new capture-size option and
+        // the four handles above are the shape BrowserRecorder has always
+        // taken. Both are passed so this works against the recorder as it
+        // is today (which ignores `settings`) and against the resized one,
+        // in either landing order.
+        settings,
       });
+      const planned = this._resolvedOutputSize();
       rec.start();
       this.recording.recorder = rec;
+      this.recording.settings = settings || null;
+      this.recording.plannedSize = planned;
+      // `start()` builds the compose canvas the recording is sampled
+      // from, so reading it back is the truth about the output size —
+      // whichever BrowserRecorder build is loaded.
+      this.recording.outputSize = composeCanvasSize(rec) || planned;
       this._onRecordStarted();
     } catch (err) {
       this._onRecordError(err);
@@ -201,6 +336,9 @@
     if (this.fpsEl && t.fps !== undefined) this.fpsEl.textContent = t.fps + ' fps';
     if (this.latEl && t.lat !== undefined) this.latEl.textContent = t.lat + ' ms';
     if (this.brEl  && t.br  !== undefined) this.brEl.textContent  = t.br  + ' kbps';
+    // The live canvas only settles on its size once frames arrive, so
+    // piggyback the readout on the telemetry tick rather than polling.
+    this._renderCaptureDims();
   };
 
   FarmFocus.prototype._onRecordStarted = function () {
@@ -212,17 +350,35 @@
     this._renderRecordTimer();
   };
 
-  FarmFocus.prototype._onRecordFinished = function (artifact) {
+  FarmFocus.prototype._onRecordFinished = function (artifact, naming) {
     this._renderRecordButton();
     this._renderRecordTimer();
     if (!artifact || typeof artifact.url !== 'string') return;
     this.recording.entries.unshift({
       url: artifact.url,
-      filename: artifact.filename || 'recording.webm',
+      filename: this._recordFilename(artifact, naming),
       duration: typeof artifact.durationSeconds === 'number' ? artifact.durationSeconds : 0,
       bytes:    typeof artifact.bytes === 'number'           ? artifact.bytes           : 0,
     });
     this._renderRecordList();
+  };
+
+  // `download="…"` is what the file lands as, so the size belongs in the
+  // name. Two honesty rules: a recorder that ignored the chosen size gets
+  // its plain pixels rather than the preset it didn't honour, and a name
+  // the recorder already slugged is left alone instead of doubled.
+  FarmFocus.prototype._recordFilename = function (artifact, naming) {
+    const base = (artifact && artifact.filename) || 'recording.webm';
+    const n = naming || this.recording;
+    const settings = n.settings;
+    const out = n.outputSize;
+    if (!settings || settings.size.isNative || !out) return base;
+    const slug = sameSize(n.plannedSize, out)
+      ? settings.slug(out.width, out.height)
+      : out.width + 'x' + out.height;
+    if (base.indexOf(slug) >= 0) return base;
+    const dot = base.lastIndexOf('.');
+    return dot > 0 ? base.slice(0, dot) + '-' + slug + base.slice(dot) : base + '-' + slug;
   };
 
   FarmFocus.prototype._onRecordError = function (err) {
@@ -247,6 +403,7 @@
       recorder: null,
       active: false, startedAt: 0, timer: null,
       entries: [],
+      settings: null, plannedSize: null, outputSize: null,
     };
     this._renderRecordButton();
     this._renderRecordTimer();
@@ -283,11 +440,24 @@
 
   FarmFocus.prototype.dispose = function () {
     this._resetRecording();
+    if (this.captureMenu) { this.captureMenu.detach(); this.captureMenu = null; }
     this.host.innerHTML = '';
     if (window.FarmViews) window.FarmViews.renderFocusEmpty(this.host);
     this.tile = null;
     this.device = null;
   };
+
+  // The recorder's compose canvas is the recording's output surface.
+  // Reading it back after `start()` is version-proof: a BrowserRecorder
+  // that resizes and one that doesn't both report what they really built.
+  function composeCanvasSize(rec) {
+    const c = rec && rec.compose;
+    return c && c.width > 0 && c.height > 0 ? { width: c.width, height: c.height } : null;
+  }
+
+  function sameSize(a, b) {
+    return !!a && !!b && a.width === b.width && a.height === b.height;
+  }
 
   function formatDuration(seconds) {
     if (!isFinite(seconds) || seconds < 0) seconds = 0;
