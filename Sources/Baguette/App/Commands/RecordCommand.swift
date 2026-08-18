@@ -125,6 +125,14 @@ struct RecordCommand: AsyncParsableCommand {
             log("Device \(options.udid) not found")
             throw ExitCode.failure
         }
+        // A shut-down device has no framebuffer to wire, so it delivers
+        // nothing — and without this it would sit out the whole
+        // --duration before reporting "the screen never changed", which
+        // sends the user tapping at a simulator that isn't running.
+        guard simulator.state == .booted else {
+            log(RecordingError.deviceNotBooted(simulator.state.description).message)
+            throw ExitCode.failure
+        }
 
         let recorder = ScreenRecorder(
             screen: simulator.screen(),
@@ -139,7 +147,7 @@ struct RecordCommand: AsyncParsableCommand {
         let gate = RecordingGate()
         signal(SIGINT, SIG_IGN)
         let interrupt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
-        interrupt.setEventHandler { gate.open() }
+        interrupt.setEventHandler { gate.open(.interrupt) }
         interrupt.resume()
 
         var timer: DispatchSourceTimer?
@@ -150,7 +158,7 @@ struct RecordCommand: AsyncParsableCommand {
             // frames altogether.
             let source = DispatchSource.makeTimerSource(queue: .global())
             source.schedule(deadline: .now() + duration)
-            source.setEventHandler { gate.open() }
+            source.setEventHandler { gate.open(.duration) }
             source.resume()
             timer = source
         }
@@ -166,12 +174,19 @@ struct RecordCommand: AsyncParsableCommand {
         }
 
         await gate.wait()
+        let interrupted = gate.openedBy == .interrupt
         interrupt.cancel()
         timer?.cancel()
-        // Flushing a long recording takes seconds; hand Ctrl-C back to
-        // the kernel so a second one can abort it rather than being
-        // swallowed by a source that's already cancelled.
-        signal(SIGINT, SIG_DFL)
+        // Flushing a long recording takes seconds, and a Ctrl-C during
+        // the flush kills the process mid-`finishWriting` — the one way
+        // left to end up with a truncated file. So the signal only goes
+        // back to the kernel when the user has *already* pressed once
+        // and a second press is plausibly deliberate. On the --duration
+        // path they haven't pressed at all, and their first press must
+        // not be the one that breaks the file; SIGINT stays ignored
+        // until the reel is closed.
+        if interrupted { signal(SIGINT, SIG_DFL) }
+        defer { signal(SIGINT, SIG_DFL) }
 
         do {
             let summary = try await recorder.finish()
@@ -189,16 +204,30 @@ struct RecordCommand: AsyncParsableCommand {
 
 /// A one-shot latch an async caller waits on and a `DispatchSource`
 /// handler opens. Both the SIGINT source and the duration timer can fire;
-/// only the first one through resumes the continuation.
-private final class RecordingGate: @unchecked Sendable {
+/// only the first one through resumes the continuation — and the gate
+/// remembers which, because that decides what SIGINT does next.
+final class RecordingGate: @unchecked Sendable {
+
+    /// Why the take ended.
+    enum Reason: Equatable, Sendable {
+        case interrupt
+        case duration
+    }
+
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Never>?
-    private var opened = false
+    private var reason: Reason?
+
+    /// The reason the gate opened, or `nil` while it's still shut.
+    var openedBy: Reason? {
+        lock.lock(); defer { lock.unlock() }
+        return reason
+    }
 
     func wait() async {
         await withCheckedContinuation { continuation in
             lock.lock()
-            if opened {
+            if reason != nil {
                 lock.unlock()
                 continuation.resume()
                 return
@@ -208,10 +237,10 @@ private final class RecordingGate: @unchecked Sendable {
         }
     }
 
-    func open() {
+    func open(_ reason: Reason) {
         lock.lock()
-        guard !opened else { lock.unlock(); return }
-        opened = true
+        guard self.reason == nil else { lock.unlock(); return }
+        self.reason = reason
         let waiting = continuation
         continuation = nil
         lock.unlock()

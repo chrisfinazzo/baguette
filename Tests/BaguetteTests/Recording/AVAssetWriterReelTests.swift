@@ -88,7 +88,89 @@ struct AVAssetWriterReelTests {
         #expect(grid.pixel(x: 4, y: 2) != Pixel(r: 0x10, g: 0x20, b: 0x30, a: 255))
     }
 
+    // MARK: - What lands at the user's path
+
+    @Test func `a take with no frames in it leaves the file already at that path alone`() async throws {
+        // The classic re-run: yesterday's good clip is sitting at
+        // `--output`, today's take captures nothing. Deleting the good
+        // one to make room for a file that never got written is the
+        // worst of both outcomes, so the reel writes somewhere else
+        // until it has something worth handing over.
+        let destination = try scratchDirectory().appendingPathComponent("demo.mp4")
+        try Data("yesterday's take".utf8).write(to: destination)
+
+        let reel = AVAssetWriterReel()
+        try reel.open(
+            to: destination,
+            placement: CapturePlacement(
+                width: 64, height: 64, drawX: 0, drawY: 0, drawWidth: 64, drawHeight: 64
+            ),
+            plan: makePlan()
+        )
+        reel.discard()
+
+        #expect(try Data(contentsOf: destination) == Data("yesterday's take".utf8))
+        #expect(try siblings(of: destination) == ["demo.mp4"])
+    }
+
+    @Test func `a finished take replaces whatever was at that path`() async throws {
+        let destination = try scratchDirectory().appendingPathComponent("demo.mp4")
+        try Data("yesterday's take".utf8).write(to: destination)
+
+        let reel = AVAssetWriterReel()
+        try reel.open(
+            to: destination,
+            placement: CapturePlacement(
+                width: 64, height: 64, drawX: 0, drawY: 0, drawWidth: 64, drawHeight: 64
+            ),
+            plan: makePlan()
+        )
+        #expect(reel.append(frame: try squareSurface(), at: 0))
+        try await reel.close()
+
+        let written = try Data(contentsOf: destination)
+        #expect(written.count > 500)
+        // An MP4's file-type box sits at bytes 4…8.
+        #expect(written[4..<8] == Data("ftyp".utf8))
+        // Nothing left over beside it either way.
+        #expect(try siblings(of: destination) == ["demo.mp4"])
+    }
+
     // MARK: - Fixtures
+
+    private func makePlan() -> RecordingPlan {
+        RecordingPlan(
+            size: .native, fit: .contain, background: HexColor("#ffffff"),
+            fps: 30, bitrateBps: 2_000_000, duration: nil, format: .mp4
+        )
+    }
+
+    /// A fresh directory per test, so "what else is in here" is a
+    /// question with an answer.
+    private func scratchDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-reel-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: url, withIntermediateDirectories: true
+        )
+        return url
+    }
+
+    /// Every entry in the file's directory, hidden ones included.
+    private func siblings(of url: URL) throws -> [String] {
+        try FileManager.default
+            .contentsOfDirectory(atPath: url.deletingLastPathComponent().path)
+            .sorted()
+    }
+
+    private func squareSurface() throws -> IOSurface {
+        try #require(IOSurface(properties: [
+            .width: 64,
+            .height: 64,
+            .bytesPerElement: 4,
+            .pixelFormat: kCVPixelFormatType_32BGRA,
+        ]))
+    }
 
     /// A 4×4 framebuffer: rows 0–1 red, rows 2–3 blue. Written in raster
     /// order, top row first — exactly how the simulator hands one over.

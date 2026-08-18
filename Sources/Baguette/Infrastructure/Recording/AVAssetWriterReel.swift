@@ -40,6 +40,10 @@ final class AVAssetWriterReel: Reel, @unchecked Sendable {
     private var background: HexColor?
     private var lastTime: Double = 0
     private var frameInterval: Double = 1.0 / 30.0
+    /// Where the film is being exposed, and where it goes once it's
+    /// worth keeping. See `scratch(beside:)`.
+    private var scratch: URL?
+    private var destination: URL?
 
     /// Presentation times are expressed against this timescale; 600 is
     /// the usual QuickTime choice because it divides 24 / 25 / 30 / 60
@@ -52,12 +56,21 @@ final class AVAssetWriterReel: Reel, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        try? FileManager.default.removeItem(at: url)
+        // Expose the film somewhere else and only hand it over once the
+        // take is finished. `AVAssetWriter` needs a path with nothing at
+        // it, so writing straight to `url` would mean deleting whatever
+        // the user already had there *before* knowing this recording
+        // produces a single frame — and a take that captures nothing
+        // would then have destroyed the good clip it was meant to
+        // replace. A `kill -9` mid-take leaks the scratch file; every
+        // other ending removes it.
+        let scratch = Self.scratch(beside: url)
+        try? FileManager.default.removeItem(at: scratch)
 
         let writer: AVAssetWriter
         do {
             writer = try AVAssetWriter(
-                outputURL: url,
+                outputURL: scratch,
                 fileType: plan.format == .mp4 ? .mp4 : .mov
             )
         } catch {
@@ -115,6 +128,8 @@ final class AVAssetWriterReel: Reel, @unchecked Sendable {
         self.adaptor = adaptor
         self.placement = placement
         self.frameInterval = plan.frameInterval
+        self.scratch = scratch
+        self.destination = url
         // Video has no alpha channel, so the letterbox always shows
         // *some* colour — the user's `--background`, opaque.
         self.background = plan.background
@@ -156,42 +171,84 @@ final class AVAssetWriterReel: Reel, @unchecked Sendable {
     }
 
     func close() async throws {
-        guard let (writer, input, end) = takeWriter() else { return }
-        input.markAsFinished()
+        guard let take = takeWriter() else { return }
+        take.input.markAsFinished()
         // The last frame occupies its own interval too, so the session
         // ends one interval past it — otherwise a 5 s recording reports
         // 4.97 s and the final frame flashes by.
-        writer.endSession(atSourceTime: CMTime(
-            seconds: end, preferredTimescale: Self.timescale
+        take.writer.endSession(atSourceTime: CMTime(
+            seconds: take.end, preferredTimescale: Self.timescale
         ))
-        await writer.finishWriting()
+        await take.writer.finishWriting()
 
-        if writer.status == .failed {
+        if take.writer.status == .failed {
+            // The scratch file holds a take that didn't finish; drop it
+            // rather than move a broken file onto the user's path.
+            try? FileManager.default.removeItem(at: take.scratch)
             throw RecordingError.writerFailed(
-                writer.error?.localizedDescription ?? "AVAssetWriter failed"
+                take.writer.error?.localizedDescription ?? "AVAssetWriter failed"
             )
         }
+        try Self.handOver(take.scratch, to: take.destination)
     }
 
     func discard() {
         // `cancelWriting` is the one call that both stops the writer and
-        // deletes the file it had already created — exactly what "there
-        // was no film on this reel" should leave behind.
-        takeWriter()?.writer.cancelWriting()
+        // deletes the file it had already created — and because that
+        // file is the scratch one, whatever the user already had at
+        // their `--output` path is untouched.
+        guard let take = takeWriter() else { return }
+        take.writer.cancelWriting()
+        try? FileManager.default.removeItem(at: take.scratch)
+    }
+
+    /// Move the finished take onto the path the user named, replacing
+    /// whatever was there. `replaceItemAt` is the atomic swap when
+    /// something already exists; a plain move covers the fresh path.
+    private static func handOver(_ scratch: URL, to destination: URL) throws {
+        do {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                _ = try FileManager.default.replaceItemAt(destination, withItemAt: scratch)
+            } else {
+                try FileManager.default.moveItem(at: scratch, to: destination)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: scratch)
+            throw RecordingError.writerFailed(
+                "cannot write \(destination.path): \(error.localizedDescription)"
+            )
+        }
+    }
+
+    /// A hidden sibling of the destination, so the swap at the end is a
+    /// same-volume rename rather than a copy across filesystems.
+    private static func scratch(beside destination: URL) -> URL {
+        let extended = destination.pathExtension.isEmpty
+            ? "" : "." + destination.pathExtension
+        return destination
+            .deletingLastPathComponent()
+            .appendingPathComponent(".baguette-record-\(UUID().uuidString)\(extended)")
     }
 
     /// Hand the writer over and clear it, so a second `close()` — or a
     /// `discard()` after one — is a no-op. Split out of the async
     /// `close()` because `NSLock` is unavailable from an async context.
-    private func takeWriter()
-        -> (writer: AVAssetWriter, input: AVAssetWriterInput, end: Double)? {
+    private func takeWriter() -> (
+        writer: AVAssetWriter,
+        input: AVAssetWriterInput,
+        end: Double,
+        scratch: URL,
+        destination: URL
+    )? {
         lock.lock(); defer { lock.unlock() }
-        guard let writer, let input else { return nil }
+        guard let writer, let input, let scratch, let destination else { return nil }
         let end = lastTime + frameInterval
         self.writer = nil
         self.input = nil
         self.adaptor = nil
-        return (writer, input, end)
+        self.scratch = nil
+        self.destination = nil
+        return (writer, input, end, scratch, destination)
     }
 
     // MARK: - Compositing

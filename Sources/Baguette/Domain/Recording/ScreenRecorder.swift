@@ -127,7 +127,17 @@ final class ScreenRecorder: @unchecked Sendable {
             throw RecordingError.noFramesCaptured
         }
         if !claim.alreadyClosed {
-            try await reel.close()
+            do {
+                try await reel.close()
+            } catch {
+                // A writer that failed to flush left nothing playable
+                // behind, so the take is not closed and must not be
+                // reported as one. Reopening the claim means a second
+                // `finish()` raises the failure again instead of
+                // handing back a summary for a file that isn't there.
+                reopenClaim()
+                throw error
+            }
         }
         return claim.summary
     }
@@ -146,6 +156,13 @@ final class ScreenRecorder: @unchecked Sendable {
         let alreadyClosed = closed
         closed = true
         return (alreadyClosed, placement != nil, currentSummary(), openFailure)
+    }
+
+    /// Give the claim back after a close that threw, so the take is
+    /// still open as far as the next `finish()` is concerned.
+    private func reopenClaim() {
+        lock.lock(); defer { lock.unlock() }
+        closed = false
     }
 
     // MARK: - Frame intake

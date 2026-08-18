@@ -77,6 +77,7 @@ struct ScreenRecorderTests {
         readings: [Double],
         startFailure: Error? = nil,
         openFailure: Error? = nil,
+        closeFailure: Error? = nil,
         writes: [Bool] = []
     ) -> (ScreenRecorder, Captures) {
         let captures = Captures()
@@ -105,7 +106,10 @@ struct ScreenRecorderTests {
             if written { captures.appended.append(time) }
             return written
         }
-        given(reel).close().willProduce { captures.closed += 1 }
+        given(reel).close().willProduce {
+            captures.closed += 1
+            if let closeFailure { throw closeFailure }
+        }
         given(reel).discard().willProduce { captures.discarded += 1 }
 
         let recorder = ScreenRecorder(
@@ -266,6 +270,26 @@ struct ScreenRecorderTests {
         #expect(captures.opened == 1)
         #expect(captures.discarded == 1)
         #expect(captures.closed == 0)
+    }
+
+    @Test func `a take whose reel failed to close never reports success on a retry`() async throws {
+        // `finishWriting` failing means the file on disk was never
+        // flushed. Reporting "Recorded 3 frames" the second time asked
+        // would be reporting on a file that doesn't play.
+        let (recorder, captures) = makeRecorder(
+            plan: makePlan(fps: 10),
+            readings: [0, 0, 0.5],
+            closeFailure: RecordingError.writerFailed("disk full")
+        )
+        try recorder.start()
+        captures.deliver(try makeSurface(), times: 2)
+
+        await #expect(throws: RecordingError.writerFailed("disk full")) {
+            _ = try await recorder.finish()
+        }
+        await #expect(throws: RecordingError.writerFailed("disk full")) {
+            _ = try await recorder.finish()
+        }
     }
 
     @Test func `a reel that was never opened has nothing to throw away`() async throws {
