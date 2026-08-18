@@ -211,7 +211,39 @@ test('hands the screen rect to the overlay callback so dots land inside the clip
   assert.deepEqual(handed, { x: 55, y: 52, width: 1290, height: 2796 });
 });
 
-test('paints nothing when the source canvas is empty', () => {
+// Pressing Record (or Screenshot) before the first frame has decoded is
+// ordinary: the stream may still be negotiating. The device frame is
+// already loaded and is worth painting on its own — an empty source
+// should cost you the screen layer, not the whole composite.
+test('still paints the bezel when the source canvas has not decoded yet', () => {
+  const { CaptureComposer } = modules();
+  const ctx = fakeCtx();
+
+  CaptureComposer.paintComposite(ctx, {
+    frameImg: { tag: 'bezel', naturalWidth: 1400 },
+    screen: SCREEN,
+    sourceCanvas: source('screen', 0, 0),
+  });
+
+  assert.deepEqual(ctx.ops, [['draw', 'bezel', 0, 0, 1400, 2900]]);
+});
+
+test('skips the overlay too when there is no screen content to sit on', () => {
+  const { CaptureComposer } = modules();
+  const ctx = fakeCtx();
+  let overlaid = false;
+
+  CaptureComposer.paintComposite(ctx, {
+    frameImg: { tag: 'bezel', naturalWidth: 1400 },
+    screen: SCREEN,
+    sourceCanvas: source('screen', 0, 0),
+    onOverlay: () => { overlaid = true; },
+  });
+
+  assert.equal(overlaid, false);
+});
+
+test('paints nothing when there is neither a bezel nor a decoded source', () => {
   const { CaptureComposer } = modules();
   const ctx = fakeCtx();
 
@@ -222,4 +254,14 @@ test('paints nothing when the source canvas is empty', () => {
   });
 
   assert.deepEqual(ctx.ops, []);
+});
+
+// compositeSize already falls back to the bezel viewport, so a capture
+// started before the first frame is full-size rather than 0x0.
+test('sizes the composite from the bezel even with an undecoded source', () => {
+  const { CaptureComposer } = modules();
+  assert.deepEqual(
+    CaptureComposer.compositeSize({ naturalWidth: 1400 }, SCREEN, { width: 0, height: 0 }),
+    { width: 1400, height: 2900 }
+  );
 });

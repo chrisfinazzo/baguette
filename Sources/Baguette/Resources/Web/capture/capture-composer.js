@@ -59,10 +59,15 @@
      * @param {(ctx, rect) => void} [opts.onOverlay] painted inside the clip
      */
     static paintComposite(ctx, { frameImg, screen, sourceCanvas, onOverlay }) {
-      if (!sourceCanvas || !(sourceCanvas.width > 0)) return;
-
       const useBezel = frameImg && frameImg.naturalWidth > 0
         && screen && screen.viewport && screen.rect;
+      // Capturing before the first frame decodes is ordinary — the
+      // stream may still be negotiating. The bezel is already loaded, so
+      // an undecoded source costs you the screen layer, not the whole
+      // composite; without this, a Record pressed a beat too early
+      // produced entirely empty frames.
+      const hasContent = !!sourceCanvas && sourceCanvas.width > 0;
+      if (!useBezel && !hasContent) return;
 
       if (!useBezel) {
         const rect = {
@@ -76,6 +81,7 @@
       const vp = screen.viewport;
       const rect = screen.rect;
       ctx.drawImage(frameImg, 0, 0, vp.width, vp.height);
+      if (!hasContent) return;
       ctx.save();
       CaptureComposer.roundRectPath(
         ctx, rect.x, rect.y, rect.width, rect.height, screen.clipRadius || 0
