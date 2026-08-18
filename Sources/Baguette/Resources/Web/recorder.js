@@ -115,9 +115,13 @@
     },
 
     paintComposite(ctx, { frameImg, screen, sourceCanvas, onOverlay }) {
-      if (!sourceCanvas || !(sourceCanvas.width > 0)) return;
       const useBezel = frameImg && frameImg.naturalWidth > 0
         && screen && screen.viewport && screen.rect;
+      // Record pressed before the stream's first decoded frame is
+      // ordinary; the bezel is already loaded and worth painting on its
+      // own. Mirrors CaptureComposer.paintComposite exactly.
+      const hasContent = !!sourceCanvas && sourceCanvas.width > 0;
+      if (!useBezel && !hasContent) return;
       if (!useBezel) {
         const rect = {
           x: 0, y: 0, width: sourceCanvas.width, height: sourceCanvas.height,
@@ -131,6 +135,7 @@
       const vp = screen.viewport;
       const rect = screen.rect;
       ctx.drawImage(frameImg, 0, 0, vp.width, vp.height);
+      if (!hasContent) return;
       ctx.save();
       NativeComposer.roundRectPath(
         ctx, rect.x, rect.y, rect.width, rect.height, screen.clipRadius || 0

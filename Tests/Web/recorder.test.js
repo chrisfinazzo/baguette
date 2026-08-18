@@ -312,6 +312,30 @@ test('a native recording leaves no background mat under the frame', () => {
   assert.equal(rec.composeCtx.ops.filter((op) => op[0] === 'fill').length, 0);
 });
 
+// ── Record pressed before the first frame decodes ────────────
+
+test('recording started before the first decoded frame still shows the device', () => {
+  const win = load();
+  const source = sourceCanvas(0, 0);
+  const rec = new win.BrowserRecorder({
+    canvas: source, frameImg: BEZEL, screen: SCREEN,
+  });
+  rec.start();
+  assert.equal(rec.compose.width, 1206, 'sized from the bezel viewport, not 0');
+  flushFrame(win);
+  assert.deepEqual(drawOps(rec.composeCtx), [['draw', 'bezel', 0, 0, 1206, 2622]]);
+
+  // …and the screen layer joins as soon as the stream negotiates.
+  source.width = 1166;
+  source.height = 2582;
+  rec.composeCtx.ops.length = 0;
+  flushFrame(win);
+  assert.deepEqual(drawOps(rec.composeCtx), [
+    ['draw', 'bezel', 0, 0, 1206, 2622],
+    ['draw', 'live', 20, 20, 1166, 2582],
+  ]);
+});
+
 // ── a source that reconfigures mid-recording ─────────────────
 
 test('a source that resizes mid-recording is letterboxed into the locked size', () => {
@@ -520,6 +544,17 @@ test('without the capture modules a bezel-less recording uses the source size', 
   assert.equal(rec.compose.height, 1400);
   flushFrame(win);
   assert.deepEqual(drawOps(rec.composeCtx), [['draw', 'live', 0, 0, 900, 1400]]);
+});
+
+test('without the capture modules an undecoded source still shows the device', () => {
+  const win = loadBare();
+  const rec = new win.BrowserRecorder({
+    canvas: sourceCanvas(0, 0), frameImg: BEZEL, screen: SCREEN,
+  });
+  rec.start();
+  assert.equal(rec.compose.width, 1206);
+  flushFrame(win);
+  assert.deepEqual(drawOps(rec.composeCtx), [['draw', 'bezel', 0, 0, 1206, 2622]]);
 });
 
 test('without the capture modules a requested size is ignored, not fatal', async () => {
