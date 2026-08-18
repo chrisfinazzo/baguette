@@ -119,6 +119,13 @@ VNCondition VNConditionCurrent(void) {
             // leaves the JSON *exactly* as long as before, so a
             // second-resolution mtime plus a size comparison would read the
             // new condition as unchanged and keep applying the old one.
+            //
+            // Measured rather than assumed, by running both versions against
+            // an app polling every 100 ms: with two 49-byte writes landing in
+            // the same wall-clock second, this comparison follows every
+            // change, and the seconds-only one saw none of them and stayed
+            // on the first condition indefinitely. Reachable by dragging the
+            // browser card's latency field, whose applies debounce at 300 ms.
             if (st.st_mtimespec.tv_sec != gLastMtime.tv_sec
                 || st.st_mtimespec.tv_nsec != gLastMtime.tv_nsec
                 || st.st_size != gLastSize) {
