@@ -327,7 +327,8 @@
      reach MJPEG. Four kinds, four renderings:
 
        action    Home, Shake, Screenshot   a button; tap and it happens
-       toggle    3D, Logs, Status bar      on/off, so it shows which
+       state     Logs, Status bar, Camera  opens a panel — a dot says
+                                           which are open, not a switch
        choice    Codec, Output size        needs the options themselves
        readout   iOS version, Frame rate   not a control at all */
   .fold-item {
@@ -344,19 +345,20 @@
   .fold-item.on { color: var(--nv-accent); }
   .fold-item.on svg { opacity: 1; }
 
-  /* toggle — the state is the point, so it is drawn, not implied */
+  /* state — a DOT, not a switch.
+     Every control that reaches this menu in the real toolbar — status
+     bar, location, camera, accessibility, logs — OPENS A PANEL. A
+     switch says "a setting you flip and leave"; these are disclosures.
+     The switch also justified keeping the menu open so you could watch
+     it move, which left the panel you had just opened sitting behind
+     the menu covering it. A dot reports the same state without
+     claiming to be a setting, and every row closes the menu, because
+     every row reveals something the menu is standing on top of. */
   .fold-item .sw {
-    margin-left: auto; flex: none; width: 26px; height: 15px;
-    border-radius: 999px; background: var(--nv-btn);
-    border: 1px solid var(--nv-divider); position: relative;
+    margin-left: auto; flex: none;
+    width: 6px; height: 6px; border-radius: 999px; background: transparent;
   }
-  .fold-item .sw::after {
-    content: ''; position: absolute; top: 1px; left: 1px;
-    width: 11px; height: 11px; border-radius: 999px;
-    background: var(--nv-text-faint); transition: transform 0.15s ease;
-  }
-  .fold-item.on .sw { background: var(--nv-accent); border-color: transparent; }
-  .fold-item.on .sw::after { background: #fff; transform: translateX(11px); }
+  .fold-item.on .sw { background: var(--nv-accent); }
 
   /* choice — the options come with it, because a value you cannot
      change is a caption pretending to be a control */

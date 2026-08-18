@@ -759,6 +759,7 @@ struct Server: Sendable {
         "devices",
         "farm",
         "screens",
+        "toolbar",
         "vendor/leaflet",
     ]
 

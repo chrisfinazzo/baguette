@@ -178,3 +178,45 @@ test('spec round-trips through parse for every preset and for custom sizes', () 
   }
   assert.equal(CS.parse(CS.parse('1920x1080').spec).spec, '1920x1080');
 });
+
+// ── the terse spelling the toolbar chip wears ────────────────
+
+// The chip used to render `label`, so it was "Native" (54px) one
+// moment and "App Store iPad 13″" (132px) the next — the one control
+// whose width the user changes by using it, in a toolbar that is a
+// single row of fixed-size controls. `code` is the same choice in at
+// most four tabular characters, so the chip can hold one width.
+
+test('every preset carries a terse code for the chip', () => {
+  const catalogue = CaptureSize();
+  assert.deepEqual(catalogue.presets().map((p) => p.code), [
+    'Auto', '6.9″', '6.5″', '13″', '1:1', '16:9', '9:16', '4:3', '4:5',
+  ]);
+});
+
+test('an ad-hoc ratio is already terse, so it is its own code', () => {
+  assert.equal(CaptureSize().parse('3:2').code, '3:2');
+});
+
+// A literal pixel spec has no short spelling — "1920x1080" is wider
+// than the label it replaced. The chip says Custom and the popover's
+// resolved dimensions say which.
+test('a literal pixel spec reads as Custom on the chip', () => {
+  assert.equal(CaptureSize().parse('1920x1080').code, 'Custom');
+});
+
+// ── the aspect the chip draws ────────────────────────────────
+
+test('a ratio reports its ratio exactly, not a rounded resolve', () => {
+  assert.equal(CaptureSize().parse('16:9').aspect(), 16 / 9);
+});
+
+test('a fixed size reports its own pixel aspect', () => {
+  assert.equal(CaptureSize().named('appstore-6.9').aspect(), 1290 / 2796);
+});
+
+// Native has no shape of its own — it is whatever the source is — so
+// the chip draws nothing rather than guessing a rectangle.
+test('native reports no aspect at all', () => {
+  assert.equal(CaptureSize().named('native').aspect(), null);
+});
