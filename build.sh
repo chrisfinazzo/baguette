@@ -18,6 +18,13 @@ cp -f VirtualCamera/VirtualCamera.dylib Sources/Baguette/Resources/VirtualCamera
 mkdir -p Sources/Baguette/Resources/VirtualMotion
 cp -f VirtualMotion/VirtualMotion.dylib Sources/Baguette/Resources/VirtualMotion/
 
+# The iOS-Simulator side of network conditioning — see VirtualNetwork/.
+# Third dylib, same shape as the two above; all three are armed through one
+# shared DYLD_INSERT_LIBRARIES (see `InjectedDylibs`).
+./VirtualNetwork/build.sh
+mkdir -p Sources/Baguette/Resources/VirtualNetwork
+cp -f VirtualNetwork/VirtualNetwork.dylib Sources/Baguette/Resources/VirtualNetwork/
+
 # Pure-SPM build. Private frameworks resolve through the rpath flags +
 # linkedFramework declarations in Package.swift.
 swift build -c release

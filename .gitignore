@@ -9,3 +9,4 @@ DerivedData/
 # Sources/Baguette/Resources/, which are the tracked ones.
 /VirtualCamera/VirtualCamera.dylib
 /VirtualMotion/VirtualMotion.dylib
+/VirtualNetwork/VirtualNetwork.dylib
