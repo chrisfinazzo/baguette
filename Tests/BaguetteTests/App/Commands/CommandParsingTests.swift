@@ -20,7 +20,8 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "render-3d", "describe-ui", "logs", "serve",
-            "orientation", "shake", "status-bar", "location", "motion", "install", "add-media",
+            "orientation", "shake", "status-bar", "location", "motion", "network",
+            "install", "add-media",
             "openurl", "schemes",
             "plugin", "bakery", "diag-digitizer-trackpad", "lifetime", "interface",
         ])
@@ -359,6 +360,98 @@ struct CommandParsingTests {
     @Test func `motion stop requires --udid`() {
         #expect(throws: (any Error).self) {
             try MotionCommand.Stop.parse([])
+        }
+    }
+
+    // MARK: - network
+
+    @Test func `network lists set clear and status leaves`() {
+        let names = NetworkCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["set", "clear", "status"])
+        #expect(NetworkCommand.configuration.commandName == "network")
+    }
+
+    @Test func `network answers with the current condition when no verb is named`() {
+        // A forgotten throttle reads as "the app is slow", days later. The
+        // cheapest defence is that the bare command answers "is anything
+        // on?" rather than printing usage.
+        let fallback = NetworkCommand.configuration.defaultSubcommand
+        #expect(fallback?.configuration.commandName == "status")
+    }
+
+    @Test func `network set resolves a named preset`() throws {
+        let cmd = try NetworkCommand.Set.parse(["--udid", "U", "--profile", "3g"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.condition.condition == NetworkProfile.threeG.condition)
+    }
+
+    @Test func `network set builds a condition from explicit numbers`() throws {
+        let cmd = try NetworkCommand.Set.parse(
+            ["--udid", "U", "--latency", "300", "--bandwidth", "400", "--loss", "5"])
+        #expect(cmd.condition.condition?.latencyMs == 300)
+        #expect(cmd.condition.condition?.bandwidthKbps == 400)
+        #expect(cmd.condition.condition?.lossPercent == 5)
+    }
+
+    @Test func `network set leaves an unnamed bandwidth unmetered`() throws {
+        // "Make every request wait, but let bytes arrive at full speed" is
+        // a normal thing to ask for, and must not become a bandwidth of 0.
+        let cmd = try NetworkCommand.Set.parse(["--udid", "U", "--latency", "300"])
+        #expect(cmd.condition.condition?.bandwidthKbps == nil)
+    }
+
+    @Test func `network set parses offline`() throws {
+        let cmd = try NetworkCommand.Set.parse(["--udid", "U", "--offline"])
+        #expect(cmd.condition.condition == .offline)
+    }
+
+    @Test func `network rejects a preset nobody has heard of`() {
+        // A silent fallback would arm a condition nobody asked for, and the
+        // afternoon would go on wondering why the app was slow.
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U", "--profile", "2g"])
+        }
+    }
+
+    @Test func `network refuses to mix a preset with anything else`() {
+        // One source of truth per invocation. "3g but lossier" reads like
+        // it should work, and deciding whether the preset or the flag wins
+        // is a coin toss the user would have to remember.
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U", "--profile", "3g", "--loss", "20"])
+        }
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U", "--profile", "3g", "--offline"])
+        }
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U", "--offline", "--latency", "300"])
+        }
+    }
+
+    @Test func `network refuses a set that would condition nothing`() {
+        // Arming the dylib while changing nothing costs an app relaunch and
+        // achieves nothing visible — far more likely a forgotten flag than
+        // an intention.
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U"])
+        }
+    }
+
+    @Test func `network rejects numbers that describe no network`() {
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U", "--latency", "-1"])
+        }
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U", "--loss", "150"])
+        }
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Set.parse(["--udid", "U", "--bandwidth", "0"])
+        }
+    }
+
+    @Test func `network clear requires --udid`() {
+        #expect(throws: (any Error).self) {
+            try NetworkCommand.Clear.parse([])
         }
     }
 
