@@ -41,16 +41,26 @@
   cluster in the fold order collapses WHOLE, into one menu button.
   Never an item; never a partial group.
 
-    fold order:  Simulate → Inspect → Control → Stream
+    fold order:  Simulate → Inspect → Stream → Control
     never folds: Navigate, View, Capture
 
-  Measured on this page, the bar degrades like this:
+  Control outranks Stream deliberately. Home, App switcher, Shake and
+  Rotate are buttons someone presses while working; the codec, the fps
+  readout and the iOS version are a setting visited once and two
+  captions. An earlier draft had Control folding first, which spent the
+  bar's last pixels on a version string and made Home two clicks before
+  it had to be. Measured on this page:
 
     1178px   nothing folded — all seven clusters inline
-     998px   Simulate
-     898px   + Inspect, Control
-     778px   + Stream           four separate cluster buttons
-     518px   merged into one ⋯  with the cluster names as headings
+     898px   Simulate            Control still fully inline
+     818px   + Inspect, Stream   Control still fully inline
+     638px   + Control           four separate cluster buttons
+     518px   merged into one ⋯   clusters as an exclusive accordion
+     418px   the device name truncates; the size chip stays
+
+  The swap buys Home 260px of width: it used to fold at 898px and now
+  survives to 638px, so the sidebar case keeps all four Control
+  buttons one click away.
 
   Three things this buys that the queue cannot:
 
@@ -71,11 +81,11 @@
   cluster names still do their work, in the menu headings and the
   button's tooltip.
 
-  THE COST, STATED PLAINLY. Home becomes two clicks at 640px where it
-  is one today, and Home is frequent. The counter is that today at
-  640px it is one click PLUS a scroll gesture past six icons. If
-  Control should outrank Stream that is one number — `fold` on the
-  cluster — and it is a product call, not a technical one.
+  THE COST, STATED PLAINLY. Home does eventually fold, and Home is
+  frequent. The counter is that today at that width it is one click
+  PLUS a scroll gesture past six icons. Where the line sits is one
+  number — `fold` on the cluster — and it is a product call, not a
+  technical one.
 
   The size chip keeps the aspect grid from capture-size-menu.html: nine
   presets as nine shapes, because picking an output size IS picking a
@@ -504,7 +514,7 @@
 
   <h2>Proposed — context clusters <span class="tag good">the design</span></h2>
   <p class="note">
-    Fold order <b>Simulate → Inspect → Control → Stream</b>. Navigate,
+    Fold order <b>Simulate → Inspect → Stream → Control</b>. Navigate,
     View and Capture never fold, because Capture is the job. A folded
     cluster is an icon plus a caret — a text label would make folding
     <em>cost</em> width rather than save it — and the names appear as
@@ -607,7 +617,7 @@
       ],
     },
     {
-      id: 'stream', label: 'Stream', icon: P.film, fold: 4,
+      id: 'stream', label: 'Stream', icon: P.film, fold: 3,
       question: 'how am I seeing it',
       items: [
         { id: 'os',  label: 'iOS version', kind: 'os',  role: 'readout' },
@@ -621,7 +631,7 @@
       items: [{ id: '3d', label: '3D view', icon: P.cube, role: 'toggle', on: true }],
     },
     {
-      id: 'control', label: 'Control', icon: P.home, fold: 3,
+      id: 'control', label: 'Control', icon: P.home, fold: 4,
       question: 'things I do TO the phone',
       items: [
         { id: 'home',   label: 'Home',         icon: P.home },
