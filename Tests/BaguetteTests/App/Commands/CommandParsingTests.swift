@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "record", "render-3d", "describe-ui", "logs", "serve",
-            "orientation", "shake", "status-bar", "location", "install", "add-media",
+            "orientation", "shake", "status-bar", "location", "motion", "install", "add-media",
             "openurl", "schemes",
             "plugin", "bakery", "diag-digitizer-trackpad", "lifetime", "interface",
         ])
@@ -307,6 +307,67 @@ struct CommandParsingTests {
         let cmd = try StatusBarCommand.Clear.parse(["--udid", "U"])
         #expect(cmd.options.udid == "U")
         #expect(StatusBarCommand.Clear.configuration.commandName == "clear")
+    }
+
+    // MARK: - motion
+
+    @Test func `motion lists start set and stop leaves`() {
+        let names = MotionCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["start", "set", "stop"])
+        #expect(MotionCommand.configuration.commandName == "motion")
+    }
+
+    @Test func `motion start parses an activity kind`() throws {
+        let cmd = try MotionCommand.Start.parse(["--udid", "U", "--activity", "walking"])
+        #expect(cmd.options.udid == "U")
+        #expect(cmd.kind == .walking)
+    }
+
+    @Test func `motion start defaults to walking at a walking pace`() throws {
+        // The overwhelmingly common case is "make this app think I'm
+        // walking", so it needs no flags at all.
+        let cmd = try MotionCommand.Start.parse(["--udid", "U"])
+        #expect(cmd.kind == .walking)
+        #expect(cmd.resolvedSpeed == 1.4)
+    }
+
+    @Test func `motion start takes the speed for the kind when none is given`() throws {
+        // Each kind has a representative speed — the same presets the
+        // browser's Walk mode offers — so `--activity running` alone means
+        // a plausible run rather than a run at 0 m/s.
+        #expect(try MotionCommand.Start.parse(
+            ["--udid", "U", "--activity", "running"]).resolvedSpeed == 3.5)
+        #expect(try MotionCommand.Start.parse(
+            ["--udid", "U", "--activity", "automotive"]).resolvedSpeed == 13.4)
+        #expect(try MotionCommand.Start.parse(
+            ["--udid", "U", "--activity", "stationary"]).resolvedSpeed == 0)
+    }
+
+    @Test func `motion start honours an explicit speed`() throws {
+        let cmd = try MotionCommand.Start.parse(
+            ["--udid", "U", "--activity", "walking", "--speed", "2.2"])
+        #expect(cmd.resolvedSpeed == 2.2)
+    }
+
+    @Test func `motion rejects a negative speed`() {
+        // A negative speed classifies as `unknown`, so it would arm a session
+        // reporting no motion — a confusing way to spell "invalid input".
+        #expect(throws: (any Error).self) {
+            try MotionCommand.Start.parse(["--udid", "U", "--speed", "-1"])
+        }
+    }
+
+    @Test func `motion rejects an unknown activity`() {
+        // Failing loudly beats silently reporting `unknown` motion.
+        #expect(throws: (any Error).self) {
+            try MotionCommand.Start.parse(["--udid", "U", "--activity", "swimming"])
+        }
+    }
+
+    @Test func `motion stop requires --udid`() {
+        #expect(throws: (any Error).self) {
+            try MotionCommand.Stop.parse([])
+        }
     }
 
     // MARK: - location

@@ -10,6 +10,14 @@ cd "$(dirname "$0")"
 mkdir -p Sources/Baguette/Resources/VirtualCamera
 cp -f VirtualCamera/VirtualCamera.dylib Sources/Baguette/Resources/VirtualCamera/
 
+# The iOS-Simulator side of the motion feature — see VirtualMotion/. Same
+# shape as the camera dylib above: cross-compiled fat, linker-signed adhoc,
+# staged for SPM to bundle. Both are armed through one shared
+# DYLD_INSERT_LIBRARIES (see `InjectedDylibs`).
+./VirtualMotion/build.sh
+mkdir -p Sources/Baguette/Resources/VirtualMotion
+cp -f VirtualMotion/VirtualMotion.dylib Sources/Baguette/Resources/VirtualMotion/
+
 # Pure-SPM build. Private frameworks resolve through the rpath flags +
 # linkedFramework declarations in Package.swift.
 swift build -c release

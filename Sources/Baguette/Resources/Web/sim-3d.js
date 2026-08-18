@@ -393,6 +393,40 @@
     });
   };
 
+  /**
+   * How a RECORDING should place the stage canvas into the picked size.
+   *
+   * A screenshot in 3D re-renders server-side at the exact size, so it
+   * is always framed. A recording can't — BrowserRecorder composites the
+   * stage canvas frame by frame as it arrives. The stage is a viewport
+   * onto a scene: a device standing in the middle of empty margins. So
+   * letterboxing the WHOLE stage into a tall App Store canvas shrinks
+   * the device into the emptiness instead of cropping the emptiness
+   * away, which is how a 6.9" recording came out as a small phone adrift
+   * in bands.
+   *
+   * Crop as far as the target allows, and no further: `cover` when the
+   * target is narrower than the stage — it eats the side margins and
+   * keeps full height — and `contain` when it is wider, because past
+   * that point there is no more device to show, only bars, and cropping
+   * into the device is worse than a bar beside it.
+   *
+   * Pure and static so the arithmetic is testable without a canvas.
+   *
+   * @param {object|null} settings  a CaptureSettings
+   * @param {{width:number,height:number}} stage  the stage canvas
+   * @returns {'cover'|'contain'}
+   */
+  Sim3DPanel.recordingFit = function (settings, stage) {
+    const size = settings && settings.size;
+    const width = (stage && stage.width) || 0;
+    const height = (stage && stage.height) || 0;
+    if (!size || size.isNative || !(width > 0) || !(height > 0)) return 'contain';
+    const target = size.resolve(width, height);
+    if (!target || !(target.width > 0) || !(target.height > 0)) return 'contain';
+    return target.width / target.height < width / height ? 'cover' : 'contain';
+  };
+
   Sim3DPanel.prototype.outputSize = function () {
     const rect = this.stage ? this.stage.getBoundingClientRect() : null;
     const ratio = Math.min(window.devicePixelRatio || 1, 2);

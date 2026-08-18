@@ -53,6 +53,12 @@ struct Server: Sendable {
     /// with the command. See `PluginGrants`.
     let grants: PluginGrants
 
+    /// Per-simulator motion state. A reference type held by this struct
+    /// because motion is the one surface here that *is* stateful: the
+    /// pedometer's running totals have to survive between requests, and the
+    /// location routes need to reach them to drive the activity.
+    let motionSessions: MotionSessions
+
     init(
         simulators: any Simulators,
         chromes: any Chromes,
@@ -62,9 +68,11 @@ struct Server: Sendable {
         host: String = "127.0.0.1",
         port: Int = 8421,
         allowedHosts: [String] = [],
-        grants: PluginGrants = PluginGrants()
+        grants: PluginGrants = PluginGrants(),
+        motionSessions: MotionSessions = MotionSessions()
     ) {
         self.simulators = simulators
+        self.motionSessions = motionSessions
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
@@ -255,12 +263,13 @@ struct Server: Sendable {
         // clears it back to live. Backed by `simctl location`; pure parse
         // + dispatch lives in `Server.applyLocation` / `clearLocation`
         // for unit testing.
-        router.post("/simulators/:udid/location") { [simulators] r, _ in
+        router.post("/simulators/:udid/location") { [simulators, motionSessions] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let buffer = try? await r.body.collect(upTo: 64 * 1024)
             let body = buffer.map { String(buffer: $0) } ?? ""
             switch await Self.applyLocation(
-                udid: Self.udidParam(r), body: body, simulators: simulators
+                udid: Self.udidParam(r), body: body, simulators: simulators,
+                sessions: motionSessions
             ) {
             case .ok:
                 return jsonOK
@@ -272,9 +281,10 @@ struct Server: Sendable {
                 return errorJSON("location change failed (simctl error)", status: .internalServerError)
             }
         }
-        router.delete("/simulators/:udid/location") { [simulators] r, _ in
+        router.delete("/simulators/:udid/location") { [simulators, motionSessions] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch await Self.clearLocation(udid: Self.udidParam(r), simulators: simulators) {
+            switch await Self.clearLocation(udid: Self.udidParam(r), simulators: simulators,
+                                            sessions: motionSessions) {
             case .ok:
                 return jsonOK
             case .unknownDevice:
@@ -283,6 +293,63 @@ struct Server: Sendable {
                 return errorJSON("location clear failed (simctl error)", status: .internalServerError)
             case .invalidBody:
                 return jsonOK // unreachable for clear; keep the switch total
+            }
+        }
+
+        // Motion — `POST` arms the injected dylib and states what the device
+        // is doing; `DELETE` parks it as stationary and disarms. Once armed,
+        // the location routes above drive the activity from the speed the
+        // device is moving at, so the browser's joystick needs no new wire.
+        //
+        // Unlike location there is no simctl verb behind this: all three
+        // CoreMotion surfaces report unavailable in a stock simulator. Only
+        // apps launched *after* the POST see anything — dyld inserts at exec
+        // time. See `docs/features/motion.md`.
+        router.post("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let buffer = try? await r.body.collect(upTo: 64 * 1024)
+            let body = buffer.map { String(buffer: $0) } ?? ""
+            switch await Self.applyMotion(
+                udid: Self.udidParam(r), body: body, simulators: simulators,
+                sessions: motionSessions
+            ) {
+            case .ok:
+                return Self.jsonResponse(
+                    await Self.motionStateJSON(udid: Self.udidParam(r), sessions: motionSessions))
+            case .invalidBody:
+                return errorJSON(
+                    "motion body must name an activity: stationary, walking, running, cycling, or automotive",
+                    status: .badRequest)
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .dispatchFailed:
+                return errorJSON(
+                    "motion failed — is VirtualMotion.dylib bundled in this build?",
+                    status: .internalServerError)
+            }
+        }
+        // Read-back for the card's readout — the one place motion differs
+        // from location, which has no GET because simctl cannot report the
+        // active position. Here the state is ours, so we can answer.
+        router.get("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            guard let json = await Self.motionState(
+                udid: Self.udidParam(r), simulators: simulators, sessions: motionSessions
+            ) else {
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            }
+            return Self.jsonResponse(json)
+        }
+        router.delete("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            switch await Self.stopMotion(udid: Self.udidParam(r), simulators: simulators,
+                                         sessions: motionSessions) {
+            case .ok:
+                return jsonOK
+            case .unknownDevice:
+                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            case .invalidBody, .dispatchFailed:
+                return errorJSON("motion stop failed", status: .internalServerError)
             }
         }
 
@@ -984,10 +1051,16 @@ struct Server: Sendable {
     /// Pure parse + dispatch for `POST /simulators/:udid/location`. Split
     /// from the route closure so unit tests can drive every branch with
     /// `MockSimulators` + `MockLocation`.
+    ///
+    /// When `sessions` carries a **running** motion session for this device,
+    /// the same request also drives motion: the browser keeps posting the
+    /// walk vector it always did, and the activity follows from its speed.
+    /// A session is never created here — motion stays opt-in.
     static func applyLocation(
         udid: String,
         body: String,
-        simulators: any Simulators
+        simulators: any Simulators,
+        sessions: MotionSessions? = nil
     ) async -> LocationOutcome {
         guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
             return .unknownDevice
@@ -1005,26 +1078,190 @@ struct Server: Sendable {
             // reports course = -1.
             case .walk(let walk): try await sim.location().start(walk.route())
             }
-            return .ok
         } catch {
             return .dispatchFailed
         }
+        await driveMotion(with: request, on: sim, sessions: sessions)
+        return .ok
+    }
+
+    /// The speed a location request moves the device at, which is what
+    /// classifies the motion. A pinned point isn't travelling at all —
+    /// locationd reports `course = -1` for it — so it parks motion rather
+    /// than leaving a stale walk running.
+    private static func driveMotion(
+        with request: LocationRequest,
+        on simulator: any Simulator,
+        sessions: MotionSessions?
+    ) async {
+        guard let sessions else { return }
+        guard let session = await sessions.active(udid: simulator.udid) else { return }
+        let speed: Double
+        switch request {
+        case .point: speed = 0
+        // An untuned route runs at simctl's own default of 20 m/s, which is
+        // motorway-ish — so an untuned route reads as automotive, not as a
+        // stroll.
+        case .route(let route): speed = route.speed ?? 20
+        case .walk(let walk): speed = walk.speed
+        }
+        await session.drive(speed: speed, on: simulator)
     }
 
     /// Pure dispatch for `DELETE /simulators/:udid/location`.
+    ///
+    /// Dropping the location override also parks motion: the device has
+    /// stopped being driven anywhere, so an app shouldn't keep reading a
+    /// walk.
     static func clearLocation(
         udid: String,
-        simulators: any Simulators
+        simulators: any Simulators,
+        sessions: MotionSessions? = nil
     ) async -> LocationOutcome {
         guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
             return .unknownDevice
         }
         do {
             try await sim.location().clear()
-            return .ok
         } catch {
             return .dispatchFailed
         }
+        if let session = await sessions?.active(udid: udid) {
+            await session.drive(speed: 0, on: sim)
+        }
+        return .ok
+    }
+
+    // MARK: - motion
+
+    /// A parsed `POST /simulators/:udid/motion` body.
+    struct MotionRequest: Equatable {
+        let kind: MotionKind
+        let confidence: MotionConfidence
+        let speed: Double
+    }
+
+    /// Parse a `MotionRequest` from either spelling:
+    ///
+    /// - `{"activity":"running"}` — names the kind outright, as the CLI
+    ///   does. Its speed defaults to that kind's usual pace.
+    /// - `{"speed":6}` — names only how fast the device is moving, as the
+    ///   **browser** does, and the kind is classified here.
+    ///
+    /// The second spelling is what keeps `MotionKind`'s thresholds out of
+    /// the frontend: the card posts the speed it's already set to move at,
+    /// exactly as it posts walk vectors, and Swift owns the classification.
+    /// Two copies of those bands would drift.
+    ///
+    /// An `activity` that names no real kind is a `400` rather than a
+    /// silent `unknown`, which would look like the feature was working.
+    static func parseMotionRequest(json: String) -> MotionRequest? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dict = object as? [String: Any] else {
+            return nil
+        }
+        // A supplied-but-unknown confidence is rejected rather than quietly
+        // downgraded to `high` — reporting a confidence nobody asked for is
+        // worse than refusing the request.
+        let confidence: MotionConfidence
+        if let word = dict["confidence"] as? String {
+            guard let parsed = MotionConfidence(rawValue: word) else { return nil }
+            confidence = parsed
+        } else {
+            confidence = .high
+        }
+        // A negative speed classifies as `unknown`, which would arm a session
+        // that reports no motion at all — indistinguishable from a broken
+        // feature. CoreLocation's "-1 means I don't know" has no meaning as
+        // an *instruction*.
+        let speed = doubleField(dict["speed"])
+        if let speed, speed < 0 { return nil }
+        if let activity = dict["activity"] as? String {
+            guard let kind = MotionKind(rawValue: activity), kind != .unknown else { return nil }
+            return MotionRequest(
+                kind: kind, confidence: confidence,
+                speed: speed ?? MotionCommand.defaultSpeed(for: kind))
+        }
+        guard let speed else { return nil }
+        return MotionRequest(kind: .from(speed: speed), confidence: confidence, speed: speed)
+    }
+
+    /// Pure parse + dispatch for `POST /simulators/:udid/motion` — arms the
+    /// dylib and states what the device is doing. Creates the session, so
+    /// this is the one place motion turns on.
+    static func applyMotion(
+        udid: String,
+        body: String,
+        simulators: any Simulators,
+        sessions: MotionSessions
+    ) async -> LocationOutcome {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return .unknownDevice
+        }
+        guard let request = parseMotionRequest(json: body) else {
+            return .invalidBody
+        }
+        let session = await sessions.session(for: sim)
+        await session.set(kind: request.kind, confidence: request.confidence,
+                          speed: request.speed, on: sim)
+        // Say what was armed. Injection only takes effect on the next app
+        // launch, so when someone reports "my app sees nothing" this line is
+        // the first thing worth checking.
+        if let failure = await session.lastError {
+            log("motion: failed to arm \(sim.name) — \(failure)")
+            return .dispatchFailed
+        }
+        log("motion: \(sim.name) is \(request.kind.rawValue) at \(request.speed) m/s")
+        return .ok
+    }
+
+    /// Pure dispatch for `DELETE /simulators/:udid/motion` — parks the
+    /// device as stationary, disarms the dylib, and forgets the session so a
+    /// later walk stops driving it.
+    static func stopMotion(
+        udid: String,
+        simulators: any Simulators,
+        sessions: MotionSessions
+    ) async -> LocationOutcome {
+        guard !udid.isEmpty, simulators.find(udid: udid) != nil else {
+            return .unknownDevice
+        }
+        if let session = await sessions.active(udid: udid) {
+            // Keep the session when the stop failed, so a retry still has
+            // something to disarm — dropping it would strand an armed dylib
+            // with nothing tracking it.
+            guard await session.stop() else { return .dispatchFailed }
+        }
+        await sessions.end(udid: udid)
+        return .ok
+    }
+
+    /// The `{"activity":…,"steps":…}` payload the browser's readout shows, or
+    /// `nil` when no such simulator exists — the caller turns that into the
+    /// same `404` the POST and DELETE routes give, rather than reporting an
+    /// unknown device as one with motion switched off.
+    static func motionState(udid: String, simulators: any Simulators,
+                            sessions: MotionSessions) async -> String? {
+        guard !udid.isEmpty, simulators.find(udid: udid) != nil else { return nil }
+        return await motionStateJSON(udid: udid, sessions: sessions)
+    }
+
+    static func motionStateJSON(udid: String, sessions: MotionSessions) async -> String {
+        guard let session = await sessions.active(udid: udid) else {
+            return #"{"ok":true,"active":false}"#
+        }
+        let kind: String
+        switch await session.phase {
+        case .idle: kind = MotionKind.stationary.rawValue
+        case .publishing(let k): kind = k.rawValue
+        }
+        let steps = await session.steps
+        let metres = await session.metres
+        let speed = await session.speed
+        return #"{"ok":true,"active":true,"activity":"\#(kind)","steps":\#(steps),"#
+            + #""metres":\#(String(format: "%.1f", metres)),"#
+            + #""speed":\#(String(format: "%.2f", speed))}"#
     }
 
     /// Upper bound on a single drag-and-drop upload, collected into
@@ -1305,7 +1542,7 @@ struct Server: Sendable {
                 model: installed,
                 variants: options.variants,
                 rotation: options.rotation,
-                outputSize: options.size ?? sourceSize,
+                outputSize: options.outputSize(source: sourceSize),
                 fit: options.fit,
                 background: options.background,
                 screenGlass: options.screenGlass
@@ -2620,7 +2857,7 @@ struct Server: Sendable {
                 }
                 source = wantImage ? .image(path: path) : .video(path: path)
             }
-            guard let dylibPath = VirtualCameraInstaller.installIfNeeded() else {
+            guard let dylibPath = InjectedDylibInstaller.installIfNeeded(.camera) else {
                 try? await outbound.write(.text(
                     #"{"type":"camera_state","ok":false,"error":"VirtualCamera.dylib is not bundled in this build"}"#
                 ))

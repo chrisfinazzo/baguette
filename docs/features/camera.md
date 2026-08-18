@@ -168,9 +168,14 @@ an unchecked one could carry `..` out of the staging root.
     Integration-only.
   - `SharedMemoryFrameSink` — mmap-backed writer; rewrites the
     24-byte header + pixels and `msync(MS_SYNC)`s on every frame.
-  - `SimctlSimulatorInjection` — runs `xcrun simctl spawn <udid>
-    launchctl setenv DYLD_INSERT_LIBRARIES <dylibPath>`. Uses the
-    existing `Subprocess` collaborator → 100% unit-tested.
+  - `SimctlSimulatorInjection` (in `Infrastructure/Simulator/`, since
+    injection is no longer camera-specific) — read-modify-writes the
+    simulator's `DYLD_INSERT_LIBRARIES`: `launchctl getenv`, merge via
+    the pure `InjectedDylibs`, then `launchctl setenv` (or `unsetenv`
+    when nothing is left). Uses the existing `Subprocess` collaborator
+    → 100% unit-tested. The merge exists because that variable is one
+    string for the whole simulator and more than one baguette feature
+    injects into it — see [Sharing the variable](#sharing-dyld_insert_libraries).
   - `VirtualCameraInstaller` — resolves the bundled
     `VirtualCamera.dylib` from `Bundle.module`, sha256-keys it, and
     copies into `~/Library/Application Support/Baguette/builds/<sha12>/`.
@@ -206,10 +211,11 @@ prefix to keep upstream re-syncs diff-friendly; see
    `~/Library/Application Support/Baguette/builds/<sha12>/VirtualCamera.dylib`.
    Idempotent — if the file already exists at that path we trust
    its contents (the path itself is sha-keyed).
-4. `SimctlSimulatorInjection.arm(...)` runs
-   `xcrun simctl spawn <udid> launchctl setenv DYLD_INSERT_LIBRARIES <path>`.
-   The env var survives until the simulator reboots; apps launched
-   after the arming load the dylib via dyld.
+4. `SimctlSimulatorInjection.arm(...)` reads the simulator's current
+   `DYLD_INSERT_LIBRARIES` (`launchctl getenv`), adds this dylib to it,
+   and writes the join back (`launchctl setenv`). The env var survives
+   until the simulator reboots; apps launched after the arming load the
+   dylib via dyld.
 5. Frames pump through `/tmp/SimCam.bgra`; the dylib's display-link
    driver picks them up on the next tick.
 
@@ -297,11 +303,33 @@ baguette's image/video — no app edits.
 `camera_start` arms the sim's launchd domain
 (`SimctlSimulatorInjection`: `launchctl setenv DYLD_INSERT_LIBRARIES`),
 so **every app launched afterward** loads the dylib — SimCam-style, no
-per-app configuration. `stop` (and the WS `defer`) **disarms**
-(`launchctl unsetenv`), so the dylib does *not* stay injected into every
-future launch until reboot (the bug SimCam is known for). `CameraSession`
-owns this: it records the armed simulator on `start` and unsets it on
+per-app configuration. `stop` (and the WS `defer`) **disarms**, so the
+dylib does *not* stay injected into every future launch until reboot (the
+bug SimCam is known for). `CameraSession` owns this: it records the armed
+simulator **and dylib path** on `start`, and removes that entry on
 `stop` / failed-start.
+
+### Sharing `DYLD_INSERT_LIBRARIES`
+
+That variable is a single string for the simulator's whole launchd
+domain, and baguette has more than one feature that injects into apps
+(the virtual camera, and motion). So arming never writes a bare path:
+it reads the current value, adds or removes **its own** entry, and writes
+the join back. `InjectedDylibs` is the pure value that does the merge.
+
+Three consequences worth knowing:
+
+- Starting the camera while motion is armed keeps both loaded; stopping
+  either leaves the other alone.
+- Entries are matched by **dylib filename**, not full path — every
+  release installs under a fresh sha-keyed directory (see
+  [Per-hash install dir](#ios-26-gotchas-worth-preserving)), so the same
+  dylib legitimately arrives under a new path, and two copies of one
+  dylib in dyld's list is a load error rather than a merge.
+- A dylib you armed by hand is preserved, not clobbered. The last
+  baguette entry leaving takes the whole variable with it (`unsetenv`)
+  rather than setting an empty string, which dyld reports as a library it
+  failed to load.
 
 The one ordering rule: **the app must be (re)launched *after*
 `camera_start`.** The dylib is inserted at exec time, so:

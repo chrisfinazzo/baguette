@@ -48,9 +48,13 @@ let package = Package(
                 .copy("Resources/Plugins"),
                 // iOS-Simulator dylib (vendored under `VirtualCamera/`,
                 // built by `VirtualCamera/build.sh` and staged here by
-                // the top-level `build.sh`). `VirtualCameraInstaller`
+                // the top-level `build.sh`). `InjectedDylibInstaller`
                 // resolves the bundle path at runtime.
                 .copy("Resources/VirtualCamera"),
+                // The motion counterpart — answers CMMotionActivityManager,
+                // CMPedometer and CMMotionManager from the intent baguette
+                // publishes. Same build-and-stage path, same installer.
+                .copy("Resources/VirtualMotion"),
             ],
             swiftSettings: [
                 // MOCKING is debug-only; release strips mock code entirely.

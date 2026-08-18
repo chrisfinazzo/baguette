@@ -5,6 +5,7 @@ DerivedData/
 *.xcodeproj
 *.xcworkspace
 /Baguette
-# Build intermediate — `build.sh` stages the real copy into
-# Sources/Baguette/Resources/VirtualCamera/, which is the tracked one.
+# Build intermediates — `build.sh` stages the real copies into
+# Sources/Baguette/Resources/, which are the tracked ones.
 /VirtualCamera/VirtualCamera.dylib
+/VirtualMotion/VirtualMotion.dylib

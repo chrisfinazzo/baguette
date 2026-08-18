@@ -194,6 +194,30 @@ test('grows a ratio size around the bezel viewport', async () => {
   assert.deepEqual({ w: entry.w, h: entry.h }, { w: 2900, h: 2900 });
 });
 
+// DeviceKit authors its bezels in points — a 474 x 990 frame around a
+// 438 x 954 cutout — while the screenshot route hands back the device's
+// full 1320 x 2868 framebuffer. Compositing at the bezel's own size
+// throws ~3x of the detail away before the picked size ever sees it.
+const POINT_SCREEN = {
+  viewport: { width: 474, height: 990 },
+  rect: { x: 18, y: 18, width: 438, height: 954 },
+  clipRadius: 62,
+};
+const POINT_BEZEL = { naturalWidth: 474, naturalHeight: 990, tag: 'bezel' };
+
+test('composites a point-authored bezel at the screenshot resolution', async () => {
+  const { gallery, CaptureSettings } = galleryFor({
+    screen: POINT_SCREEN,
+    frameImg: POINT_BEZEL,
+    shot: { width: 1320, height: 2868 },
+  });
+  const entry = await gallery.capture({
+    settings: new CaptureSettings({ size: 'native', withFrame: true }),
+  });
+
+  assert.deepEqual({ w: entry.w, h: entry.h }, { w: 1428, h: 2984 });
+});
+
 test('grows a ratio size around the raw screenshot when unframed', async () => {
   const { gallery, CaptureSettings } = galleryFor({ frameImg: null });
   const entry = await gallery.capture({

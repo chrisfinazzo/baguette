@@ -120,6 +120,18 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         SimctlShake(udid: udid)
     }
 
+    /// Resolves the bundled `VirtualMotion.dylib` on the way through, since
+    /// publishing an intent is useless without the dylib that reads it. A
+    /// build that doesn't ship the dylib yields a handle whose `publish`
+    /// throws `MotionError.dylibMissing` rather than silently doing nothing.
+    func motion() -> any Motion {
+        SharedFileMotion(
+            fileURL: URL(fileURLWithPath: SharedFileMotion.path(forUDID: udid)),
+            dylibPath: InjectedDylibInstaller.installIfNeeded(.motion),
+            injection: SimctlSimulatorInjection()
+        )
+    }
+
     func pasteboard() -> any Pasteboard {
         SimctlPasteboard(udid: udid)
     }

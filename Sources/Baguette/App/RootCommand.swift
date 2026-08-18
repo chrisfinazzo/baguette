@@ -35,6 +35,7 @@ struct Baguette: AsyncParsableCommand {
             StatusBarCommand.self,
             InterfaceCommand.self,
             LocationCommand.self,
+            MotionCommand.self,
             InstallCommand.self,
             AddMediaCommand.self,
             OpenURLCommand.self,

@@ -396,6 +396,56 @@ also has a place-name search (OSM Nominatim) and a "locate me" button
 `GET …/location` and no way to query the device's current position. See
 `docs/features/location.md`.
 
+## CoreMotion — `motion`
+
+```bash
+baguette motion start --udid <UDID>                              # walking at 1.4 m/s, arms the dylib
+baguette motion start --udid <UDID> --activity running           # 3.5 m/s unless --speed says otherwise
+baguette motion set   --udid <UDID> --activity automotive        # change it; no re-arm, no relaunch
+baguette motion stop  --udid <UDID>                              # park stationary + disarm
+```
+
+| Subcommand | Args | Effect |
+|------------|------|--------|
+| `start` | `[--activity <kind>] [--speed <m/s>] [--confidence low\|medium\|high]` | publish + arm the dylib |
+| `set`   | same | publish only |
+| `stop`  | (none) | publish stationary, then disarm |
+
+`<kind>` is `stationary \| walking \| running \| cycling \| automotive`;
+anything else exits non-zero rather than reporting `unknown`. `--speed`
+defaults to that kind's usual pace (the browser's presets: Walk 1.4,
+Run 3.5, Cycle 6, Drive 13.4).
+
+**Not a simctl path, and the caveat matters more than usual.**
+`CMMotionActivityManager`, `CMPedometer` and `CMMotionManager` all report
+unavailable in a stock simulator, so baguette injects
+`VirtualMotion.dylib` via `DYLD_INSERT_LIBRARIES`. dyld inserts at exec
+time, so **only apps launched after `motion start` see anything** —
+relaunch with
+`xcrun simctl launch --terminate-running-process <UDID> <bundle-id>`.
+Confirm injection is live with
+`xcrun simctl spawn <UDID> log stream --predicate 'subsystem == "com.baguette.motion"'`.
+
+Equivalent HTTP routes during `baguette serve`:
+
+```
+POST http://localhost:8421/simulators/<UDID>/motion
+     body = {"activity":"running","speed":3.6}    (names the kind)
+       or = {"speed":6}                           (kind classified server-side)
+  → 200 {"ok":true,"active":true,"activity":"cycling","steps":24,"metres":18.0,"speed":6.00}
+  → 400 {"ok":false,"error":"motion body must name an activity: …"}
+
+GET    http://localhost:8421/simulators/<UDID>/motion     (read back; → {"ok":true,"active":false} when off)
+DELETE http://localhost:8421/simulators/<UDID>/motion     (park stationary + disarm)
+```
+
+Once armed, the **location** routes drive it: a walk vector or route
+classifies by its speed, and a bare point (or `DELETE …/location`) parks
+it stationary. Motion is opt-in — a location request never arms it. In the
+browser, that's the **Drive motion sensors** toggle on the Location card.
+Floor counting and the magnetometer stay unavailable on purpose. See
+`docs/features/motion.md`.
+
 ## Accessibility tree — `describe-ui`
 
 ```bash

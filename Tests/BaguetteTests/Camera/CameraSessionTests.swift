@@ -96,7 +96,7 @@ struct CameraSessionTests {
     @Test func `stop tears down the capture that was started for the active source`() async {
         let w = makeWiring()
         given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())
-        given(w.injection).disarm(on: .any).willReturn(())
+        given(w.injection).disarm(dylibPath: .any, on: .any).willReturn(())
         given(w.video).start(source: .any, onFrame: .any).willReturn(())
         given(w.video).stop().willReturn(())
 
@@ -126,7 +126,7 @@ struct CameraSessionTests {
     @Test func `start failure on capture leaves the session idle with an error`() async {
         let w = makeWiring()
         given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())
-        given(w.injection).disarm(on: .any).willReturn(())
+        given(w.injection).disarm(dylibPath: .any, on: .any).willReturn(())
         // Override `start` to throw instead of capturing the closure.
         given(w.webcam).start(source: .any, onFrame: .any)
             .willThrow(NSError(
@@ -162,7 +162,7 @@ struct CameraSessionTests {
     @Test func `stop drops back to idle and tears down capture`() async {
         let w = makeWiring()
         given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())
-        given(w.injection).disarm(on: .any).willReturn(())
+        given(w.injection).disarm(dylibPath: .any, on: .any).willReturn(())
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
 
@@ -177,7 +177,7 @@ struct CameraSessionTests {
     @Test func `stop disarms the dylib on the simulator it armed`() async {
         let w = makeWiring()
         given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())
-        given(w.injection).disarm(on: .any).willReturn(())
+        given(w.injection).disarm(dylibPath: .any, on: .any).willReturn(())
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
 
@@ -186,7 +186,9 @@ struct CameraSessionTests {
 
         // Injection must be removed on teardown — leaving DYLD_INSERT_LIBRARIES
         // armed loads the dylib into every future app launch until reboot.
-        verify(w.injection).disarm(on: .any).called(1)
+        // It names *its own* dylib: the variable is shared with other
+        // injecting features, so a blanket teardown would disarm theirs too.
+        verify(w.injection).disarm(dylibPath: .value("/tmp/vc.dylib"), on: .any).called(1)
     }
 
     /// `stop` suspends twice (tearing down capture, then disarming the
@@ -197,7 +199,7 @@ struct CameraSessionTests {
     @Test func `a stop that lands mid-teardown doesn't tear down twice`() async {
         let w = makeWiring()
         given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())
-        given(w.injection).disarm(on: .any).willReturn(())
+        given(w.injection).disarm(dylibPath: .any, on: .any).willReturn(())
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
 
@@ -207,7 +209,7 @@ struct CameraSessionTests {
         _ = await (first, second)
 
         verify(w.webcam).stop().called(1)
-        verify(w.injection).disarm(on: .any).called(1)
+        verify(w.injection).disarm(dylibPath: .any, on: .any).called(1)
         #expect(w.session.phase == .idle)
     }
 
