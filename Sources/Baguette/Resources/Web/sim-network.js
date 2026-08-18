@@ -32,6 +32,7 @@
       // replaces it with whatever the device is actually subject to.
       this.state = {
         profile: null, latencyMs: 0, bandwidthKbps: 0, lossPercent: 0, offline: false,
+        custom: false,
       };
       /** Called with a `NetworkConditionForm` whenever the armed state may
        *  have changed, so the toolbar can show a throttle is on even while
@@ -59,6 +60,17 @@
       return new window.Baguette._NetworkConditionForm(this.state);
     }
 
+    /// Which pill reads as chosen. Mostly the form's own derivation, but
+    /// the card also remembers an explicit Custom choice — picking Custom
+    /// reveals empty fields, and until one is filled in there is nothing in
+    /// the values themselves to say Custom was ever chosen.
+    _mode() {
+      if (this.state.offline) return 'offline';
+      if (this.state.profile) return this.state.profile;
+      if (this.state.custom || this._form().isConditioning) return 'custom';
+      return 'off';
+    }
+
     // Read what this simulator is actually subject to, so the card opens
     // showing the truth rather than whatever was last typed into it.
     async _hydrate() {
@@ -74,14 +86,16 @@
       if (Array.isArray(data.profiles)) this.profiles = data.profiles;
       const form = window.Baguette._NetworkConditionForm.fromState(data);
       this.state = {
-        // A preset resolves to numbers server-side, and the server reports
-        // those numbers rather than the name it was given — so the pills
-        // deselect once applied. The numbers are the honest readout.
-        profile: null,
+        // The device reports the preset its numbers came from, so the pill
+        // the user pressed stays lit rather than deselecting the moment the
+        // response lands.
+        profile: form.profile,
         latencyMs: form.latencyMs || 0,
         bandwidthKbps: form.bandwidthKbps || 0,
         lossPercent: form.lossPercent || 0,
         offline: form.offline,
+        // Conditioned by numbers that match no preset: that is Custom.
+        custom: !!(data.active && !form.profile && !form.offline),
       };
       if (this.host) this._build();
       this._announce();
@@ -96,23 +110,32 @@
     _build() {
       const s = this.state;
       const off = s.offline;
+      const mode = this._mode();
+      // A preset already states every number it conditions, so the fields
+      // appear only under Custom. Showing them beside a lit preset invites
+      // the one combination the route refuses, and reads as though the two
+      // could be layered.
+      const custom = mode === 'custom';
+      const pill = (value, label) =>
+        `<button class="nw-pill${mode === value ? ' active' : ''}" ` +
+        `data-p="${escapeAttr(value)}" ${off ? 'disabled' : ''}>${escapeAttr(label)}</button>`;
+
       this.host.innerHTML =
         '<div class="nw-section">' +
           '<p class="nw-section-title">Preset</p>' +
           '<div class="nw-pills" data-pills="profile">' +
-            this.profiles.map((p) =>
-              `<button class="nw-pill" data-p="${escapeAttr(p)}" ${off ? 'disabled' : ''}>` +
-              `${escapeAttr(PROFILE_LABELS[p] || p)}</button>`
-            ).join('') +
+            this.profiles.map((p) => pill(p, PROFILE_LABELS[p] || p)).join('') +
+            pill('custom', 'Custom…') +
           '</div>' +
         '</div>' +
-        '<div class="nw-section">' +
-          '<p class="nw-section-title">Custom</p>' +
-          this._numberRow('Latency', 'latencyMs', s.latencyMs, 'ms', off) +
-          this._numberRow('Bandwidth', 'bandwidthKbps', s.bandwidthKbps, 'kbps', off) +
-          this._numberRow('Loss', 'lossPercent', s.lossPercent, '%', off) +
-          '<p class="nw-hint">Leave bandwidth at 0 to keep the link unmetered.</p>' +
-        '</div>' +
+        (custom
+          ? '<div class="nw-section">' +
+              this._numberRow('Latency', 'latencyMs', s.latencyMs, 'ms', off) +
+              this._numberRow('Bandwidth', 'bandwidthKbps', s.bandwidthKbps, 'kbps', off) +
+              this._numberRow('Loss', 'lossPercent', s.lossPercent, '%', off) +
+              '<p class="nw-hint">Leave bandwidth at 0 to keep the link unmetered.</p>' +
+            '</div>'
+          : '') +
         '<div class="nw-section">' +
           '<label class="nw-toggle">' +
             `<input type="checkbox" data-k="offline" ${off ? 'checked' : ''}>` +
@@ -129,6 +152,21 @@
         'Changing it afterwards reaches a running app without a relaunch.</p>';
 
       this._wire();
+    }
+
+    /// Updates the armed readout and the pill row without rebuilding the
+    /// inputs — a full rebuild while someone is typing in one of them
+    /// replaces the focused element mid-keystroke.
+    _refreshFooter() {
+      const mode = this._mode();
+      this.host.querySelectorAll('.nw-pill').forEach((p) => {
+        p.classList.toggle('active', p.getAttribute('data-p') === mode);
+      });
+      const state = this.host.querySelector('.nw-state');
+      if (state) {
+        state.textContent = this._form().describe();
+        state.classList.toggle('on', this._form().isConditioning);
+      }
     }
 
     _numberRow(label, key, value, unit, disabled) {
@@ -153,9 +191,19 @@
         pills.addEventListener('click', (e) => {
           const b = e.target.closest('.nw-pill');
           if (!b || b.disabled) return;
-          this.state.profile = b.getAttribute('data-p');
-          pills.querySelectorAll('.nw-pill').forEach((c) => c.classList.remove('active'));
-          b.classList.add('active');
+          const chosen = b.getAttribute('data-p');
+          if (chosen === 'custom') {
+            // Custom only reveals the fields. Applying here would post
+            // whatever happened to be in them — usually nothing, which the
+            // route reads as a clear and would collapse the section again.
+            this.state.profile = null;
+            this.state.custom = true;
+            this._build();
+            return;
+          }
+          this.state.profile = chosen;
+          this.state.custom = false;
+          this._build();
           this._scheduleApply();
         });
       }
@@ -165,13 +213,16 @@
         el.addEventListener(key === 'offline' ? 'change' : 'input', () => {
           if (key === 'offline') {
             this.state.offline = el.checked;
+            this._build();
           } else {
             this.state[key] = Number(el.value);
-            // Typing a number means the numbers are what's wanted. Leaving
-            // a preset selected would make the request state two sources
-            // and get it refused, so the pill lets go.
+            // Typing a number means the numbers are what's wanted, so any
+            // preset lets go — a request naming both is refused. Rebuilding
+            // here would steal focus mid-keystroke, so only the readout is
+            // refreshed.
             this.state.profile = null;
-            h.querySelectorAll('.nw-pill').forEach((c) => c.classList.remove('active'));
+            this.state.custom = true;
+            this._refreshFooter();
           }
           this._scheduleApply();
         });
@@ -242,6 +293,7 @@
       }
       this.state = {
         profile: null, latencyMs: 0, bandwidthKbps: 0, lossPercent: 0, offline: false,
+        custom: false,
       };
       if (this.host) this._build();
       this._announce();

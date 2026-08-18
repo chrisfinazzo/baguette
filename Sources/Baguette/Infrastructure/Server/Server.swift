@@ -1435,7 +1435,12 @@ struct Server: Sendable {
             return #"{"ok":true,"active":false,"profiles":[\#(profiles)]}"#
         }
         let bandwidth = condition.bandwidthKbps.map { "\($0)" } ?? "null"
-        return #"{"ok":true,"active":true,"latencyMs":\#(condition.latencyMs),"#
+        // Naming the preset lets the card keep the pill the user pressed
+        // lit, without the frontend holding NLC's figures to recognise the
+        // numbers it gets back.
+        let profile = NetworkProfile.matching(condition).map { "\"\($0.rawValue)\"" } ?? "null"
+        return #"{"ok":true,"active":true,"profile":\#(profile),"#
+            + #""latencyMs":\#(condition.latencyMs),"#
             + #""bandwidthKbps":\#(bandwidth),"lossPercent":\#(condition.lossPercent),"#
             + #""offline":\#(condition.isOffline),"summary":"\#(condition.summary)","#
             + #""profiles":[\#(profiles)]}"#

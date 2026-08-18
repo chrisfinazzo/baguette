@@ -82,4 +82,22 @@ struct NetworkProfileTests {
     @Test func `offers every preset for the CLI and the browser to list`() {
         #expect(NetworkProfile.allCases.count == 7)
     }
+
+    @Test func `recognises a condition as one of its own presets`() {
+        // The card posts a preset's *name* and the device reports back
+        // *numbers*, so without this the browser cannot tell that what is
+        // applied is still the preset the user picked — and the pill it
+        // lit deselects itself the moment the answer arrives.
+        for profile in NetworkProfile.allCases {
+            #expect(NetworkProfile.matching(profile.condition) == profile,
+                    "\(profile.rawValue) unmatched")
+        }
+    }
+
+    @Test func `does not mistake a hand-tuned condition for a preset`() {
+        #expect(NetworkProfile.matching(
+            NetworkCondition(latencyMs: 317, bandwidthKbps: 411, lossPercent: 3)!) == nil)
+        #expect(NetworkProfile.matching(.unconditioned) == nil)
+        #expect(NetworkProfile.matching(.offline) == nil)
+    }
 }

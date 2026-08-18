@@ -176,6 +176,27 @@ struct NetworkRoutesTests {
         #expect(json.contains(#""summary":"200 ms latency, 780 kbps""#))
     }
 
+    @Test func `networkStateJSON names the preset when one matches`() async {
+        // So the card can keep the pill the user pressed lit. It posts a
+        // name and gets numbers back; without this it would have to hold
+        // NLC's figures itself to recognise them, which is the duplication
+        // the whole design avoids.
+        let w = makeWiring(current: NetworkProfile.threeG.condition)
+
+        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+
+        #expect(json.contains(#""profile":"3g""#))
+    }
+
+    @Test func `networkStateJSON names no preset for a hand-tuned condition`() async {
+        let w = makeWiring(
+            current: NetworkCondition(latencyMs: 317, bandwidthKbps: 411, lossPercent: 3)!)
+
+        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+
+        #expect(json.contains(#""profile":null"#))
+    }
+
     @Test func `networkStateJSON reports an unconditioned simulator as inactive`() async {
         let w = makeWiring(current: nil)
 

@@ -68,6 +68,21 @@ enum NetworkProfile: String, CaseIterable, Sendable {
         }
     }
 
+    /// The preset `condition` came from, or `nil` when it matches none.
+    ///
+    /// The card posts a preset's **name** and the device reports back
+    /// **numbers**, so without this the browser cannot tell that what is
+    /// applied is still the preset the user picked. The alternative —
+    /// having the frontend hold NLC's figures so it can recognise them —
+    /// is exactly the duplication this type exists to prevent.
+    ///
+    /// A hand-tuned condition that happens to equal a preset is reported as
+    /// that preset. They are the same network; naming it is more useful
+    /// than insisting on how it was typed.
+    static func matching(_ condition: NetworkCondition) -> NetworkProfile? {
+        allCases.first { $0.condition == condition }
+    }
+
     /// The condition this preset stands for.
     ///
     /// Can't fail: every figure above is a compile-time constant, all

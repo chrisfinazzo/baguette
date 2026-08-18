@@ -35,15 +35,38 @@
       this.offline = !!offline;
     }
 
-    /** Reads back what `GET /simulators/:udid/network` reports. */
+    /**
+     * Reads back what `GET /simulators/:udid/network` reports.
+     *
+     * `profile` is carried across deliberately. The card posts a preset's
+     * name and the device answers with numbers *plus* the preset they came
+     * from; dropping that name is what made a pressed pill deselect itself
+     * the moment the response landed.
+     */
     static fromState(state) {
       if (!state || !state.active) return new NetworkConditionForm({});
       return new NetworkConditionForm({
+        profile: state.profile,
         latencyMs: state.latencyMs,
         bandwidthKbps: state.bandwidthKbps,
         lossPercent: state.lossPercent,
         offline: state.offline,
       });
+    }
+
+    /**
+     * Which control the card should show as chosen: a preset's name,
+     * `'offline'`, `'custom'`, or `'off'`.
+     *
+     * The three number fields only make sense under Custom. A preset
+     * already states every number it conditions, so showing editable
+     * fields beside a lit preset invites the exact combination the route
+     * refuses — and reads as though they could be layered.
+     */
+    get mode() {
+      if (this.offline) return 'offline';
+      if (this.profile) return this.profile;
+      return this.isConditioning ? 'custom' : 'off';
     }
 
     /**

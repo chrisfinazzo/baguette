@@ -94,6 +94,40 @@ test('reads a server state payload back into a form', () => {
   assert.deepEqual(form.toBody(), { latencyMs: 200, bandwidthKbps: 780 });
 });
 
+test('keeps the preset the device reports, so the pill stays lit', () => {
+  // The card posts a name and the device answers with numbers plus the
+  // preset they came from. Dropping that name is what made a pressed pill
+  // deselect itself the moment the response landed.
+  const F = Form();
+  const form = F.fromState({
+    active: true, profile: '3g', latencyMs: 200, bandwidthKbps: 780, lossPercent: 0,
+  });
+  assert.equal(form.profile, '3g');
+  assert.deepEqual(form.toBody(), { profile: '3g' });
+  assert.equal(form.describe(), '3g');
+});
+
+test('a hand-tuned condition reports no preset and reads as custom', () => {
+  const F = Form();
+  const form = F.fromState({
+    active: true, profile: null, latencyMs: 317, bandwidthKbps: 411, lossPercent: 3,
+  });
+  assert.equal(form.profile, null);
+  assert.equal(form.mode, 'custom');
+  assert.deepEqual(form.toBody(), { latencyMs: 317, bandwidthKbps: 411, lossPercent: 3 });
+});
+
+test('mode names which control the card should be showing', () => {
+  // The inputs only make sense under Custom; a preset states every number
+  // it conditions, so showing three editable fields beside it invites a
+  // combination the route refuses.
+  const F = Form();
+  assert.equal(new F({ profile: '3g' }).mode, '3g');
+  assert.equal(new F({ offline: true }).mode, 'offline');
+  assert.equal(new F({ latencyMs: 300 }).mode, 'custom');
+  assert.equal(new F({}).mode, 'off');
+});
+
 test('an inactive server state reads back as a form that conditions nothing', () => {
   const F = Form();
   assert.equal(F.fromState({ active: false }).toBody(), null);
