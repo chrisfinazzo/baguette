@@ -49,6 +49,39 @@ For releases prior to this changelog, see the
   `--offline` will not feel offline to it. See
   [`docs/features/network.md`](docs/features/network.md).
 
+### Fixed
+
+- **Adding a bakery no longer collides with itself and kills the clone.**
+  `GitCheckout.clone` emptied the cache directory and then cloned into it,
+  leaving the live tree half-written for the tens of seconds a clone takes.
+  A second clone of the same bakery arriving in that window — the browser's
+  preview against a terminal `bakery add`, or one impatient second press of
+  Preview — deleted the tree the first was still writing into, and git died
+  on its own vanished temp pack:
+  `fatal: could not open '…/pack/tmp_pack_XXXXXX' for reading: No such file
+  or directory` / `fatal: fetch-pack: invalid index-pack output`.
+  Each clone now assembles the checkout in a staging directory of its own
+  beside the destination and moves it in only once it is complete, so
+  nothing ever deletes a checkout in progress and whoever finishes last
+  wins the swap. Two consequences worth having on their own: a failed clone
+  now leaves the checkout you already had instead of a network blip taking
+  the working copy with it, and a reader never sees the cache directory
+  mid-delete. The modal also runs one preview at a time — the button
+  disables while a clone is in flight, and says that a cold one takes a
+  minute rather than showing a bare "Fetching…".
+
+- **The add-a-bakery modal drew behind the device.** It mounted into
+  `.right-rails` alongside the plugin rail, and `.right-rails` is
+  `position: fixed` — which creates a stacking context whatever its
+  `z-index` says. So the modal's `z-index: 60` was weighed against its
+  siblings inside the rail rather than against the page, and the device's
+  `z-index: 2` screen area a level up painted over it: the phone cut the
+  dialog in half and the scrim dimmed everything except the thing it was
+  covering. Page-covering UI now hangs off the view root instead. The
+  comment on `.right-rails` claimed the opposite ("with `z-index: auto`
+  this container doesn't create a stacking context") and has been corrected
+  — `position: fixed` alone is enough.
+
 
 ---
 

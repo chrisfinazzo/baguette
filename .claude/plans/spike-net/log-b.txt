@@ -1,0 +1,487 @@
+getpwuid_r did not find a match for uid 501
+Filtering the log data using "subsystem == "com.baguette.network""
+Timestamp               Ty Process[PID:TID]
+2026-08-18 10:57:35.498 Df mlhostd[83472:16e2c27] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:35.498 Df mlhostd[83472:16e2c27] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:35.498 Df mlhostd[83472:16e2c27] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:36.144 Df managedappdistributiond[83888:16e2e89] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:36.144 Df managedappdistributiond[83888:16e2e89] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:36.144 Df managedappdistributiond[83888:16e2e89] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:37.006 Df proactiveeventtrackerd[84158:16e301a] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:37.006 Df proactiveeventtrackerd[84158:16e301a] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:37.006 Df proactiveeventtrackerd[84158:16e301a] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:37.397 Df AvasAppDriver[84074:16e2fd9] [com.baguette.network:spike] [SpikeNet] loading into AvasAppDriver — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:37.397 Df AvasAppDriver[84074:16e2fd9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:37.397 Df AvasAppDriver[84074:16e2fd9] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:37.846 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] knobs reloaded — latency=300ms loss=0% offline=0
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED HEAD http://192.168.0.15:8101 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:38.159 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued http://192.168.0.15:8101
+2026-08-18 10:57:38.920 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for HEAD http://192.168.0.15:8101
+2026-08-18 10:57:38.927 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] delivered empty body for http://192.168.0.15:8101
+2026-08-18 10:57:38.930 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET http://192.168.0.15:8101 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:39.246 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued http://192.168.0.15:8101
+2026-08-18 10:57:39.541 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET http://192.168.0.15:8101
+2026-08-18 10:57:39.974 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] finished http://192.168.0.15:8101 — 11351 bytes in 4 chunks over 1.04s
+2026-08-18 10:57:41.056 Df facetimemessagestored[84679:16e3459] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:41.057 Df facetimemessagestored[84679:16e3459] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:41.057 Df facetimemessagestored[84679:16e3459] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:41.646 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable -> YES
+2026-08-18 10:57:41.646 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:41.958 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable
+2026-08-18 10:57:43.675 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable
+2026-08-18 10:57:44.133 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] finished http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable — 23042023 bytes in 4 chunks over 2.49s
+2026-08-18 10:57:44.475 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable -> YES
+2026-08-18 10:57:44.475 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:44.792 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable
+2026-08-18 10:57:45.613 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable
+2026-08-18 10:57:45.697 Df mlhostd[86278:16e3f35] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:45.697 Df mlhostd[86278:16e3f35] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:45.697 Df mlhostd[86278:16e3f35] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:46.344 Df managedappdistributiond[86437:16e3fb8] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:46.344 Df managedappdistributiond[86437:16e3fb8] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:46.344 Df managedappdistributiond[86437:16e3fb8] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:46.383 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] finished http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable — 23041431 bytes in 4 chunks over 1.91s
+2026-08-18 10:57:47.353 Df proactiveeventtrackerd[86529:16e40ae] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:47.354 Df proactiveeventtrackerd[86529:16e40ae] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:47.354 Df proactiveeventtrackerd[86529:16e40ae] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:49.944 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:57:49.947 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:57:49.947 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:57:49.947 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:57:49.947 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:57:49.947 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:57:49.947 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:49.982 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:57:49.982 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:57:49.982 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:57:49.982 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications -> YES
+2026-08-18 10:57:49.983 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:49.985 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/driver/profile -> YES
+2026-08-18 10:57:49.985 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/driver/profile -> YES
+2026-08-18 10:57:49.985 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/driver/profile -> YES
+2026-08-18 10:57:49.985 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/driver/profile -> YES
+2026-08-18 10:57:49.985 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/driver/profile -> YES
+2026-08-18 10:57:49.985 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/driver/profile -> YES
+2026-08-18 10:57:49.986 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED POST https://megatron.avas.dev/v2/api/driver/profile (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:49.986 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] body for POST https://megatron.avas.dev/v2/api/driver/profile: HTTPBody=0 bytes, HTTPBodyStream=present
+2026-08-18 10:57:49.988 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/auth/ably-token -> YES
+2026-08-18 10:57:49.988 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/auth/ably-token -> YES
+2026-08-18 10:57:49.988 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/auth/ably-token -> YES
+2026-08-18 10:57:49.988 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/auth/ably-token -> YES
+2026-08-18 10:57:49.988 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/auth/ably-token -> YES
+2026-08-18 10:57:49.988 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/auth/ably-token -> YES
+2026-08-18 10:57:49.989 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/auth/ably-token (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 -> YES
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:50.129 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/user/get-user -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/info -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/app/assets (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/user/get-user -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/user/get-user -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/user/get-user -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/user/get-user -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/user/get-user -> YES
+2026-08-18 10:57:50.130 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/info -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/info -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/info -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/info -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/info -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/user/get-user (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/info (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:50.131 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:50.272 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing
+2026-08-18 10:57:50.318 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/auth/ably-token
+2026-08-18 10:57:50.318 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications
+2026-08-18 10:57:50.318 Df AvasAppDriver[84074:16e3165] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/profile
+2026-08-18 10:57:50.341 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders
+2026-08-18 10:57:50.448 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/app/assets
+2026-08-18 10:57:50.449 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/user/get-user
+2026-08-18 10:57:50.450 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1
+2026-08-18 10:57:50.451 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/preorders/new-requests
+2026-08-18 10:57:50.451 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me
+2026-08-18 10:57:50.451 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/info
+2026-08-18 10:57:50.916 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications
+2026-08-18 10:57:50.916 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/auth/ably-token
+2026-08-18 10:57:50.916 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/app/assets
+2026-08-18 10:57:50.918 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing
+2026-08-18 10:57:50.924 Df AvasAppDriver[84074:16e3165] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1
+2026-08-18 10:57:50.941 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders
+2026-08-18 10:57:50.956 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me
+2026-08-18 10:57:50.964 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/info
+2026-08-18 10:57:50.964 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests
+2026-08-18 10:57:50.964 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] upstream 200 for POST https://megatron.avas.dev/v2/api/driver/profile
+2026-08-18 10:57:50.969 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/user/get-user
+2026-08-18 10:57:51.402 Df facetimemessagestored[87265:16e46e7] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:51.402 Df facetimemessagestored[87265:16e46e7] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:51.402 Df facetimemessagestored[87265:16e46e7] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:51.409 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/auth/ably-token — 262 bytes in 4 chunks over 1.42s
+2026-08-18 10:57:51.430 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders — 30 bytes in 4 chunks over 1.45s
+2026-08-18 10:57:51.431 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing — 32 bytes in 4 chunks over 1.48s
+2026-08-18 10:57:51.477 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/info — 858 bytes in 4 chunks over 1.35s
+2026-08-18 10:57:51.480 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me — 30 bytes in 4 chunks over 1.35s
+2026-08-18 10:57:51.482 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit POST https://main.realtime.ably.net:443/keys/al87zw.neR6PA/requestToken?rnd=740248467694877 -> YES
+2026-08-18 10:57:51.482 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED POST https://main.realtime.ably.net:443/keys/al87zw.neR6PA/requestToken?rnd=740248467694877 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:51.482 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] body for POST https://main.realtime.ably.net:443/keys/al87zw.neR6PA/requestToken?rnd=740248467694877: HTTPBody=0 bytes, HTTPBodyStream=present
+2026-08-18 10:57:51.484 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/bites/orders/active -> YES
+2026-08-18 10:57:51.484 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/bites/orders/active -> YES
+2026-08-18 10:57:51.484 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/bites/orders/active -> YES
+2026-08-18 10:57:51.484 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/bites/orders/active -> YES
+2026-08-18 10:57:51.484 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/bites/orders/active -> YES
+2026-08-18 10:57:51.484 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/bites/orders/active -> YES
+2026-08-18 10:57:51.484 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/bites/orders/active (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:51.496 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/user/get-user — 710 bytes in 4 chunks over 1.35s
+2026-08-18 10:57:51.538 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/vehicles?working_group_id=1 — 410 bytes in 4 chunks over 1.41s
+2026-08-18 10:57:51.538 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/preorders/new-requests — 30 bytes in 4 chunks over 1.41s
+2026-08-18 10:57:51.565 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config -> YES
+2026-08-18 10:57:51.565 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config -> YES
+2026-08-18 10:57:51.565 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config -> YES
+2026-08-18 10:57:51.565 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config -> YES
+2026-08-18 10:57:51.565 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config -> YES
+2026-08-18 10:57:51.565 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config -> YES
+2026-08-18 10:57:51.565 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:51.566 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/profile — 1078 bytes in 4 chunks over 1.58s
+2026-08-18 10:57:51.578 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/public/localization?language=en&namespaces=notifications — 2898 bytes in 4 chunks over 1.59s
+2026-08-18 10:57:51.617 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/app/assets — 2945 bytes in 4 chunks over 1.49s
+2026-08-18 10:57:51.804 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/bites/orders/active
+2026-08-18 10:57:51.805 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://main.realtime.ably.net:443/keys/al87zw.neR6PA/requestToken?rnd=740248467694877
+2026-08-18 10:57:51.935 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/bites/orders/active
+2026-08-18 10:57:51.979 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/app/v2/driver-location-config
+2026-08-18 10:57:52.041 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] upstream 201 for POST https://main.realtime.ably.net:443/keys/al87zw.neR6PA/requestToken?rnd=740248467694877
+2026-08-18 10:57:52.173 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/app/v2/driver-location-config
+2026-08-18 10:57:52.677 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/app/v2/driver-location-config — 298 bytes in 4 chunks over 1.11s
+2026-08-18 10:57:52.700 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/bites/orders/active — 41 bytes in 4 chunks over 1.22s
+2026-08-18 10:57:52.716 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] finished https://main.realtime.ably.net:443/keys/al87zw.neR6PA/requestToken?rnd=740248467694877 — 405 bytes in 4 chunks over 1.23s
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/map-styles-v3 -> YES
+2026-08-18 10:57:52.717 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/tile-token -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/pending-jobs (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/map-styles-v3 -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/map-styles-v3 -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/map-styles-v3 -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/map-styles-v3 -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/map-styles-v3 -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/tile-token -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/tile-token -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/tile-token -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/tile-token -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/tile-token -> YES
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:52.718 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:52.719 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/app/map-styles-v3 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:52.719 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/app/tile-token (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:52.730 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/auth/store-push-token -> YES
+2026-08-18 10:57:52.730 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/auth/store-push-token -> YES
+2026-08-18 10:57:52.730 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/auth/store-push-token -> YES
+2026-08-18 10:57:52.730 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/auth/store-push-token -> YES
+2026-08-18 10:57:52.730 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/auth/store-push-token -> YES
+2026-08-18 10:57:52.730 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/auth/store-push-token -> YES
+2026-08-18 10:57:52.731 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED POST https://megatron.avas.dev/v2/api/auth/store-push-token (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:52.731 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] body for POST https://megatron.avas.dev/v2/api/auth/store-push-token: HTTPBody=0 bytes, HTTPBodyStream=present
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/geo/v3/locate -> YES
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/geo/v3/locate -> YES
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/geo/v3/locate -> YES
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/geo/v3/locate -> YES
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/geo/v3/locate -> YES
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v2/api/geo/v3/locate -> YES
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED POST https://megatron.avas.dev/v2/api/geo/v3/locate (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:52.849 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] body for POST https://megatron.avas.dev/v2/api/geo/v3/locate: HTTPBody=0 bytes, HTTPBodyStream=present
+2026-08-18 10:57:53.043 Df AvasAppDriver[84074:16e3165] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/pending-jobs
+2026-08-18 10:57:53.043 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/preorders/new-requests
+2026-08-18 10:57:53.078 Df AvasAppDriver[84074:16e46c9] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me
+2026-08-18 10:57:53.079 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/app/map-styles-v3
+2026-08-18 10:57:53.079 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/auth/store-push-token
+2026-08-18 10:57:53.079 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/app/tile-token
+2026-08-18 10:57:53.262 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/pending-jobs
+2026-08-18 10:57:53.336 Df AvasAppDriver[84074:16e46c8] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/geo/v3/locate
+2026-08-18 10:57:53.391 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/app/map-styles-v3
+2026-08-18 10:57:53.438 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] canInit POST https://megatron.avas.dev/v1/loc/location/f91acfb4-4884-4ed5-b47f-fc5680a99463 -> YES
+2026-08-18 10:57:53.439 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED POST https://megatron.avas.dev/v1/loc/location/f91acfb4-4884-4ed5-b47f-fc5680a99463 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:53.439 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] body for POST https://megatron.avas.dev/v1/loc/location/f91acfb4-4884-4ed5-b47f-fc5680a99463: HTTPBody=0 bytes, HTTPBodyStream=present
+2026-08-18 10:57:53.554 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me
+2026-08-18 10:57:53.554 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/app/tile-token
+2026-08-18 10:57:53.554 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/preorders/new-requests
+2026-08-18 10:57:53.557 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] upstream 200 for POST https://megatron.avas.dev/v2/api/auth/store-push-token
+2026-08-18 10:57:53.673 Df AvasAppDriver[84074:16e3165] [com.baguette.network:spike] [SpikeNet] upstream 200 for POST https://megatron.avas.dev/v2/api/geo/v3/locate
+2026-08-18 10:57:53.878 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/pending-jobs — 53 bytes in 4 chunks over 1.16s
+2026-08-18 10:57:53.878 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v1/loc/location/f91acfb4-4884-4ed5-b47f-fc5680a99463
+2026-08-18 10:57:53.985 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/app/map-styles-v3 — 235422 bytes in 4 chunks over 1.27s
+2026-08-18 10:57:54.070 Df AvasAppDriver[84074:16e46ca] [com.baguette.network:spike] [SpikeNet] upstream 200 for POST https://megatron.avas.dev/v1/loc/location/f91acfb4-4884-4ed5-b47f-fc5680a99463
+2026-08-18 10:57:54.092 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/auth/store-push-token — 60 bytes in 4 chunks over 1.36s
+2026-08-18 10:57:54.093 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/preorders/new-requests — 30 bytes in 4 chunks over 1.37s
+2026-08-18 10:57:54.093 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/preorders/assigned-to-me — 30 bytes in 4 chunks over 1.37s
+2026-08-18 10:57:54.093 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/app/tile-token — 170 bytes in 4 chunks over 1.37s
+2026-08-18 10:57:54.207 Df AvasAppDriver[84074:16e46ca] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/geo/v3/locate — 734 bytes in 4 chunks over 1.36s
+2026-08-18 10:57:54.376 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] canInit GET https://demotiles.maplibre.org/style.json? -> YES
+2026-08-18 10:57:54.376 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://demotiles.maplibre.org/style.json? (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:54.562 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://tiles.avasapp.com/data/v3/16/46153/32000.pbf?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA -> YES
+2026-08-18 10:57:54.563 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://tiles.avasapp.com/data/v3/16/46153/32000.pbf?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:54.563 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] canInit GET https://tiles.avasapp.com/pois/16/46153/32000?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA -> YES
+2026-08-18 10:57:54.563 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://tiles.avasapp.com/pois/16/46153/32000?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:54.586 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:57:54.587 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:57:54.587 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:57:54.587 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:57:54.587 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:57:54.587 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:57:54.587 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:54.588 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/traffic (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:54.588 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:54.588 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/app/assets -> YES
+2026-08-18 10:57:54.588 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/app/assets (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:54.643 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png -> YES
+2026-08-18 10:57:54.643 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png -> YES
+2026-08-18 10:57:54.643 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png -> YES
+2026-08-18 10:57:54.643 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png -> YES
+2026-08-18 10:57:54.643 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png -> YES
+2026-08-18 10:57:54.643 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] canInit GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png -> YES
+2026-08-18 10:57:54.644 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:54.720 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://demotiles.maplibre.org/style.json?
+2026-08-18 10:57:54.796 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://demotiles.maplibre.org/style.json?
+2026-08-18 10:57:54.879 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://tiles.avasapp.com/data/v3/16/46153/32000.pbf?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA
+2026-08-18 10:57:54.879 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://tiles.avasapp.com/pois/16/46153/32000?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA
+2026-08-18 10:57:54.892 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v1/loc/location/f91acfb4-4884-4ed5-b47f-fc5680a99463 — 32 bytes in 4 chunks over 1.45s
+2026-08-18 10:57:54.892 Df AvasAppDriver[84074:16e46ca] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/app/assets
+2026-08-18 10:57:54.893 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/traffic
+2026-08-18 10:57:54.934 Df AvasAppDriver[84074:16e3174] [com.baguette.network:spike] [SpikeNet] upstream 204 for GET https://tiles.avasapp.com/pois/16/46153/32000?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA
+2026-08-18 10:57:54.934 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] delivered empty body for https://tiles.avasapp.com/pois/16/46153/32000?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA
+2026-08-18 10:57:54.935 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://tiles.avasapp.com/data/v3/16/46153/32000.pbf?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA
+2026-08-18 10:57:54.964 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png
+2026-08-18 10:57:55.014 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/app/assets
+2026-08-18 10:57:55.059 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/traffic
+2026-08-18 10:57:55.119 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png
+2026-08-18 10:57:55.225 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] finished https://demotiles.maplibre.org/style.json? — 77224 bytes in 4 chunks over 0.85s
+2026-08-18 10:57:55.471 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/app/assets — 2945 bytes in 4 chunks over 0.88s
+2026-08-18 10:57:55.500 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] finished https://tiles.avasapp.com/data/v3/16/46153/32000.pbf?expires=1787036400&t=5OeQ1Mxtr_ZUvaHN9ZlTRTE0qXV8rNrtwqSpP10WIQQ&md5=0WcLgAl1Wq8HTPKIfv2iJA — 3426 bytes in 4 chunks over 0.94s
+2026-08-18 10:57:55.575 Df AvasAppDriver[84074:16e48e5] [com.baguette.network:spike] [SpikeNet] finished https://d3u74tt9fb4uap.cloudfront.net/app-icons/tariff-icons/avas-car-top.png — 3350 bytes in 4 chunks over 0.93s
+2026-08-18 10:57:55.576 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/traffic — 457022 bytes in 4 chunks over 0.99s
+2026-08-18 10:57:56.033 Df mlhostd[87650:16e4bb1] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:56.034 Df mlhostd[87650:16e4bb1] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:56.034 Df mlhostd[87650:16e4bb1] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:56.656 Df managedappdistributiond[87720:16e4c62] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:56.656 Df managedappdistributiond[87720:16e4c62] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:56.656 Df managedappdistributiond[87720:16e4c62] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:57.617 Df proactiveeventtrackerd[87786:16e4d36] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:57.618 Df proactiveeventtrackerd[87786:16e4d36] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:57.618 Df proactiveeventtrackerd[87786:16e4d36] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:01.699 Df facetimemessagestored[87895:16e4fa9] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:01.700 Df facetimemessagestored[87895:16e4fa9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:01.700 Df facetimemessagestored[87895:16e4fa9] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:06.286 Df mlhostd[88093:16e537f] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:06.287 Df mlhostd[88093:16e537f] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:06.287 Df mlhostd[88093:16e537f] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:06.896 Df managedappdistributiond[88132:16e53fe] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:06.896 Df managedappdistributiond[88132:16e53fe] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:06.896 Df managedappdistributiond[88132:16e53fe] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:07.868 Df proactiveeventtrackerd[88154:16e54e8] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:07.868 Df proactiveeventtrackerd[88154:16e54e8] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:07.868 Df proactiveeventtrackerd[88154:16e54e8] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:11.981 Df facetimemessagestored[88345:16e5926] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:11.981 Df facetimemessagestored[88345:16e5926] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:11.981 Df facetimemessagestored[88345:16e5926] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:14.735 Df siriactionsd[88622:16e5e09] [com.baguette.network:spike] [SpikeNet] loading into siriactionsd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:14.736 Df siriactionsd[88622:16e5e09] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:14.736 Df siriactionsd[88622:16e5e09] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:16.390 Df mlhostd[88692:16e5ff5] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:16.390 Df mlhostd[88692:16e5ff5] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:16.390 Df mlhostd[88692:16e5ff5] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:17.040 Df managedappdistributiond[88705:16e6074] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:17.041 Df managedappdistributiond[88705:16e6074] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:17.041 Df managedappdistributiond[88705:16e6074] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:17.960 Df proactiveeventtrackerd[88733:16e6126] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:17.960 Df proactiveeventtrackerd[88733:16e6126] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:17.960 Df proactiveeventtrackerd[88733:16e6126] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:18.847 Df linkd[88749:16e61a2] [com.baguette.network:spike] [SpikeNet] loading into linkd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:18.847 Df linkd[88749:16e61a2] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:18.847 Df linkd[88749:16e61a2] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:20.133 Df mobiletimerd[88795:16e62e8] [com.baguette.network:spike] [SpikeNet] loading into mobiletimerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:20.134 Df mobiletimerd[88795:16e62e8] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:20.134 Df mobiletimerd[88795:16e62e8] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:21.515 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:58:21.516 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:58:21.516 Df AvasAppDriver[84074:16e3173] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:58:21.516 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders (latency 300ms loss 0% offline 0)
+2026-08-18 10:58:21.850 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders
+2026-08-18 10:58:22.135 Df facetimemessagestored[88873:16e6478] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:22.135 Df facetimemessagestored[88873:16e6478] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:22.136 Df facetimemessagestored[88873:16e6478] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:22.205 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders
+2026-08-18 10:58:22.800 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders — 30 bytes in 4 chunks over 1.28s
+2026-08-18 10:58:23.905 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:58:23.905 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:58:23.905 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:58:23.905 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/pending-jobs (latency 300ms loss 0% offline 0)
+2026-08-18 10:58:24.224 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/pending-jobs
+2026-08-18 10:58:24.344 Df AvasAppDriver[84074:16e64a4] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/pending-jobs
+2026-08-18 10:58:24.776 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/pending-jobs — 53 bytes in 4 chunks over 0.87s
+2026-08-18 10:58:26.623 Df mlhostd[89001:16e6792] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:26.624 Df mlhostd[89001:16e6792] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:26.624 Df mlhostd[89001:16e6792] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:27.284 Df managedappdistributiond[89005:16e67e9] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:27.285 Df managedappdistributiond[89005:16e67e9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:27.285 Df managedappdistributiond[89005:16e67e9] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:28.198 Df proactiveeventtrackerd[89056:16e689a] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:28.198 Df proactiveeventtrackerd[89056:16e689a] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:28.199 Df proactiveeventtrackerd[89056:16e689a] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:32.358 Df facetimemessagestored[89243:16e6bf0] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:58:32.358 Df facetimemessagestored[89243:16e6bf0] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:32.358 Df facetimemessagestored[89243:16e6bf0] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:36.850 Df mlhostd[89368:16e6ea3] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:36.850 Df mlhostd[89368:16e6ea3] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:36.850 Df mlhostd[89368:16e6ea3] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:37.567 Df managedappdistributiond[89393:16e6f3c] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:37.567 Df managedappdistributiond[89393:16e6f3c] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:37.567 Df managedappdistributiond[89393:16e6f3c] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:38.437 Df proactiveeventtrackerd[89424:16e6fe6] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:38.438 Df proactiveeventtrackerd[89424:16e6fe6] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:38.438 Df proactiveeventtrackerd[89424:16e6fe6] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:42.645 Df facetimemessagestored[89588:16e7337] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:42.645 Df facetimemessagestored[89588:16e7337] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:42.645 Df facetimemessagestored[89588:16e7337] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:47.088 Df mlhostd[89791:16e77cf] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:47.088 Df mlhostd[89791:16e77cf] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:47.088 Df mlhostd[89791:16e77cf] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:47.771 Df managedappdistributiond[89827:16e786d] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:47.771 Df managedappdistributiond[89827:16e786d] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:47.771 Df managedappdistributiond[89827:16e786d] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:48.632 Df proactiveeventtrackerd[89842:16e78bc] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:48.633 Df proactiveeventtrackerd[89842:16e78bc] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:48.633 Df proactiveeventtrackerd[89842:16e78bc] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:52.805 Df AvasAppDriver[84074:16e7016] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:58:52.805 Df AvasAppDriver[84074:16e7016] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:58:52.805 Df AvasAppDriver[84074:16e7016] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing -> YES
+2026-08-18 10:58:52.806 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] knobs reloaded — latency=300ms loss=0% offline=1
+2026-08-18 10:58:52.806 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing (latency 300ms loss 0% offline 1)
+2026-08-18 10:58:52.806 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] failing https://megatron.avas.dev/v2/api/driver/ride/v2/ongoing as offline (NSURLError -1009)
+2026-08-18 10:58:52.825 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:58:52.825 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:58:52.825 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:58:52.825 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders (latency 300ms loss 0% offline 1)
+2026-08-18 10:58:52.825 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] failing https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders as offline (NSURLError -1009)
+2026-08-18 10:58:52.941 Df facetimemessagestored[89931:16e7b01] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:52.942 Df facetimemessagestored[89931:16e7b01] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:52.942 Df facetimemessagestored[89931:16e7b01] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:54.784 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:58:54.784 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:58:54.784 Df AvasAppDriver[84074:16e3175] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:58:54.784 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/pending-jobs (latency 300ms loss 0% offline 1)
+2026-08-18 10:58:54.784 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] failing https://megatron.avas.dev/v2/api/driver/pending-jobs as offline (NSURLError -1009)
+2026-08-18 10:58:55.583 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:58:55.587 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:58:55.587 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:58:55.587 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:58:55.587 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:58:55.587 Df AvasAppDriver[84074:16e7017] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/traffic -> YES
+2026-08-18 10:58:55.589 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/traffic (latency 300ms loss 0% offline 1)
+2026-08-18 10:58:55.589 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] failing https://megatron.avas.dev/v2/api/traffic as offline (NSURLError -1009)
+2026-08-18 10:58:57.331 Df mlhostd[90022:16e7cb4] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:57.331 Df mlhostd[90022:16e7cb4] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:57.331 Df mlhostd[90022:16e7cb4] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:58.059 Df managedappdistributiond[90037:16e7cf9] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:58.060 Df managedappdistributiond[90037:16e7cf9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:58.060 Df managedappdistributiond[90037:16e7cf9] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:58:58.896 Df proactiveeventtrackerd[90052:16e7d6d] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:58:58.897 Df proactiveeventtrackerd[90052:16e7d6d] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:58:58.897 Df proactiveeventtrackerd[90052:16e7d6d] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:03.241 Df facetimemessagestored[90133:16e7f38] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:59:03.241 Df facetimemessagestored[90133:16e7f38] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:03.242 Df facetimemessagestored[90133:16e7f38] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:07.597 Df mlhostd[90207:16e810c] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:59:07.597 Df mlhostd[90207:16e810c] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:07.597 Df mlhostd[90207:16e810c] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:08.322 Df managedappdistributiond[90233:16e81aa] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=1
+2026-08-18 10:59:08.324 Df managedappdistributiond[90233:16e81aa] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:08.324 Df managedappdistributiond[90233:16e81aa] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:09.143 Df proactiveeventtrackerd[90245:16e8211] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:59:09.144 Df proactiveeventtrackerd[90245:16e8211] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:09.144 Df proactiveeventtrackerd[90245:16e8211] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:13.527 Df facetimemessagestored[90502:16e8723] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:59:13.528 Df facetimemessagestored[90502:16e8723] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:13.528 Df facetimemessagestored[90502:16e8723] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:17.788 Df mlhostd[90584:16e8987] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:59:17.788 Df mlhostd[90584:16e8987] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:17.788 Df mlhostd[90584:16e8987] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:18.515 Df managedappdistributiond[90610:16e8a02] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:59:18.515 Df managedappdistributiond[90610:16e8a02] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:18.515 Df managedappdistributiond[90610:16e8a02] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:19.325 Df proactiveeventtrackerd[90612:16e8a1d] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:59:19.325 Df proactiveeventtrackerd[90612:16e8a1d] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:19.326 Df proactiveeventtrackerd[90612:16e8a1d] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:22.877 Df AvasAppDriver[84074:16e8c42] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:59:22.877 Df AvasAppDriver[84074:16e8c42] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:59:22.877 Df AvasAppDriver[84074:16e8c42] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders -> YES
+2026-08-18 10:59:22.877 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] knobs reloaded — latency=300ms loss=0% offline=0
+2026-08-18 10:59:22.877 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders (latency 300ms loss 0% offline 0)
+2026-08-18 10:59:23.246 Df AvasAppDriver[84074:16e8c42] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders
+2026-08-18 10:59:23.512 Df AvasAppDriver[84074:16e8c42] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders
+2026-08-18 10:59:23.714 Df facetimemessagestored[90727:16e8c83] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:59:23.714 Df facetimemessagestored[90727:16e8c83] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:23.714 Df facetimemessagestored[90727:16e8c83] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:59:23.942 Df AvasAppDriver[84074:16e8c69] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders — 30 bytes in 4 chunks over 1.06s
+2026-08-18 10:59:24.800 Df AvasAppDriver[84074:16e8c41] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:59:24.800 Df AvasAppDriver[84074:16e8c41] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:59:24.800 Df AvasAppDriver[84074:16e8c41] [com.baguette.network:spike] [SpikeNet] canInit GET https://megatron.avas.dev/v2/api/driver/pending-jobs -> YES
+2026-08-18 10:59:24.801 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET https://megatron.avas.dev/v2/api/driver/pending-jobs (latency 300ms loss 0% offline 0)
+2026-08-18 10:59:25.119 Df AvasAppDriver[84074:16e7016] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/pending-jobs
+2026-08-18 10:59:25.243 Df AvasAppDriver[84074:16e8c41] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET https://megatron.avas.dev/v2/api/driver/pending-jobs
+2026-08-18 10:59:25.699 Df AvasAppDriver[84074:16e7016] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/pending-jobs — 53 bytes in 4 chunks over 0.90s
+2026-08-18 10:59:28.041 Df mlhostd[90929:16e8f50] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:59:28.041 Df mlhostd[90929:16e8f50] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:59:28.041 Df mlhostd[90929:16e8f50] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+Child process terminated with signal 15: Terminated
+DONE

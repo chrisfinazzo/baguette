@@ -44,37 +44,38 @@ final class GitCheckout: Checkout, @unchecked Sendable {
     }
 
     func clone(_ ref: BakeryRef, into directory: URL, at commit: String?) async throws -> CheckoutResult {
-        // Fresh clone: remove any stale cache dir so `git clone` doesn't
-        // refuse a non-empty target.
-        try? FileManager.default.removeItem(at: directory)
-        try FileManager.default.createDirectory(
-            at: directory.deletingLastPathComponent(), withIntermediateDirectories: true
+        // Assembled beside the live directory and moved in once it's
+        // finished — never written in place.
+        //
+        // Cloning straight into `directory` means emptying it first and
+        // then leaving it half-written for the tens of seconds a clone
+        // takes. A second clone of the same bakery arriving in that
+        // window — the browser's preview and a terminal `bakery add`,
+        // or one impatient second click on Preview — empties the
+        // directory the first one is still writing into, and git dies
+        // on its own vanished temp pack:
+        //
+        //   fatal: could not open '…/pack/tmp_pack_XXXXXX' for reading:
+        //          No such file or directory
+        //   fatal: fetch-pack: invalid index-pack output
+        //
+        // A staging directory per clone means no operation ever deletes
+        // a checkout in progress: the racers land in directories of
+        // their own and whoever finishes last wins the swap. It also
+        // means a clone that fails leaves the checkout you already had,
+        // instead of a network blip taking the working copy with it.
+        let parent = directory.deletingLastPathComponent()
+        let staging = parent.appendingPathComponent(
+            ".\(directory.lastPathComponent).incoming-\(UUID().uuidString)"
         )
-        try await run(["clone", "--depth", "1", ref.cloneURL, directory.path])
-        let head = try await revParse(at: directory)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        // A clone that threw left a partial tree behind; a clone that
+        // succeeded already moved it away, and removing nothing is free.
+        defer { try? FileManager.default.removeItem(at: staging) }
 
-        // Unpinned: first contact, so whatever the default branch points
-        // at is the answer, and the caller records it.
-        guard let commit else {
-            return CheckoutResult(directory: directory, commit: head)
-        }
-        // Already there — the branch hasn't moved since we pinned it.
-        guard head != commit else {
-            return CheckoutResult(directory: directory, commit: head)
-        }
-
-        // The branch moved. Ask for the pinned object by name; a shallow
-        // clone doesn't contain it, so it has to be fetched.
-        try await run(["-C", directory.path, "fetch", "--depth", "1", "origin", commit])
-        try await run(["-C", directory.path, "checkout", "--detach", "FETCH_HEAD"])
-
-        // Verify rather than trust: `checkout FETCH_HEAD` after a fetch
-        // that resolved something else would land us somewhere plausible
-        // and wrong, which is precisely the case this exists to catch.
-        let landed = try await revParse(at: directory)
-        guard landed == commit else {
-            throw GitCheckoutError.pinUnavailable(commit: commit, got: landed)
-        }
+        try await run(["clone", "--depth", "1", ref.cloneURL, staging.path])
+        let landed = try await settle(on: commit, in: staging)
+        try Self.moveIntoPlace(staging, at: directory)
         return CheckoutResult(directory: directory, commit: landed)
     }
 
@@ -102,6 +103,45 @@ final class GitCheckout: Checkout, @unchecked Sendable {
     }
 
     // MARK: - private
+
+    /// Land the checkout in `directory` on the pinned commit, and
+    /// report the sha it ends up standing on.
+    private func settle(on commit: String?, in directory: URL) async throws -> String {
+        let head = try await revParse(at: directory)
+        // Unpinned: first contact, so whatever the default branch points
+        // at is the answer, and the caller records it. Already on the
+        // pin: the branch hasn't moved since we trusted it.
+        guard let commit, head != commit else { return head }
+
+        // The branch moved. Ask for the pinned object by name; a shallow
+        // clone doesn't contain it, so it has to be fetched.
+        try await run(["-C", directory.path, "fetch", "--depth", "1", "origin", commit])
+        try await run(["-C", directory.path, "checkout", "--detach", "FETCH_HEAD"])
+
+        // Verify rather than trust: `checkout FETCH_HEAD` after a fetch
+        // that resolved something else would land us somewhere plausible
+        // and wrong, which is precisely the case this exists to catch.
+        let landed = try await revParse(at: directory)
+        guard landed == commit else {
+            throw GitCheckoutError.pinUnavailable(commit: commit, got: landed)
+        }
+        return landed
+    }
+
+    /// Swap a finished checkout in for whatever was there.
+    ///
+    /// `replaceItemAt` is the atomic exchange when something already
+    /// holds the name — a reader either sees the whole old tree or the
+    /// whole new one, never a directory mid-delete. It needs an
+    /// original to replace, though, and a first-ever clone has none.
+    private static func moveIntoPlace(_ staging: URL, at directory: URL) throws {
+        let files = FileManager.default
+        if files.fileExists(atPath: directory.path) {
+            _ = try files.replaceItemAt(directory, withItemAt: staging)
+        } else {
+            try files.moveItem(at: staging, to: directory)
+        }
+    }
 
     private func revParse(at directory: URL) async throws -> String {
         let out = try await run(["-C", directory.path, "rev-parse", "HEAD"])

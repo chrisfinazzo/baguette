@@ -1055,6 +1055,12 @@
       // each other. The panel and flyout inside stay `position: fixed`
       // and are unaffected by the stack; see `.right-rails`.
       mount: rightRails(),
+      // The add-a-bakery modal covers the page, so it hangs off the
+      // view root instead. `.right-rails` is `position: fixed` and so a
+      // stacking context of its own whatever its `z-index` says —
+      // anything mounted in there composites at the rail's level, which
+      // is below the device.
+      modalMount: document.getElementById('simNativeView') || document.body,
       isBooted: () => true,
       onHighlight: (frame) => paintPluginHighlight(frame),
       onTap: (point) => tapForPlugin(point),

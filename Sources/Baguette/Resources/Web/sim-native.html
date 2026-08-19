@@ -948,10 +948,19 @@
      fixed and mounted in here. Full-height plus `justify-content:
      center` centres the group without that side effect.
 
-     No `z-index` either — with `z-index: auto` this container doesn't
-     create a stacking context, so each rail, panel and modal inside
-     keeps competing on its own layer against the rest of the page
-     rather than being flattened to the container's. */
+     This container IS a stacking context, and no `z-index` here can
+     change that: `position: fixed` creates one on its own, whatever
+     `z-index` says. Everything mounted inside therefore composites at
+     the stack's level — the rail's own `z-index` is what the page
+     sorts, and a child's is only ever measured against its siblings in
+     here. That's fine for the rails, the flyout and the panel, which
+     all live at the right edge; it is not fine for anything meant to
+     cover the page. The add-a-bakery modal used to mount here and its
+     `z-index: 60` was being weighed against the rail rather than
+     against the device's `z-index: 2` screen area a level up, so the
+     scrim meant to dim the phone painted behind it. Page-covering
+     things hang off `#simNativeView` instead — see `modalMount` in
+     sim-native.js. */
   #simNativeView .right-rails {
     position: fixed;
     right: 16px; top: 12px; bottom: 12px;

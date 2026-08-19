@@ -22,6 +22,10 @@ struct GitCheckoutTests {
     /// `pinnedHead` models a clone whose default branch already sits on
     /// the pinned sha, so no extra fetch is needed. Leave it nil and
     /// `rev-parse` always answers `commit`.
+    ///
+    /// A successful clone creates the directory it was handed and puts
+    /// a menu in it, because the real one does — and `GitCheckout` then
+    /// has a tree to move into place.
     private func makeCheckout(
         commit: String = "abc123", cloneExit: Int32 = 0, pinnedHead: String? = nil
     ) -> (GitCheckout, Captures) {
@@ -37,6 +41,12 @@ struct GitCheckoutTests {
                 onBytes(Data("\(pinnedHead ?? commit)\n".utf8))
                 onExit(0)
             } else {
+                if args.first == "clone", cloneExit == 0, let target = args.last {
+                    try? FileManager.default.createDirectory(
+                        atPath: target, withIntermediateDirectories: true)
+                    FileManager.default.createFile(
+                        atPath: target + "/baguette.json", contents: Data("{}".utf8))
+                }
                 onExit(cloneExit)
             }
         }
@@ -48,7 +58,8 @@ struct GitCheckoutTests {
     @Test func `clone shallow-fetches the url with no submodules`() async throws {
         let (git, captures) = makeCheckout()
         let ref = try BakeryRef.parse("acme/tools")
-        let dest = URL(fileURLWithPath: "/tmp/cache/github.com/acme/tools")
+        let cache = try TempCache()
+        let dest = cache.url.appendingPathComponent("github.com/acme/tools")
         _ = try await git.clone(ref, into: dest, at: nil)
 
         let clone = try #require(captures.calls.first)
@@ -56,23 +67,133 @@ struct GitCheckoutTests {
         #expect(clone.contains("--depth"))
         #expect(clone.contains("1"))
         #expect(clone.contains(ref.cloneURL))
-        #expect(clone.contains(dest.path))
+        // Never the live directory — see the staging tests below.
+        #expect(!clone.contains(dest.path))
         // No submodule recursion — a bakery must not drag in arbitrary
         // submodule URLs.
         #expect(!clone.contains("--recurse-submodules"))
+    }
+
+    // MARK: - staging
+    //
+    // A clone that writes straight into the cache directory has to
+    // empty it first and then leaves it half-written for the tens of
+    // seconds a clone takes. A second add of the same bakery arriving
+    // in that window deletes the tree the first clone is still writing
+    // into, and git dies on its own vanished temp pack:
+    //
+    //   fatal: could not open '…/pack/tmp_pack_XXXXXX' for reading: …
+    //   fatal: fetch-pack: invalid index-pack output
+    //
+    // So nothing may touch the live directory until there is a finished
+    // checkout to put there.
+
+    @Test func `a clone assembles the checkout elsewhere and only then moves it into place`() async throws {
+        let home = try TempCache()
+        let dest = home.url.appendingPathComponent("github.com/acme/tools")
+        let (git, captures) = makeCheckout()
+
+        let result = try await git.clone(try BakeryRef.parse("acme/tools"), into: dest, at: nil)
+
+        let staged = try #require(captures.calls.first?.last)
+        #expect(staged != dest.path)
+        // Beside the destination, so the move in is a rename on one
+        // volume rather than a copy.
+        #expect(URL(fileURLWithPath: staged).deletingLastPathComponent().path
+                == dest.deletingLastPathComponent().path)
+        // The caller is handed the live directory, holding the clone.
+        #expect(result.directory == dest)
+        #expect(FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent("baguette.json").path))
+        // And the staging directory is not left behind.
+        #expect(!FileManager.default.fileExists(atPath: staged))
+    }
+
+    @Test func `two clones of one bakery never write into each other's checkout`() async throws {
+        // The failure this whole arrangement exists to prevent: the
+        // browser's preview and a terminal `bakery add` reaching the
+        // same cache directory at once.
+        let home = try TempCache()
+        let dest = home.url.appendingPathComponent("github.com/acme/tools")
+        let (first, firstCalls) = makeCheckout()
+        let (second, secondCalls) = makeCheckout()
+        let ref = try BakeryRef.parse("acme/tools")
+
+        async let one = first.clone(ref, into: dest, at: nil)
+        async let two = second.clone(ref, into: dest, at: nil)
+        _ = try await (one, two)
+
+        #expect(try #require(firstCalls.calls.first?.last)
+                != #require(secondCalls.calls.first?.last))
+        #expect(FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent("baguette.json").path))
+    }
+
+    @Test func `a re-clone replaces the checkout that was there`() async throws {
+        // The ordinary second add. The new tree wins, and none of the
+        // old one survives alongside it.
+        let home = try TempCache()
+        let dest = home.url.appendingPathComponent("github.com/acme/tools")
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        FileManager.default.createFile(
+            atPath: dest.appendingPathComponent("stale.txt").path, contents: Data())
+        let (git, _) = makeCheckout()
+
+        _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: dest, at: nil)
+
+        #expect(FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent("baguette.json").path))
+        #expect(!FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent("stale.txt").path))
+    }
+
+    @Test func `a failed clone leaves the checkout you already had`() async throws {
+        // Deleting first meant a network blip took the working copy
+        // with it, so the next command reported a missing bakery
+        // rather than a failed fetch.
+        let home = try TempCache()
+        let dest = home.url.appendingPathComponent("github.com/acme/tools")
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        FileManager.default.createFile(
+            atPath: dest.appendingPathComponent("baguette.json").path, contents: Data("{}".utf8))
+        let (git, _) = makeCheckout(cloneExit: 128)
+
+        await #expect(throws: (any Error).self) {
+            _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: dest, at: nil)
+        }
+        #expect(FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent("baguette.json").path))
+    }
+
+    /// A throwaway `~/.baguette/bakeries` to clone into, so these tests
+    /// touch a real filesystem without touching the user's.
+    final class TempCache {
+        let url: URL
+        init() throws {
+            url = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("baguette-bakeries-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        deinit { try? FileManager.default.removeItem(at: url) }
     }
 
     @Test func `clone runs git non-interactively so a bad url fails fast`() async throws {
         // GIT_TERMINAL_PROMPT=0 turns a private/missing repo into an
         // immediate failure instead of a hang on a credential prompt.
         let (git, captures) = makeCheckout()
-        _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil)
+        let cache = try TempCache()
+        _ = try await git.clone(
+            try BakeryRef.parse("acme/tools"), into: cache.url.appendingPathComponent("tools"), at: nil
+        )
         #expect(captures.environments.first??["GIT_TERMINAL_PROMPT"] == "0")
     }
 
     @Test func `clone reports the pinned commit via rev-parse`() async throws {
         let (git, captures) = makeCheckout(commit: "deadbeef")
-        let result = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil)
+        let cache = try TempCache()
+        let result = try await git.clone(
+            try BakeryRef.parse("acme/tools"), into: cache.url.appendingPathComponent("tools"), at: nil
+        )
         #expect(result.commit == "deadbeef")
         // Second call resolves HEAD in the freshly cloned dir.
         #expect(captures.calls.last?.contains("rev-parse") == true)
@@ -80,8 +201,11 @@ struct GitCheckoutTests {
 
     @Test func `a failed clone throws rather than reporting a bogus commit`() async throws {
         let (git, _) = makeCheckout(cloneExit: 128)
+        let cache = try TempCache()
         await #expect(throws: (any Error).self) {
-            _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil)
+            _ = try await git.clone(
+                try BakeryRef.parse("acme/tools"), into: cache.url.appendingPathComponent("tools"), at: nil
+            )
         }
     }
 
@@ -152,8 +276,9 @@ struct GitCheckoutTests {
         // we take the default branch and record what we got. That
         // recorded sha is what every later fetch is held to.
         let (git, captures) = makeCheckout(commit: "deadbeef")
+        let cache = try TempCache()
         let result = try await git.clone(
-            try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: nil
+            try BakeryRef.parse("acme/tools"), into: cache.url.appendingPathComponent("tools"), at: nil
         )
         #expect(result.commit == "deadbeef")
         #expect(captures.calls.allSatisfy { !$0.contains("checkout") })
@@ -177,15 +302,19 @@ struct GitCheckoutTests {
                 // out are we standing on it.
                 let landed = revParseCount.next() == 0 ? "f00d999" : "aaaa111"
                 onBytes(Data("\(landed)\n".utf8))
+            } else if args.first == "clone", let target = args.last {
+                try? FileManager.default.createDirectory(
+                    atPath: target, withIntermediateDirectories: true)
             }
             onExit(0)
         }
         given(sub).terminate().willReturn()
         given(sub).kill().willReturn()
         let git = GitCheckout(subprocess: { sub })
+        let cache = try TempCache()
 
         let result = try await git.clone(
-            try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: "aaaa111"
+            try BakeryRef.parse("acme/tools"), into: cache.url.appendingPathComponent("tools"), at: "aaaa111"
         )
         #expect(result.commit == "aaaa111")
         let fetch = try #require(captures.calls.first { $0.contains("fetch") })
@@ -198,8 +327,9 @@ struct GitCheckoutTests {
         // trusted. Paying for a second network round-trip to confirm
         // what the clone already told us would be waste.
         let (git, captures) = makeCheckout(commit: "aaaa111", pinnedHead: "aaaa111")
+        let cache = try TempCache()
         let result = try await git.clone(
-            try BakeryRef.parse("acme/tools"), into: URL(fileURLWithPath: "/tmp/x"), at: "aaaa111"
+            try BakeryRef.parse("acme/tools"), into: cache.url.appendingPathComponent("tools"), at: "aaaa111"
         )
         #expect(result.commit == "aaaa111")
         #expect(captures.calls.allSatisfy { !$0.contains("fetch") })

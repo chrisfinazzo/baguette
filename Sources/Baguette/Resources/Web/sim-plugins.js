@@ -79,14 +79,24 @@
      * @param {object} opts
      * @param {string} opts.udid
      * @param {HTMLElement} [opts.mount]     where the rail + panel attach (default document.body)
+     * @param {HTMLElement} [opts.modalMount] where the add-a-bakery modal attaches (default `mount`)
      * @param {() => boolean} [opts.isBooted]
      * @param {(frame:object|null) => void} [opts.onHighlight]
      * @param {(point:{x:number,y:number}) => void} [opts.onTap]  device points
      * @param {(msg:string) => void} [opts.log]
      */
-    constructor({ udid, mount, isBooted, onHighlight, onTap, log }) {
+    constructor({ udid, mount, modalMount, isBooted, onHighlight, onTap, log }) {
       this.udid = udid;
       this.mount = mount || document.body;
+      // The modal covers the page, so it cannot hang off the rail.
+      // `.right-rails` is `position: fixed`, and a fixed element is a
+      // stacking context whatever its `z-index` says — so everything
+      // mounted inside it composites at the rail's level, and the
+      // modal's `z-index: 60` was being measured against its siblings
+      // in the rail rather than against the page. The device's screen
+      // area sits at `z-index: 2` a level up, which is how a scrim
+      // meant to cover the phone ended up painting behind it.
+      this.modalMount = modalMount || this.mount;
       this.isBooted = isBooted || (() => true);
       this.onHighlight = onHighlight || (() => {});
       this.onTap = onTap || (() => {});
@@ -999,7 +1009,7 @@
         +   '<div class="plugin-modal-result"></div>'
         + '</div>'
         + '</div>';
-      this.mount.appendChild(overlay);
+      this.modalMount.appendChild(overlay);
 
       const close = () => overlay.remove();
       overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -1007,15 +1017,35 @@
 
       const input = overlay.querySelector('.plugin-input');
       const result = overlay.querySelector('.plugin-modal-result');
-      const preview = () => this.previewInto(input.value.trim(), result, close);
-      overlay.querySelector('.plugin-preview-btn').addEventListener('click', preview);
+      const button = overlay.querySelector('.plugin-preview-btn');
+      // One preview at a time. A preview clones the repo, which takes
+      // the better part of a minute on a cold cache with nothing on
+      // screen but "Fetching…", so a second press is the natural
+      // reaction — and two clones of one bakery used to fight over the
+      // same cache directory until git died. The clone is safe against
+      // that now; this stops the pointless second minute of network.
+      // Per-modal, not per-panel: closing and reopening starts clean,
+      // so a request still in flight from a dismissed modal can't leave
+      // the new one's button inert. Its answer just paints into a
+      // `result` element nobody is looking at any more.
+      let inFlight = false;
+      const preview = () => {
+        if (inFlight) return;
+        const ref = input.value.trim();
+        if (!ref) return;
+        inFlight = true;
+        button.disabled = true;
+        this.previewInto(ref, result, close)
+            .finally(() => { inFlight = false; button.disabled = false; });
+      };
+      button.addEventListener('click', preview);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') preview(); });
       input.focus();
     }
 
     async previewInto(ref, result, closeModal) {
       if (!ref) return;
-      result.innerHTML = '<div class="plugin-status">Fetching…</div>';
+      result.innerHTML = '<div class="plugin-status">Fetching… this clones the repo, so a cold one takes a minute.</div>';
       let data;
       try {
         const res = await fetch('/bakeries/preview', {

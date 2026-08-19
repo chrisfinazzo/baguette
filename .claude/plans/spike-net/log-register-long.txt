@@ -1,0 +1,136 @@
+getpwuid_r did not find a match for uid 501
+Filtering the log data using "subsystem == "com.baguette.network""
+Timestamp               Ty Process[PID:TID]
+2026-08-18 10:55:59.586 Df AvasAppDriver[46699:16d7154] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued https://megatron.avas.dev/v2/api/driver/pending-jobs
+2026-08-18 10:55:59.861 Df AvasAppDriver[46699:16d7154] [com.baguette.network:spike] [SpikeNet] finished https://megatron.avas.dev/v2/api/driver/v2/current-bid-orders — 30 bytes in 8 chunks over 4.60s
+2026-08-18 10:56:02.452 Df AvasAppDriver[52153:16d73ff] [com.baguette.network:spike] [SpikeNet] loading into AvasAppDriver — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:02.452 Df AvasAppDriver[52153:16d73ff] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:02.706 Df AvasAppDriver[52153:16d74b0] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:56:02.712 Df AvasAppDriver[52153:16d74b0] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:56:02.712 Df AvasAppDriver[52153:16d74b0] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:56:02.712 Df AvasAppDriver[52153:16d74b0] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:56:02.712 Df AvasAppDriver[52153:16d74b0] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:56:02.712 Df AvasAppDriver[52153:16d74b0] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:56:02.712 Df AvasAppDriver[52153:16d74db] [com.baguette.network:spike] [SpikeNet] knobs reloaded — latency=0ms loss=0% offline=0
+2026-08-18 10:56:02.712 Df AvasAppDriver[52153:16d74db] [com.baguette.network:spike] [SpikeNet] INTERCEPTED HEAD http://192.168.0.15:8101 (latency 0ms loss 0% offline 0)
+2026-08-18 10:56:03.373 Df AvasAppDriver[52153:16d74bf] [com.baguette.network:spike] [SpikeNet] upstream 200 for HEAD http://192.168.0.15:8101
+2026-08-18 10:56:03.373 Df AvasAppDriver[52153:16d7480] [com.baguette.network:spike] [SpikeNet] delivered empty body for http://192.168.0.15:8101
+2026-08-18 10:56:03.881 Df mlhostd[52344:16d76ac] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:03.882 Df mlhostd[52344:16d76ac] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:04.418 Df managedappdistributiond[52448:16d76eb] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:04.419 Df managedappdistributiond[52448:16d76eb] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:05.347 Df proactiveeventtrackerd[52520:16d7806] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:05.348 Df proactiveeventtrackerd[52520:16d7806] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:06.765 Df AvasAppDriver[52153:16d74bf] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable -> YES
+2026-08-18 10:56:06.765 Df AvasAppDriver[52153:16d74db] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable (latency 0ms loss 0% offline 0)
+2026-08-18 10:56:07.114 Df AvasAppDriver[52153:16d74bf] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable
+2026-08-18 10:56:07.369 Df AvasAppDriver[52153:16d74d0] [com.baguette.network:spike] [SpikeNet] finished http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable — 23041431 bytes in 1 chunks over 0.60s
+2026-08-18 10:56:09.145 Df facetimemessagestored[52613:16d797e] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:09.146 Df facetimemessagestored[52613:16d797e] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:14.046 Df mlhostd[52696:16d7b40] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:14.046 Df mlhostd[52696:16d7b40] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:14.589 Df managedappdistributiond[52697:16d7b4a] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:14.590 Df managedappdistributiond[52697:16d7b4a] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:15.518 Df proactiveeventtrackerd[52735:16d7be3] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:15.518 Df proactiveeventtrackerd[52735:16d7be3] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:19.327 Df facetimemessagestored[52791:16d7dd9] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:19.327 Df facetimemessagestored[52791:16d7dd9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:24.208 Df mlhostd[52877:16d7fd4] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:24.209 Df mlhostd[52877:16d7fd4] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:24.779 Df managedappdistributiond[52943:16d8089] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:24.779 Df managedappdistributiond[52943:16d8089] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:25.684 Df proactiveeventtrackerd[52999:16d811e] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:25.684 Df proactiveeventtrackerd[52999:16d811e] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:29.501 Df facetimemessagestored[53110:16d825b] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:29.501 Df facetimemessagestored[53110:16d825b] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:34.371 Df mlhostd[53540:16d85a1] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:34.371 Df mlhostd[53540:16d85a1] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:34.954 Df managedappdistributiond[53629:16d865b] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:34.954 Df managedappdistributiond[53629:16d865b] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:35.847 Df proactiveeventtrackerd[53780:16d87f9] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:35.847 Df proactiveeventtrackerd[53780:16d87f9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:39.674 Df facetimemessagestored[54032:16d89b1] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:39.674 Df facetimemessagestored[54032:16d89b1] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:44.532 Df mlhostd[54324:16d8be1] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:44.532 Df mlhostd[54324:16d8be1] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:45.127 Df managedappdistributiond[54338:16d8c25] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:45.128 Df managedappdistributiond[54338:16d8c25] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:46.009 Df proactiveeventtrackerd[54365:16d8c96] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:46.009 Df proactiveeventtrackerd[54365:16d8c96] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:49.846 Df facetimemessagestored[54403:16d8dc2] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:49.846 Df facetimemessagestored[54403:16d8dc2] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:54.699 Df mlhostd[54483:16d8fa3] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:54.699 Df mlhostd[54483:16d8fa3] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:55.307 Df managedappdistributiond[54505:16d901f] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:55.307 Df managedappdistributiond[54505:16d901f] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:56:56.189 Df proactiveeventtrackerd[54525:16d9056] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:56:56.189 Df proactiveeventtrackerd[54525:16d9056] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:00.157 Df facetimemessagestored[55929:16d9874] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:00.157 Df facetimemessagestored[55929:16d9874] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:04.868 Df mlhostd[58202:16da5d2] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:04.869 Df mlhostd[58202:16da5d2] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:05.493 Df managedappdistributiond[58483:16da78f] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:05.493 Df managedappdistributiond[58483:16da78f] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:06.372 Df proactiveeventtrackerd[58879:16da985] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:06.372 Df proactiveeventtrackerd[58879:16da985] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:10.340 Df facetimemessagestored[60919:16db4fa] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:10.340 Df facetimemessagestored[60919:16db4fa] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:15.040 Df mlhostd[62871:16dbfa8] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:15.041 Df mlhostd[62871:16dbfa8] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:15.678 Df managedappdistributiond[63158:16dc178] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:15.679 Df managedappdistributiond[63158:16dc178] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:16.542 Df proactiveeventtrackerd[63550:16dc39e] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:16.542 Df proactiveeventtrackerd[63550:16dc39e] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:20.591 Df facetimemessagestored[72246:16dec2c] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:20.592 Df facetimemessagestored[72246:16dec2c] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:25.284 Df mlhostd[78706:16e0cd0] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:25.285 Df mlhostd[78706:16e0cd0] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:25.887 Df managedappdistributiond[79171:16e0f7c] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:25.887 Df managedappdistributiond[79171:16e0f7c] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:26.790 Df proactiveeventtrackerd[79458:16e11df] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:26.791 Df proactiveeventtrackerd[79458:16e11df] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:30.772 Df facetimemessagestored[82072:16e21c6] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=register latency=0ms chunks=1/0ms loss=0% offline=0
+2026-08-18 10:57:30.772 Df facetimemessagestored[82072:16e21c6] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:34.474 Df log[83018:16e28a9] [com.baguette.network:spike] [SpikeNet] loading into log — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:34.474 Df log[83018:16e28a9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:34.474 Df log[83018:16e28a9] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:35.498 Df mlhostd[83472:16e2c27] [com.baguette.network:spike] [SpikeNet] loading into mlhostd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:35.498 Df mlhostd[83472:16e2c27] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:35.498 Df mlhostd[83472:16e2c27] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:36.144 Df managedappdistributiond[83888:16e2e89] [com.baguette.network:spike] [SpikeNet] loading into managedappdistributiond — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:36.144 Df managedappdistributiond[83888:16e2e89] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:36.144 Df managedappdistributiond[83888:16e2e89] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:37.006 Df proactiveeventtrackerd[84158:16e301a] [com.baguette.network:spike] [SpikeNet] loading into proactiveeventtrackerd — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:37.006 Df proactiveeventtrackerd[84158:16e301a] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:37.006 Df proactiveeventtrackerd[84158:16e301a] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:37.397 Df AvasAppDriver[84074:16e2fd9] [com.baguette.network:spike] [SpikeNet] loading into AvasAppDriver — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:37.397 Df AvasAppDriver[84074:16e2fd9] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:37.397 Df AvasAppDriver[84074:16e2fd9] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:37.846 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e313e] [com.baguette.network:spike] [SpikeNet] canInit HEAD http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] knobs reloaded — latency=300ms loss=0% offline=0
+2026-08-18 10:57:37.852 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED HEAD http://192.168.0.15:8101 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:38.159 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued http://192.168.0.15:8101
+2026-08-18 10:57:38.920 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] upstream 200 for HEAD http://192.168.0.15:8101
+2026-08-18 10:57:38.927 Df AvasAppDriver[84074:16e3164] [com.baguette.network:spike] [SpikeNet] delivered empty body for http://192.168.0.15:8101
+2026-08-18 10:57:38.930 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/ -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e313c] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101 -> YES
+2026-08-18 10:57:38.931 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET http://192.168.0.15:8101 (latency 300ms loss 0% offline 0)
+2026-08-18 10:57:39.246 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] guard: declining our own re-issued http://192.168.0.15:8101
+2026-08-18 10:57:39.541 Df AvasAppDriver[84074:16e312b] [com.baguette.network:spike] [SpikeNet] upstream 200 for GET http://192.168.0.15:8101
+2026-08-18 10:57:39.974 Df AvasAppDriver[84074:16e3166] [com.baguette.network:spike] [SpikeNet] finished http://192.168.0.15:8101 — 11351 bytes in 4 chunks over 1.04s
+2026-08-18 10:57:41.056 Df facetimemessagestored[84679:16e3459] [com.baguette.network:spike] [SpikeNet] loading into facetimemessagestored — mode=both latency=300ms chunks=4/100ms loss=0% offline=0
+2026-08-18 10:57:41.057 Df facetimemessagestored[84679:16e3459] [com.baguette.network:spike] [SpikeNet] registerClass -> YES
+2026-08-18 10:57:41.057 Df facetimemessagestored[84679:16e3459] [com.baguette.network:spike] [SpikeNet] config swizzle installed (default=1 ephemeral=1)
+2026-08-18 10:57:41.646 Df AvasAppDriver[84074:16e313a] [com.baguette.network:spike] [SpikeNet] canInit GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable -> YES
+2026-08-18 10:57:41.646 Df AvasAppDriver[84074:16e316c] [com.baguette.network:spike] [SpikeNet] INTERCEPTED GET http://192.168.0.15:8101/apps/avas-driver/index.ts.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=src/app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable (latency 300ms loss 0% offline 0)
+Child process terminated with signal 15: Terminated
+DONE register-long
