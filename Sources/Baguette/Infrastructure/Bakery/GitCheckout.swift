@@ -73,10 +73,19 @@ final class GitCheckout: Checkout, @unchecked Sendable {
         // succeeded already moved it away, and removing nothing is free.
         defer { try? FileManager.default.removeItem(at: staging) }
 
-        try await run(["clone", "--depth", "1", ref.cloneURL, staging.path])
-        let landed = try await settle(on: commit, in: staging)
-        try Self.moveIntoPlace(staging, at: directory)
-        return CheckoutResult(directory: directory, commit: landed)
+        // Failures are reported against the directory the caller asked
+        // for. Staging is an implementation detail with a UUID in its
+        // name that is deleted on the way out, and this message reaches
+        // a browser modal — naming it sends the reader looking for a
+        // path that, as far as they are concerned, never existed.
+        do {
+            try await run(["clone", "--depth", "1", ref.cloneURL, staging.path])
+            let landed = try await settle(on: commit, in: staging)
+            try Self.moveIntoPlace(staging, at: directory)
+            return CheckoutResult(directory: directory, commit: landed)
+        } catch let error as GitCheckoutError {
+            throw error.naming(directory.path, insteadOf: staging.path)
+        }
     }
 
     func pull(at directory: URL) async throws -> String {
@@ -130,16 +139,29 @@ final class GitCheckout: Checkout, @unchecked Sendable {
 
     /// Swap a finished checkout in for whatever was there.
     ///
-    /// `replaceItemAt` is the atomic exchange when something already
-    /// holds the name — a reader either sees the whole old tree or the
-    /// whole new one, never a directory mid-delete. It needs an
-    /// original to replace, though, and a first-ever clone has none.
+    /// Move first and ask questions on failure, rather than checking
+    /// whether the destination exists and branching on the answer.
+    /// Testing first leaves a window: two clones of one bakery both see
+    /// nothing there, both move, and the loser fails with "couldn't be
+    /// moved" having done all the work. Since concurrent clones are the
+    /// whole reason for staging, that window is not hypothetical — the
+    /// two-clone test caught it.
+    ///
+    /// `replaceItemAt` is the atomic exchange when something does hold
+    /// the name, so a reader sees the whole old tree or the whole new
+    /// one and never a directory mid-delete. It needs an original to
+    /// replace, which is exactly why it can't be the first move.
     private static func moveIntoPlace(_ staging: URL, at directory: URL) throws {
         let files = FileManager.default
-        if files.fileExists(atPath: directory.path) {
-            _ = try files.replaceItemAt(directory, withItemAt: staging)
-        } else {
+        do {
             try files.moveItem(at: staging, to: directory)
+        } catch {
+            // Either a checkout was already there, or another clone
+            // landed one while this one was still cloning. The finished
+            // tree replaces it either way; a failure with nothing there
+            // is a real one and stays thrown.
+            guard files.fileExists(atPath: directory.path) else { throw error }
+            _ = try files.replaceItemAt(directory, withItemAt: staging)
         }
     }
 
@@ -251,6 +273,27 @@ enum GitCheckoutError: Error, Equatable, CustomStringConvertible {
     /// because the honest reading is "this bakery is not what you
     /// trusted any more", not "git had a problem".
     case pinUnavailable(commit: String, got: String)
+
+    /// The same failure, told in terms of the directory the caller
+    /// asked about. Substituted in both the argv and git's own output,
+    /// because git echoes the path it was handed ("Cloning into '…'").
+    func naming(_ directory: String, insteadOf staging: String) -> GitCheckoutError {
+        switch self {
+        case .gitFailed(let arguments, let status, let output):
+            return .gitFailed(
+                arguments: arguments.map { $0 == staging ? directory : $0 },
+                status: status,
+                output: output.replacingOccurrences(of: staging, with: directory)
+            )
+        case .timedOut(let arguments, let after):
+            return .timedOut(
+                arguments: arguments.map { $0 == staging ? directory : $0 }, after: after
+            )
+        case .pinUnavailable:
+            // Names commits, not paths.
+            return self
+        }
+    }
 
     var description: String {
         switch self {

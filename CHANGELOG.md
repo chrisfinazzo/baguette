@@ -49,6 +49,35 @@ For releases prior to this changelog, see the
   `--offline` will not feel offline to it. See
   [`docs/features/network.md`](docs/features/network.md).
 
+- **Install plugins from the browser — from bakeries you already trust.**
+  The rail's **+** now opens a shelf of every trusted bakery, its pinned
+  commit, and what it offers: an **Install** button on anything you don't
+  have, *Installed* on anything you do, and the rail picks the new plugin
+  up without a reload. Previously the browser could only preview and hand
+  you a command to paste.
+  The trust boundary moved, but only halfway, and the half that matters
+  stayed put. `POST /bakeries/install` names a bakery by its **recorded
+  id**, never a URL or a git ref — so a request can only reach a source
+  already in `bakeries.json`, at the commit pinned there, and a plugin
+  that source's own menu lists. Installing writes files baguette later
+  executes from and the only thing in front of a browser route is a set
+  of origin heuristics; naming sources by recorded id is what keeps the
+  blast radius of a wrong one at "installs from a repo you already
+  vetted" instead of "clones anything onto your disk". A refusal never
+  echoes the id it was handed back into the page.
+  **Trusting a new source is still not something a page can do** —
+  `baguette bakery add` stays a terminal act, because a modal button
+  isn't consent (the page sets the flag it then checks) and trust is the
+  decision that actually matters. Preview still ends by handing you the
+  command. The decision is `InstallDecision` in `Domain/Bakery/` with
+  every refusal path unit-tested, and installing still only copies
+  files — nothing runs until you open the plugin's panel.
+  `GET /bakeries.json` now reports each offer's install state, decided
+  host-side from what the plugin scan can see rather than from
+  `installed.json` (a bundled plugin has no provenance record and must
+  still read as satisfied). See
+  [`docs/features/plugins.md`](docs/features/plugins.md).
+
 ### Fixed
 
 - **Adding a bakery no longer collides with itself and kills the clone.**

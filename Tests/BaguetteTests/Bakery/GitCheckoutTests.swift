@@ -147,6 +147,40 @@ struct GitCheckoutTests {
             atPath: dest.appendingPathComponent("stale.txt").path))
     }
 
+    @Test func `a failed clone names the directory you asked for, not the staging one`() async throws {
+        // The staging directory is an implementation detail with a
+        // UUID in its name, and it's deleted on the way out. Reporting
+        // it sends the reader looking for a path that never existed as
+        // far as they're concerned — and this message lands in a
+        // browser modal, not just a terminal.
+        let cache = try TempCache()
+        let dest = cache.url.appendingPathComponent("github.com/acme/tools")
+        let sub = MockSubprocess()
+        given(sub).run(
+            executable: .any, arguments: .any, workingDirectory: .any,
+            environment: .any, stdin: .any, onBytes: .any, onExit: .any
+        ).willProduce { _, args, _, _, _, onBytes, onExit in
+            // git names the directory it was given in its own output.
+            onBytes(Data("Cloning into '\(args.last ?? "")'...\nfatal: repository not found\n".utf8))
+            onExit(128)
+        }
+        given(sub).terminate().willReturn()
+        given(sub).kill().willReturn()
+        let git = GitCheckout(subprocess: { sub })
+
+        await #expect(throws: (any Error).self) {
+            _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: dest, at: nil)
+        }
+        do {
+            _ = try await git.clone(try BakeryRef.parse("acme/tools"), into: dest, at: nil)
+        } catch {
+            let message = String(describing: error)
+            #expect(!message.contains("incoming-"))
+            #expect(message.contains(dest.path))
+            #expect(message.contains("repository not found"))
+        }
+    }
+
     @Test func `a failed clone leaves the checkout you already had`() async throws {
         // Deleting first meant a network blip took the working copy
         // with it, so the next command reported a missing bakery

@@ -364,7 +364,8 @@
       document.removeEventListener('keydown', this.onFlyoutKeydown);
     }
 
-    /// A "+" at the foot of the rail that opens the add-a-bakery modal.
+    /// A "+" at the foot of the rail that opens the plugins modal —
+    /// what your bakeries offer, and the field for previewing a new one.
     addAddButton() {
       const divider = document.createElement('div');
       divider.className = 'plugin-rail-divider';
@@ -372,10 +373,10 @@
 
       const button = document.createElement('button');
       button.className = 'plugin-rail-btn plugin-rail-add';
-      button.title = 'Add a plugin from a bakery';
-      button.setAttribute('aria-label', 'Add a plugin');
+      button.title = 'Plugins — install from your bakeries, or add one';
+      button.setAttribute('aria-label', 'Plugins');
       button.innerHTML = svgWrap('<path d="M12 5v14M5 12h14"/>', 18);
-      button.addEventListener('click', () => this.openAddModal());
+      button.addEventListener('click', () => this.openPluginsModal());
       this.rail.appendChild(button);
     }
 
@@ -983,25 +984,45 @@
       });
     }
 
-    // --- add-a-bakery modal ------------------------------------------
+    // --- the plugins modal --------------------------------------------
     //
-    // Preview only. Cloning a repo and reading its menu is safe and
-    // needs the browser; *installing* writes files that later run as
-    // programs, and this page's only protection is a set of origin
-    // heuristics. A terminal carries trust context a web page can't —
-    // you typed the command — so the modal ends by handing you one.
+    // Two halves, and the split is the trust boundary.
+    //
+    // The shelf installs from bakeries you have **already trusted**. The
+    // request names one by its recorded id, so the page can only reach a
+    // source already in `bakeries.json`, at the commit pinned there.
+    //
+    // The field below only *previews*. Cloning a repo and reading its
+    // menu is safe; trusting a new source is not something a page can
+    // do for you — a modal button isn't consent, the page sets the flag
+    // it then checks — so preview ends by handing you the command to
+    // type. See `InstallDecision` on the Swift side.
 
-    openAddModal() {
+    openPluginsModal() {
+      // One at a time. Pressing "+" again used to stack a second copy
+      // on the first, and because each reads the shelf when it opens,
+      // the one you ended up looking at could be the stale one — it
+      // showed Install for a plugin the modal underneath had already
+      // installed.
+      const open = this.modalMount.querySelector('.plugin-modal-overlay');
+      if (open) {
+        const field = open.querySelector('.plugin-input');
+        if (field) field.focus();
+        return;
+      }
+
       const overlay = document.createElement('div');
       overlay.className = 'plugin-modal-overlay';
       overlay.innerHTML =
-        '<div class="plugin-modal" role="dialog" aria-label="Add a plugin">'
+        '<div class="plugin-modal" role="dialog" aria-label="Plugins">'
         + '<div class="plugin-head">'
-        +   '<span class="plugin-title">Add a plugin</span>'
+        +   '<span class="plugin-title">Plugins</span>'
         +   '<button class="plugin-close" aria-label="Close">✕</button>'
         + '</div>'
         + '<div class="plugin-modal-body">'
-        +   '<label class="plugin-field-label">Bakery — a git repo with a baguette.json</label>'
+        +   '<div class="plugin-shelf"><div class="plugin-status">Reading your bakeries…</div></div>'
+        +   '<div class="plugin-modal-rule"></div>'
+        +   '<label class="plugin-field-label">Add a bakery — a git repo with a baguette.json</label>'
         +   '<div class="plugin-field-row">'
         +     '<input class="plugin-input" type="text" placeholder="owner/repo or a git URL" spellcheck="false">'
         +     '<button class="plugin-btn plugin-preview-btn">Preview</button>'
@@ -1014,6 +1035,7 @@
       const close = () => overlay.remove();
       overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
       overlay.querySelector('.plugin-close').addEventListener('click', close);
+      void this.paintShelf(overlay.querySelector('.plugin-shelf'));
 
       const input = overlay.querySelector('.plugin-input');
       const result = overlay.querySelector('.plugin-modal-result');
@@ -1043,6 +1065,101 @@
       input.focus();
     }
 
+    /**
+     * Draw what your trusted bakeries are offering.
+     *
+     * Every name here came out of some repo's `baguette.json`, so it
+     * goes in as text, never markup — same rule the panel rows follow.
+     * Whether a plugin counts as installed is decided server-side; the
+     * page renders the answer rather than re-deriving it.
+     */
+    async paintShelf(shelf) {
+      let data;
+      try {
+        const res = await fetch('/bakeries.json', { cache: 'no-cache' });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'could not read your bakeries');
+      } catch (error) {
+        shelf.innerHTML = '<div class="plugin-status plugin-error">'
+          + escapeHTML(String(error.message || error)) + '</div>';
+        return;
+      }
+
+      const bakeries = data.bakeries || [];
+      if (!bakeries.length) {
+        // Not an error — the first-run state, and the field below is
+        // the answer to it.
+        shelf.innerHTML = '<div class="plugin-status">'
+          + 'No bakeries trusted yet. Preview one below, then trust it in a terminal.'
+          + '</div>';
+        return;
+      }
+
+      shelf.innerHTML = '<div class="plugin-shelf-label">Your bakeries</div>'
+        + bakeries.map((bakery) =>
+          '<div class="plugin-source">'
+          + '<div class="plugin-source-head">'
+          +   '<span class="plugin-source-id">' + escapeHTML(bakery.id) + '</span>'
+          +   '<span class="plugin-commit">@' + escapeHTML(String(bakery.commit || '').slice(0, 10)) + '</span>'
+          + '</div>'
+          + '<ul class="plugin-offers">'
+          + (bakery.plugins || []).map((p) =>
+              '<li class="plugin-offer">'
+              + '<span class="plugin-row-title">' + escapeHTML(p.name) + '</span>'
+              + (p.installed
+                  ? '<span class="plugin-installed">Installed</span>'
+                  : '<button class="plugin-btn plugin-install-btn"'
+                    + ' data-bakery="' + escapeHTML(bakery.id) + '"'
+                    + ' data-plugin="' + escapeHTML(p.name) + '">Install</button>')
+              + '</li>').join('')
+          + '</ul>'
+          + '</div>').join('');
+
+      for (const button of shelf.querySelectorAll('.plugin-install-btn')) {
+        button.addEventListener('click', () => this.installOffer(button, shelf));
+      }
+    }
+
+    /**
+     * Install one offer, then put the rail back in step with the disk.
+     *
+     * An install clones the bakery at its pinned commit, so this is the
+     * same minute-long wait a preview is — the button says so and stops
+     * taking clicks. Only this button is disabled, not the whole shelf:
+     * two installs from different bakeries don't collide, and the
+     * checkout is safe against two that do.
+     */
+    async installOffer(button, shelf) {
+      if (button.disabled) return;
+      const bakery = button.dataset.bakery;
+      const plugin = button.dataset.plugin;
+      button.disabled = true;
+      button.textContent = 'Installing…';
+      try {
+        const res = await fetch('/bakeries/install', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ bakery, plugin }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'install failed');
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Install';
+        this.log('install failed: ' + (error.message || error));
+        const note = document.createElement('div');
+        note.className = 'plugin-status plugin-error';
+        note.textContent = String(error.message || error);
+        shelf.appendChild(note);
+        return;
+      }
+      // Redraw from the server rather than flipping the button to
+      // "Installed" here: the manifest decides the installed plugin's
+      // real name, and it doesn't have to match the menu label.
+      await this.paintShelf(shelf);
+      // The rail is now out of date by exactly one plugin.
+      await this.reload();
+    }
+
     async previewInto(ref, result, closeModal) {
       if (!ref) return;
       result.innerHTML = '<div class="plugin-status">Fetching… this clones the repo, so a cold one takes a minute.</div>';
@@ -1060,16 +1177,17 @@
       }
 
       const shortCommit = String(data.commit || '').slice(0, 10);
-      // Each offered plugin becomes the command that installs it, not a
-      // button that does. Installing puts files on the machine that
-      // later run as programs, and a terminal carries trust context a
-      // web page can't — you typed it. See `docs/features/plugins.md`.
+      // A preview of a source you haven't trusted ends in one command,
+      // not a button. Trusting is the decision that matters — after it,
+      // this bakery joins the shelf above and its plugins install from
+      // there with a click. See `docs/features/plugins.md`.
+      const trustCommand = 'baguette bakery add ' + ref;
       const rows = (data.plugins || []).map((p) =>
         '<li class="plugin-offer">'
         + '<span class="plugin-row-title">' + escapeHTML(p.name) + '</span>'
-        + '<code class="plugin-cmd">baguette plugin install '
-        +   escapeHTML(ref) + '/' + escapeHTML(p.name) + '</code>'
-        + '<button class="plugin-btn plugin-copy-cmd" data-plugin="' + escapeHTML(p.name) + '">Copy</button>'
+        + (data.alreadyTrusted
+            ? '<span class="plugin-installed">Trusted</span>'
+            : '<span class="plugin-row-sub">on the shelf once trusted</span>')
         + '</li>').join('');
 
       result.innerHTML =
@@ -1079,11 +1197,18 @@
         +   '<span class="plugin-commit">@' + escapeHTML(shortCommit) + '</span>'
         + '</div>'
         + '<ul class="plugin-offers">' + rows + '</ul>'
-        + '<div class="plugin-status">Run one of these in a terminal, then reopen the rail.</div>';
+        + (data.alreadyTrusted
+            ? '<div class="plugin-status">Already trusted — it\'s on the shelf above.</div>'
+            : '<div class="plugin-field-row">'
+              + '<code class="plugin-cmd">' + escapeHTML(trustCommand) + '</code>'
+              + '<button class="plugin-btn plugin-copy-cmd">Copy</button>'
+              + '</div>'
+              + '<div class="plugin-status">Run that in a terminal to trust the source, '
+              + 'then reopen this — its plugins install from the shelf above.</div>');
 
       for (const btn of result.querySelectorAll('.plugin-copy-cmd')) {
         btn.addEventListener('click', () => {
-          const row = btn.closest('.plugin-offer');
+          const row = btn.parentElement;
           const cmd = row && row.querySelector('.plugin-cmd');
           this.copyToClipboard(cmd ? cmd.textContent : '', row);
         });

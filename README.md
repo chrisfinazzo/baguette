@@ -417,8 +417,9 @@ rejected.
 | `POST` `GET` `DELETE` | `/simulators/:udid/network`     | injected network conditioning — latency, downlink bandwidth, request loss, offline ([docs](docs/features/network.md)) |
 | `GET`  | `/plugins.json`                            | installed plugin manifests   |
 | `POST` | `/plugins/:id/commands/:cmd?udid=`         | run one plugin contribution, answer its rows |
-| `GET`  | `/bakeries.json`                           | trusted bakeries + pinned commits |
+| `GET`  | `/bakeries.json`                           | trusted bakeries + pinned commits + which plugins you already have |
 | `POST` | `/bakeries/preview`                        | clone + read a bakery's menu (safe; trusts nothing) |
+| `POST` | `/bakeries/install`                        | install a plugin from an **already-trusted** bakery, by recorded id |
 | `WS`   | `/simulators/:udid/stream?format=mjpeg\|avcc` | live frames + control + input + `describe_ui` |
 | `WS`   | `/simulators/:udid/logs?level=&style=&predicate=&bundleId=` | live unified-log stream |
 | `WS`   | `/simulators/:udid/camera`                 | virtual camera: pick a Mac webcam, frames pumped into the simulator's AVFoundation stack via the bundled `VirtualCamera.dylib` |

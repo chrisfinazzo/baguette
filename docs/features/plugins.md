@@ -529,21 +529,50 @@ baguette bakery remove tddworks/baguette-plugins
 References: `owner/repo` (GitHub), `owner/repo/plugin`, a full
 `https://…` / `git@…` URL (any host), or `file://…` (a local checkout).
 
-### Browsing (browser)
+### Installing (browser)
 
 In focus mode, the plugins rail on the right has a **+** at the bottom.
-Paste `owner/repo` and click **Preview** to see the source, its resolved
-commit, and the plugins it offers. Each one comes with the command that
-installs it, ready to copy.
+It opens a modal in two halves, and the split is the trust boundary.
 
-**The browser previews; it doesn't install.** Installing writes files
-into a directory baguette later executes from, and the only thing in
-front of a browser route is a set of origin heuristics — well tested,
-but heuristics, and if one is ever wrong the blast radius goes from
-"read the screen" to "write files that will run as you". A modal button
-isn't real consent either: the page sets the flag it then checks.
-Typing a command in your own terminal carries trust a web page can't,
-so that's where installing happens.
+**The shelf** lists every bakery you already trust, its pinned commit,
+and what it offers. A plugin you don't have yet gets an **Install**
+button; one you do reads *Installed*. Installing clones the bakery at
+its pinned commit and copies the plugin in — the same work
+`baguette plugin install` does, so it takes the same minute on a cold
+cache — then the rail picks the new plugin up without a reload.
+
+**The field below only previews.** Paste `owner/repo`, click
+**Preview**, and you see the source, its resolved commit, and what it
+offers, followed by the `baguette bakery add` command to copy. Run
+that in a terminal and the bakery joins the shelf.
+
+```
+POST /bakeries/install   {"bakery": "github.com/tddworks/baguette",
+                          "plugin": "deeplink"}
+  → 200 {"bakery": "…", "commit": "20fc40f19d…", "installed": ["deeplink"]}
+  → 403 {"ok": false, "error": "that bakery isn't trusted — …"}
+```
+
+#### Why the browser can install but not trust
+
+Installing writes files into a directory baguette later executes from,
+and the only thing in front of a browser route is a set of origin
+heuristics — well tested, but heuristics. So the install route names a
+bakery by its **recorded id**, never a URL or a git ref. A request can
+only reach a source already in `bakeries.json`, at the commit pinned
+there, and a name that bakery's own menu lists. If an origin check is
+ever wrong, the blast radius is "installs a plugin from a repo you
+already vetted" rather than "clones anything and writes it to your
+disk". A refusal never echoes the id it was given back into the page.
+
+Trusting a *new* source stays a terminal act, because a modal button
+isn't real consent — the page sets the flag it then checks — and
+because trust is the decision that actually matters. Typing the command
+carries context a web page can't.
+
+The decision is `InstallDecision` in `Domain/Bakery/`, and every
+refusal path is unit-tested; installing still only copies files, so
+nothing runs until you open the plugin's panel.
 
 ### Trust & storage
 

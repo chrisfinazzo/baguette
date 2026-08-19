@@ -315,8 +315,10 @@ POST /simulators/:udid/input                GestureDispatcher (one envelope)
 WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher
 GET  /plugins.json                          Plugins.listJSON
 POST /plugins/:id/commands/:cmd?udid=       PluginDispatch → the plugin's rows
-GET  /bakeries.json                         trusted sources + pinned commits
+GET  /bakeries.json                         trusted sources + pinned commits + install state
 POST /bakeries/preview                      BakeryInstall.preview (trusts nothing)
+POST /bakeries/install                      InstallDecision → BakeryInstall.install
+                                            (already-trusted bakeries only, by id)
                                             (no install route — that's CLI-only, by design)
 GET  /<file>.{html,js,css,…}                Resources/Web/<file>
 ```

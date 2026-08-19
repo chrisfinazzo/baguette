@@ -36,12 +36,29 @@ struct ServerBakeryRoutesTests {
     @Test func `listing answers the trusted bakeries`() async throws {
         let env = try Env()
         _ = try await env.install.install(ref: try BakeryRef.parse("acme/tools"), requested: "hello")
-        guard case .ok(let json) = Server.listBakeries(home: env.home) else {
+        guard case .ok(let json) = Server.listBakeries(home: env.home, installed: []) else {
             Issue.record("expected .ok"); return
         }
         let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
         let bakeries = try #require(parsed?["bakeries"] as? [[String: Any]])
         #expect(bakeries.first?["commit"] as? String == "c0ffee")
+    }
+
+    @Test func `listing says which of a bakery's plugins are already installed`() async throws {
+        // What the shelf draws an Install button from. Deciding it here
+        // rather than in the page keeps one rule for "do I have this",
+        // and it isn't the same as "is it in installed.json" — a
+        // bundled plugin has no provenance record.
+        let env = try Env()
+        _ = try await env.install.install(ref: try BakeryRef.parse("acme/tools"), requested: "hello")
+        guard case .ok(let json) = Server.listBakeries(home: env.home, installed: ["hello"]) else {
+            Issue.record("expected .ok"); return
+        }
+        let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        let bakeries = try #require(parsed?["bakeries"] as? [[String: Any]])
+        let plugins = try #require(bakeries.first?["plugins"] as? [[String: Any]])
+        #expect(plugins.first?["name"] as? String == "hello")
+        #expect(plugins.first?["installed"] as? Bool == true)
     }
 
     @Test func `a registry that cannot be read is a failure, not an empty list`() throws {
@@ -53,23 +70,85 @@ struct ServerBakeryRoutesTests {
             at: env.home.appendingPathComponent("bakeries.json"),
             withIntermediateDirectories: true
         )
-        guard case .failed = Server.listBakeries(home: env.home) else {
+        guard case .failed = Server.listBakeries(home: env.home, installed: []) else {
             Issue.record("expected .failed"); return
         }
     }
 
-    // MARK: - there is no install route
-
     @Test func `previewing does not install anything`() async throws {
-        // The browser can look; it cannot put files on the machine.
-        // Installing writes into a directory baguette later executes
-        // from, and a modal button isn't consent — the page sets the
-        // flag it then checks. The command a user types in their own
-        // terminal is the boundary that means something.
+        // Preview looks and records nothing — not the source, not a
+        // plugin. Installing is a separate route with a gate of its
+        // own; reaching it by previewing would make that gate
+        // decorative.
         let env = try Env()
         _ = await Server.previewBakery(reference: "acme/tools", install: env.install)
         #expect(try env.registry.installed().isEmpty)
         #expect(try env.registry.bakeries().isEmpty)
+    }
+
+    // MARK: - installing from a bakery you already trust
+    //
+    // The browser may install, but only from a source already in
+    // `bakeries.json` and only by the id recorded there — never a URL.
+    // Installing writes files baguette later executes from, and the
+    // only thing in front of a browser route is a set of origin
+    // heuristics; naming sources by recorded id is what keeps the blast
+    // radius of a wrong one at "a repo you already vetted".
+
+    @Test func `installing puts a trusted bakery's plugin on the machine`() async throws {
+        let env = try Env()
+        try env.trust(plugins: ["hello"])
+
+        let outcome = await Server.installFromBakery(
+            bakery: "github.com/acme/tools", plugin: "hello",
+            home: env.home, install: env.install
+        )
+        guard case .ok(let json) = outcome else { Issue.record("expected .ok, got \(outcome)"); return }
+
+        let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        #expect(parsed?["installed"] as? [String] == ["hello"])
+        #expect(try env.registry.installed().map(\.name) == ["hello"])
+    }
+
+    @Test func `installing from a bakery that was never trusted is refused`() async throws {
+        // The request names an id, so an untrusted one resolves to
+        // nothing — no ref is parsed, no remote is contacted, no
+        // directory is touched.
+        let env = try Env()
+        let outcome = await Server.installFromBakery(
+            bakery: "github.com/evil/pack", plugin: "hello",
+            home: env.home, install: env.install
+        )
+        guard case .refused = outcome else { Issue.record("expected .refused, got \(outcome)"); return }
+        #expect(try env.registry.installed().isEmpty)
+        #expect(try env.registry.bakeries().isEmpty)
+    }
+
+    @Test func `installing a plugin the bakery does not offer is refused`() async throws {
+        // Trusting a source is not trusting an arbitrary path in it.
+        let env = try Env()
+        try env.trust(plugins: ["hello"])
+
+        let outcome = await Server.installFromBakery(
+            bakery: "github.com/acme/tools", plugin: "somethingelse",
+            home: env.home, install: env.install
+        )
+        guard case .refused = outcome else { Issue.record("expected .refused, got \(outcome)"); return }
+        #expect(try env.registry.installed().isEmpty)
+    }
+
+    @Test func `a refused install never echoes an untrusted id back into the page`() async throws {
+        // The message lands in a modal. It may name what the user
+        // already trusted; it must not reflect whatever id was posted.
+        let env = try Env()
+        let outcome = await Server.installFromBakery(
+            bakery: "<img src=x onerror=alert(1)>", plugin: "hello",
+            home: env.home, install: env.install
+        )
+        guard case .refused(let message) = outcome else {
+            Issue.record("expected .refused, got \(outcome)"); return
+        }
+        #expect(!message.contains("<img"))
     }
 
     // MARK: - fixture (mirrors BakeryInstallTests.Env)
@@ -92,6 +171,15 @@ struct ServerBakeryRoutesTests {
             }
             given(checkout).pull(at: .any).willReturn("c0ffee")
             install = BakeryInstall(checkout: checkout, home: home)
+        }
+
+        /// Trust `acme/tools` the way a terminal `bakery add` would,
+        /// without going through the network path.
+        func trust(plugins: [String]) throws {
+            try registry.record(Bakery(
+                id: "github.com/acme/tools", url: "https://github.com/acme/tools.git",
+                commit: "c0ffee", plugins: plugins, addedAt: "2026-08-19T00:00:00Z"
+            ))
         }
     }
 }
