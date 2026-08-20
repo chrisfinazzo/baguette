@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.93] - 2026-08-20
+
 ### Added
 
 - **Network conditioning — `baguette network set|clear|status`.** Makes a
@@ -929,7 +933,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.92...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.93...HEAD
+[0.1.93]: https://github.com/tddworks/baguette/compare/v0.1.92...v0.1.93
 [0.1.92]: https://github.com/tddworks/baguette/compare/v0.1.91...v0.1.92
 [0.1.91]: https://github.com/tddworks/baguette/compare/v0.1.90...v0.1.91
 [0.1.90]: https://github.com/tddworks/baguette/compare/v0.1.89...v0.1.90
