@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.94] - 2026-08-20
+
 ### Fixed
 
 - **A new injected dylib silently broke the Homebrew build.** Each one needed
@@ -964,7 +968,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.93...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.94...HEAD
+[0.1.94]: https://github.com/tddworks/baguette/compare/v0.1.93...v0.1.94
 [0.1.93]: https://github.com/tddworks/baguette/compare/v0.1.92...v0.1.93
 [0.1.92]: https://github.com/tddworks/baguette/compare/v0.1.91...v0.1.92
 [0.1.91]: https://github.com/tddworks/baguette/compare/v0.1.90...v0.1.91
