@@ -2,28 +2,13 @@
 set -e
 cd "$(dirname "$0")"
 
-# The iOS-Simulator side of the camera feature — see Injected/VirtualCamera/.
+# Every iOS-Simulator dylib baguette injects, built and staged into
+# Sources/Baguette/Resources/<Name>/ for SPM to `.copy` as a resource.
 # Cross-compiled against the iphonesimulator SDK (fat: arm64 + x86_64),
-# linker-signed adhoc. Staged into Sources/Baguette/Resources/VirtualCamera/
-# so SPM bundles it as a `.copy` resource.
-./Injected/VirtualCamera/build.sh
-mkdir -p Sources/Baguette/Resources/VirtualCamera
-cp -f Injected/VirtualCamera/VirtualCamera.dylib Sources/Baguette/Resources/VirtualCamera/
-
-# The iOS-Simulator side of the motion feature — see Injected/VirtualMotion/. Same
-# shape as the camera dylib above: cross-compiled fat, linker-signed adhoc,
-# staged for SPM to bundle. Both are armed through one shared
-# DYLD_INSERT_LIBRARIES (see `InjectedDylibs`).
-./Injected/VirtualMotion/build.sh
-mkdir -p Sources/Baguette/Resources/VirtualMotion
-cp -f Injected/VirtualMotion/VirtualMotion.dylib Sources/Baguette/Resources/VirtualMotion/
-
-# The iOS-Simulator side of network conditioning — see Injected/VirtualNetwork/.
-# Third dylib, same shape as the two above; all three are armed through one
-# shared DYLD_INSERT_LIBRARIES (see `InjectedDylibs`).
-./Injected/VirtualNetwork/build.sh
-mkdir -p Sources/Baguette/Resources/VirtualNetwork
-cp -f Injected/VirtualNetwork/VirtualNetwork.dylib Sources/Baguette/Resources/VirtualNetwork/
+# linker-signed adhoc. All of them are armed through one shared
+# DYLD_INSERT_LIBRARIES (see `InjectedDylibs`), and the loop inside picks up
+# a new Injected/<Name>/ with no edit here.
+./Injected/build.sh
 
 # Pure-SPM build. Private frameworks resolve through the rpath flags +
 # linkedFramework declarations in Package.swift.

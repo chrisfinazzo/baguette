@@ -10,6 +10,37 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+
+- **A new injected dylib silently broke the Homebrew build.** Each one needed
+  its own stanza in `build.sh`, in `.gitignore`, and in homebrew-core's
+  hardcoded framework table. `VirtualNetwork` (0.1.93) updated the first two,
+  so Homebrew kept installing the committed universal binary and its CI failed
+  on both `brew audit` ("Unexpected universal binaries were found") and
+  relocation ("Updated load commands do not fit in the header").
+  `Injected/build.sh` now loops over `Injected/*/build.sh`, so a new dylib is
+  picked up with no list to update anywhere.
+- **Gathering the dylibs under `Injected/` broke the formula's source glob.**
+  The formula rebuilds each dylib from `<Name>/Sources/*.m`, which stopped
+  matching when the sources moved. `clang` exits **0** on an empty source
+  list, emitting a valid, loadable, symbol-less 16KB stub — so 0.1.93 would
+  have installed camera and motion dylibs that injected nothing and reported
+  no error, and only the unrelated `brew audit` failure kept that off users'
+  machines. The build now fails outright when a dylib exports no symbols.
+
+### Changed
+
+- Injected dylibs build fat (arm64 + x86_64) as before, but
+  `BAGUETTE_INJECTED_ARCHS` narrows that to a single host slice for
+  packagers, and every slice is now linked with
+  `-headerpad_max_install_names` so Homebrew can rewrite the install ID
+  during relocation.
+
+### Removed
+
+- Stale top-level `VirtualCamera/VirtualCamera.dylib`, left behind when the
+  injected dylibs moved under `Injected/`.
+
 ---
 
 ## [0.1.93] - 2026-08-20
