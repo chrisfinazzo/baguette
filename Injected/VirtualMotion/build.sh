@@ -30,6 +30,7 @@ build_slice() {
         -Wall \
         -install_name "@rpath/${OUT}" \
         -Wl,-adhoc_codesign \
+        -Wl,-headerpad_max_install_names \
         -I Sources \
         -o "VirtualMotion.${arch}.dylib" \
         Sources/VirtualMotionIntent.m \
@@ -37,15 +38,25 @@ build_slice() {
         Sources/VirtualMotionHooks.m
 }
 
-build_slice arm64
-build_slice x86_64
+# Fat by default, so one dylib serves both Apple silicon and Intel hosts.
+# `BAGUETTE_INJECTED_ARCHS` narrows that to a single slice, which is what
+# Homebrew needs: `brew audit` rejects a keg containing a universal binary
+# ("Unexpected universal binaries were found"), so its formula builds
+# host-arch-only. One slice skips `lipo` — the slice *is* the product.
+ARCHS=${BAGUETTE_INJECTED_ARCHS:-"arm64 x86_64"}
 
-xcrun lipo -create \
-    VirtualMotion.arm64.dylib \
-    VirtualMotion.x86_64.dylib \
-    -output "$OUT"
+SLICES=()
+for arch in $ARCHS; do
+    build_slice "$arch"
+    SLICES+=("${OUT%.dylib}.${arch}.dylib")
+done
 
-rm VirtualMotion.arm64.dylib VirtualMotion.x86_64.dylib
+if [ "${#SLICES[@]}" -eq 1 ]; then
+    mv "${SLICES[0]}" "$OUT"
+else
+    xcrun lipo -create "${SLICES[@]}" -output "$OUT"
+    rm "${SLICES[@]}"
+fi
 
 # Modern `ld` ad-hoc signs each slice with the `linker-signed` flag set, and
 # `lipo -create` preserves those signatures. iOS 26+ simulator dyld accepts

@@ -199,12 +199,17 @@ prefix to keep upstream re-syncs diff-friendly; see
 
 ## Dylib installation flow
 
-1. `build.sh` runs `Injected/VirtualCamera/build.sh` first → produces
+1. `build.sh` runs `Injected/build.sh` first, which loops over every
+   `Injected/*/build.sh` — here `Injected/VirtualCamera/build.sh` → produces
    `Injected/VirtualCamera/VirtualCamera.dylib` (fat: arm64 + x86_64,
    linker-signed adhoc, install-name `@rpath/VirtualCamera.dylib`).
-2. The artifact is copied into
+   `BAGUETTE_INJECTED_ARCHS` narrows the slices for packagers that reject a
+   universal binary; Homebrew sets it to the host arch alone.
+2. The same loop copies the artifact into
    `Sources/Baguette/Resources/VirtualCamera/VirtualCamera.dylib` so
-   SPM bundles it as a `.copy` resource.
+   SPM bundles it as a `.copy` resource, and fails the build if the dylib
+   exports no symbols — `clang` exits 0 on an empty source list, and the
+   symbol-less stub that produces once shipped in Homebrew for months.
 3. First time `camera_start` lands on the WS,
    `VirtualCameraInstaller.installIfNeeded()` reads the bundled
    bytes, computes `sha256(bytes).prefix(12)`, and copies into
