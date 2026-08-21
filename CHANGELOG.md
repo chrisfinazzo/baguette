@@ -14,6 +14,10 @@ For releases prior to this changelog, see the
 
 ## [0.1.95] - 2026-08-21
 
+---
+
+## [0.1.95] - 2026-08-21
+
 
 ---
 
@@ -974,6 +978,7 @@ For releases prior to this changelog, see the
 ---
 
 [Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.95...HEAD
+[0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.95...v0.1.95
 [0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.94...v0.1.95
 [0.1.94]: https://github.com/tddworks/baguette/compare/v0.1.93...v0.1.94
 [0.1.93]: https://github.com/tddworks/baguette/compare/v0.1.92...v0.1.93
