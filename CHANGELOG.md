@@ -16,11 +16,6 @@ For releases prior to this changelog, see the
 
 ---
 
-## [0.1.95] - 2026-08-21
-
-
----
-
 ## [0.1.94] - 2026-08-20
 
 ### Fixed
